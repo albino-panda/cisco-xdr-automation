@@ -1,0 +1,47 @@
+# Scoring bands, blast-radius caps, approval rules, verification and temporary-control review.
+# Approval can never be disabled here: there is no switch for it, and the loader rejects
+# auto_approve / skip_approval / bypass_approval / approval_required keys.
+
+scoring:
+  bands:                        # risk score lower bounds (0-100)
+    LOW: 0
+    MEDIUM: 30
+    HIGH: 60
+    CRITICAL: 80
+  weights: {}                   # design-only in Phase 0 (src/xdr_response/scoring/README.md)
+
+blast_radius:                   # above a cap, every action of that kind needs ELEVATED approval
+  max_endpoints: 5
+  max_users: 3
+  max_indicators: 50
+  max_messages: 500
+
+approval:
+  signing_key_id: primary       # key id only; the key itself is the APPROVAL_SIGNING_KEY secret
+  containment_token_ttl_minutes: 30
+  release_token_ttl_minutes: 30
+  package_ttl_minutes: 240
+  standard_role: xdr-approver
+  elevated_role: xdr-elevated-approver
+  standard_min_approvers: 1     # distinct HUMAN approvers, >= 1
+  elevated_min_approvers: 1     # distinct HUMAN approvers holding elevated_role, >= 1
+  allow_self_approval: false
+  clock_skew_seconds: 60
+
+verification:
+  poll_interval_seconds: 10
+  timeout_seconds: 300
+  unable_to_verify_counts_as_contained: false
+
+temporary_controls:             # review reminders only; controls are never released automatically
+  review_after_hours:
+    isolate_endpoint: 24
+    block_domain: 168
+    block_url: 168
+    block_ip: 72
+    block_hash: 720
+    disable_user: 24
+    quarantine_email: 72
+    block_network_client: 24
+    remove_privileged_role: 24
+    quarantine_file: 168

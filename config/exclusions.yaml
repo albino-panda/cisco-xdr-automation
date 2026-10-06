@@ -1,0 +1,20 @@
+# Third-party lookup exclusions: these values are never sent to VirusTotal, AlienVault OTX or HIBP.
+# Non-public IPs, hostnames, endpoint ids, processes, file paths, message ids and user names are
+# never disclosed regardless of this file (xdr_response.config.policy.DisclosurePolicy).
+
+internal_domains:
+  - corp.example.com
+  - example.internal
+
+third_party_lookup:
+  internal_domain_suffixes:
+    - corp.example.com
+    - ad.example.com
+    - local
+  cidrs:                        # in addition to private/reserved ranges
+    - 100.64.0.0/10             # carrier-grade NAT used by the remote-access VPN
+  user_domains:                 # email domains HIBP must not receive
+    - partner.example.net
+  hostnames:
+    - vpn.example.com
+    - mail.corp.example.com

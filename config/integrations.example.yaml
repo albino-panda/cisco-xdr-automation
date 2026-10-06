@@ -1,0 +1,157 @@
+# Example runtime + integration configuration for xdr_response.
+#
+# Copy to config/integrations.yaml (git-ignored) and adjust. This file holds NO secret values:
+# every entry under `secrets:` is the NAME of an environment variable (or mounted secret file),
+# never the value. The loader refuses secret values, unknown integrations and any approval-bypass
+# key (auto_approve, skip_approval, bypass_approval, approval_required).
+#
+# Base URLs come from docs/integrations.md (VERIFIED rows only). Splunk is optional and disabled.
+
+runtime:
+  dry_run: true                 # default; override per process with DRY_RUN=false
+  environment: lab              # lab | staging | production
+  audit_path: var/audit/audit.jsonl
+  registry_path: var/registry/controls.jsonl
+  token_ledger_path: var/approval/token-ledger.jsonl
+
+integrations:
+  cisco_xdr:
+    enabled: true
+    base_url: https://visibility.amp.cisco.com
+    region: us
+    timeout_seconds: 15
+    max_retries: 3
+    secrets:
+      client_id: XDR_CLIENT_ID
+      client_secret: XDR_CLIENT_SECRET
+
+  secure_endpoint:
+    enabled: true
+    base_url: https://api.amp.cisco.com
+    region: us
+    secrets:
+      client_id: SE_CLIENT_ID
+      api_key: SE_API_KEY
+
+  secure_email:
+    enabled: true
+    base_url: https://api.us.etd.cisco.com
+    region: us
+    secrets:
+      client_id: ETD_CLIENT_ID
+      client_secret: ETD_CLIENT_SECRET
+      api_key: ETD_API_KEY
+
+  secure_malware_analytics:
+    enabled: true
+    base_url: https://panacea.threatgrid.com
+    secrets:
+      api_key: SMA_API_KEY
+
+  secure_cloud_analytics:
+    enabled: false              # no VERIFIED endpoint yet (docs/integrations.md 2.5)
+    secrets:
+      api_key: SCA_API_KEY
+
+  umbrella:
+    enabled: true
+    base_url: https://api.umbrella.com
+    rate_limit_per_minute: 1000
+    secrets:
+      api_key: UMBRELLA_API_KEY
+      api_secret: UMBRELLA_API_SECRET
+
+  meraki:
+    enabled: true
+    base_url: https://api.meraki.com/api/v1
+    secrets:
+      api_key: MERAKI_API_KEY
+    options:
+      organization_id: null     # set to your Meraki organization id
+
+  entra:
+    enabled: true
+    base_url: https://graph.microsoft.com
+    secrets:
+      tenant_id: ENTRA_TENANT_ID
+      client_id: ENTRA_CLIENT_ID
+      client_secret: ENTRA_CLIENT_SECRET
+    options:
+      # Graph scope string is UNVERIFIED in docs/integrations.md 2.8: confirm it for your tenant.
+      # The adapter refuses to build auth without an explicit value (no silent default).
+      oauth_scope: https://graph.microsoft.com/.default
+
+  defender_endpoint:
+    enabled: true
+    base_url: https://api.security.microsoft.com/api
+    rate_limit_per_minute: 100  # documented per-API limit
+    secrets:
+      tenant_id: ENTRA_TENANT_ID
+      client_id: MDE_CLIENT_ID
+      client_secret: MDE_CLIENT_SECRET
+
+  defender_o365:
+    enabled: true
+    base_url: https://graph.microsoft.com
+    secrets:
+      tenant_id: ENTRA_TENANT_ID
+      client_id: ENTRA_CLIENT_ID
+      client_secret: ENTRA_CLIENT_SECRET
+    options:
+      # Graph scope string is UNVERIFIED in docs/integrations.md 2.8: confirm it for your tenant.
+      # The adapter refuses to build auth without an explicit value (no silent default).
+      oauth_scope: https://graph.microsoft.com/.default
+
+  intune:
+    enabled: true
+    base_url: https://graph.microsoft.com
+    secrets:
+      tenant_id: ENTRA_TENANT_ID
+      client_id: ENTRA_CLIENT_ID
+      client_secret: ENTRA_CLIENT_SECRET
+    options:
+      # Graph scope string is UNVERIFIED in docs/integrations.md 2.8: confirm it for your tenant.
+      # The adapter refuses to build auth without an explicit value (no silent default).
+      oauth_scope: https://graph.microsoft.com/.default
+
+  microsoft_cloud:
+    enabled: true
+    base_url: https://graph.microsoft.com
+    secrets:
+      tenant_id: ENTRA_TENANT_ID
+      client_id: ENTRA_CLIENT_ID
+      client_secret: ENTRA_CLIENT_SECRET
+    options:
+      # Graph scope string is UNVERIFIED in docs/integrations.md 2.8: confirm it for your tenant.
+      # The adapter refuses to build auth without an explicit value (no silent default).
+      oauth_scope: https://graph.microsoft.com/.default
+
+  virustotal:
+    enabled: true
+    base_url: https://www.virustotal.com/api/v3
+    rate_limit_per_minute: 4    # public API quota
+    secrets:
+      api_key: VT_API_KEY
+
+  alienvault_otx:
+    enabled: true
+    base_url: https://otx.alienvault.com
+    secrets:
+      api_key: OTX_API_KEY
+
+  hibp:
+    enabled: true
+    base_url: https://haveibeenpwned.com/api/v3
+    secrets:
+      api_key: HIBP_API_KEY
+    options:
+      user_agent: xdr-response-framework
+
+  splunk:
+    enabled: false              # optional, never a hard dependency
+    base_url: https://splunk.example.test:8089
+    secrets:
+      token: SPLUNK_TOKEN
+      hec_token: SPLUNK_HEC_TOKEN
+    options:
+      hec_url: https://splunk.example.test:8088

@@ -1,0 +1,42 @@
+# Allow-lists. Allow-listed targets are never blocked: the package builder moves them to
+# `excluded_targets` with the reason, and the decision card shows them. Example values only.
+
+never_block:
+  domains:
+    - example.com               # own primary domain (parent match covers subdomains)
+    - microsoft.com
+    - cisco.com
+  urls: []
+  ips:
+    - 192.0.2.53                # internal resolver
+  cidrs:
+    - 192.0.2.0/28              # core network infrastructure
+  hashes: []
+  users:
+    - breakglass@example.com
+  endpoints:
+    - TH-DC-01
+
+# Owned domains where URL-level blocks are allowed even though the domain is never blocked
+url_block_allowed_domains:
+  - example.com
+
+# Approved remote monitoring and management tools (unauthorized-RMM workflow)
+approved_rmm:
+  - name: Example RMM
+    hashes:
+      - "1111111111111111111111111111111111111111111111111111111111111111"
+    domains:
+      - rmm.example.net
+    signers:
+      - Example RMM Vendor Inc.
+
+# Approved DNS tools (DNS tunneling workflow)
+approved_dns_tools:
+  - name: Example DNS diagnostics
+    hashes:
+      - "2222222222222222222222222222222222222222222222222222222222222222"
+    domains:
+      - dnstools.example.net
+    signers:
+      - Example DNS Tools Ltd.

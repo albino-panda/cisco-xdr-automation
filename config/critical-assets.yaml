@@ -1,0 +1,89 @@
+# Critical asset classes. A containment action on a matching target is never blocked silently:
+# it is marked ELEVATED and the decision card shows a warning with asset, role, action and
+# potential impact. Patterns are fnmatch, case-insensitive. Example values only.
+
+classes:
+  domain_controller:
+    display_name: Domain controller
+    role: Active Directory domain controller
+    potential_impact: Isolating or disabling a domain controller can stop authentication, Group Policy and DNS for the whole domain.
+    match:
+      hostname_patterns: ["DC-*", "*-DC-*", "ADDC*"]
+      groups: ["Domain Controllers"]
+      tags: ["domain-controller"]
+
+  identity_infrastructure:
+    display_name: Identity infrastructure
+    role: Identity provider, federation, PKI or directory sync server
+    potential_impact: Containment can break single sign-on, certificate issuance or directory synchronization for all users.
+    match:
+      hostname_patterns: ["ADFS*", "PKI-*", "CA-*", "AADC*", "IDP-*"]
+      tags: ["identity", "pki", "federation"]
+
+  executive_endpoint:
+    display_name: Executive endpoint
+    role: Endpoint used by an executive or VIP
+    potential_impact: Isolation interrupts an executive's work and must be coordinated with their office.
+    match:
+      hostname_patterns: ["EXEC-*", "VIP-*"]
+      users: ["ceo@example.com", "cfo@example.com"]
+      groups: ["Executives"]
+      tags: ["vip", "executive"]
+
+  production_server:
+    display_name: Production server
+    role: Production application or database server
+    potential_impact: Isolation can cause a customer-facing outage or data loss for in-flight transactions.
+    match:
+      hostname_patterns: ["PRD-*", "PROD-*", "*-PRD-*"]
+      tags: ["production"]
+      ip_cidrs: ["203.0.113.0/26"]
+
+  hypervisor:
+    display_name: Hypervisor
+    role: Virtualization host or management plane
+    potential_impact: Isolating a hypervisor takes every guest virtual machine offline.
+    match:
+      hostname_patterns: ["ESX*", "HV-*", "VCENTER*"]
+      tags: ["hypervisor", "vmware", "hyper-v"]
+
+  network_infrastructure:
+    display_name: Network infrastructure
+    role: Router, switch, firewall, VPN or wireless controller
+    potential_impact: Blocking or isolating network infrastructure can disconnect whole sites or remote users.
+    match:
+      hostname_patterns: ["FW-*", "RTR-*", "SW-*", "VPN-*", "WLC-*"]
+      tags: ["network-infrastructure"]
+      ip_cidrs: ["192.0.2.0/28"]
+
+  security_infrastructure:
+    display_name: Security infrastructure
+    role: SIEM, EDR management, log collector or security tooling
+    potential_impact: Containment can blind the SOC by stopping telemetry, detection or response tooling.
+    match:
+      hostname_patterns: ["SIEM-*", "SOC-*", "LOG-*", "EDR-*"]
+      tags: ["security-tooling"]
+
+  service_account:
+    display_name: Service account
+    role: Non-interactive application or service account
+    potential_impact: Disabling a service account can stop the applications and scheduled jobs that use it.
+    match:
+      user_patterns: ["svc-*", "svc_*", "*-svc@*"]
+      groups: ["Service Accounts"]
+
+  privileged_account:
+    display_name: Privileged account
+    role: Administrator or break-glass account
+    potential_impact: Disabling an administrator or break-glass account can remove the ability to recover the tenant.
+    match:
+      user_patterns: ["adm-*", "admin-*", "*-admin@*", "breakglass*"]
+      groups: ["Domain Admins", "Global Administrators"]
+
+  automation_account:
+    display_name: Automation account
+    role: Account used by automation, orchestration or CI/CD
+    potential_impact: Disabling an automation account can stop deployments, backups or orchestration workflows.
+    match:
+      user_patterns: ["auto-*", "ci-*", "*-automation@*"]
+      groups: ["Automation Accounts"]
