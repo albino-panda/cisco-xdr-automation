@@ -19,3 +19,8 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest
       - run: PYTHONPATH=engine python -m xdr_plan check
+      - run: |
+          for scenario in ransomware phishing account_takeover ransomware_domain_controller; do
+            python tools/simulator/simulate.py "$scenario" --live --check > /dev/null
+            python tools/simulator/simulate.py "$scenario" --check > /dev/null
+          done
