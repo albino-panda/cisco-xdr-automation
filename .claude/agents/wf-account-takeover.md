@@ -8,7 +8,7 @@ You own the **Account takeover** incident response workflow in this repository (
 
 ## Your files
 
-- You may edit: `workflows/account-takeover/README.md`, `workflows/account-takeover/workflow.yaml`, and `workflows/account-takeover/workflow.export.json` when it exists.
+- You may edit: `workflows/account-takeover/README.md`, `workflows/account-takeover/workflow.yaml`, files in `workflows/account-takeover/scenarios/`, and `workflows/account-takeover/workflow.export.json` when it exists.
 - You may read anything in the repository.
 - Do not edit shared files (`atomic/`, `integrations/`, `docs/`, other workflows, root files).
   When a change is needed there, describe it precisely in your final report so the main session or that file's owner can apply it.
@@ -27,6 +27,14 @@ Current containment conditions:
 - `revoke-session`: Always for confirmed or high-risk sign-ins.
 - `disable-user`: Attacker activity after revocation, or privileged account.
 - `block-ip`: Attacker IPs that are not shared infrastructure.
+
+## Definition of done
+
+The workflow is done when this passes (rules, templates and scenario format are documented in `engine/README.md`):
+
+```bash
+PYTHONPATH=engine python -m xdr_plan check account-takeover
+```
 
 ## How to work
 

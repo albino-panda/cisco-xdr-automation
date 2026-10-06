@@ -8,7 +8,7 @@ You own the **Privilege escalation** incident response workflow in this reposito
 
 ## Your files
 
-- You may edit: `workflows/privilege-escalation/README.md`, `workflows/privilege-escalation/workflow.yaml`, and `workflows/privilege-escalation/workflow.export.json` when it exists.
+- You may edit: `workflows/privilege-escalation/README.md`, `workflows/privilege-escalation/workflow.yaml`, files in `workflows/privilege-escalation/scenarios/`, and `workflows/privilege-escalation/workflow.export.json` when it exists.
 - You may read anything in the repository.
 - Do not edit shared files (`atomic/`, `integrations/`, `docs/`, other workflows, root files).
   When a change is needed there, describe it precisely in your final report so the main session or that file's owner can apply it.
@@ -27,6 +27,14 @@ Current containment conditions:
 - `isolate-endpoint`: Host where an exploit ran.
 - `revoke-session`: Escalated account.
 - `disable-user`: Account created or elevated by the attacker.
+
+## Definition of done
+
+The workflow is done when this passes (rules, templates and scenario format are documented in `engine/README.md`):
+
+```bash
+PYTHONPATH=engine python -m xdr_plan check privilege-escalation
+```
 
 ## How to work
 

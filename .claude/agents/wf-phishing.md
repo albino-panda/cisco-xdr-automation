@@ -8,7 +8,7 @@ You own the **Phishing** incident response workflow in this repository (`cisco-x
 
 ## Your files
 
-- You may edit: `workflows/phishing/README.md`, `workflows/phishing/workflow.yaml`, and `workflows/phishing/workflow.export.json` when it exists.
+- You may edit: `workflows/phishing/README.md`, `workflows/phishing/workflow.yaml`, files in `workflows/phishing/scenarios/`, and `workflows/phishing/workflow.export.json` when it exists.
 - You may read anything in the repository.
 - Do not edit shared files (`atomic/`, `integrations/`, `docs/`, other workflows, root files).
   When a change is needed there, describe it precisely in your final report so the main session or that file's owner can apply it.
@@ -28,6 +28,14 @@ Current containment conditions:
 - `block-url`: Malicious URLs on otherwise legitimate domains.
 - `block-domain`: Domains with a malicious verdict that are not allow-listed.
 - `block-hash`: Malicious attachments.
+
+## Definition of done
+
+The workflow is done when this passes (rules, templates and scenario format are documented in `engine/README.md`):
+
+```bash
+PYTHONPATH=engine python -m xdr_plan check phishing
+```
 
 ## How to work
 

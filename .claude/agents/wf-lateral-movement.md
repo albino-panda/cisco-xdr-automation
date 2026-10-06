@@ -8,7 +8,7 @@ You own the **Lateral movement** incident response workflow in this repository (
 
 ## Your files
 
-- You may edit: `workflows/lateral-movement/README.md`, `workflows/lateral-movement/workflow.yaml`, and `workflows/lateral-movement/workflow.export.json` when it exists.
+- You may edit: `workflows/lateral-movement/README.md`, `workflows/lateral-movement/workflow.yaml`, files in `workflows/lateral-movement/scenarios/`, and `workflows/lateral-movement/workflow.export.json` when it exists.
 - You may read anything in the repository.
 - Do not edit shared files (`atomic/`, `integrations/`, `docs/`, other workflows, root files).
   When a change is needed there, describe it precisely in your final report so the main session or that file's owner can apply it.
@@ -27,6 +27,14 @@ Current containment conditions:
 - `isolate-endpoint`: Source and destination hosts with confirmed malicious activity.
 - `revoke-session`: Accounts used for the movement.
 - `disable-user`: Accounts confirmed compromised and not protected.
+
+## Definition of done
+
+The workflow is done when this passes (rules, templates and scenario format are documented in `engine/README.md`):
+
+```bash
+PYTHONPATH=engine python -m xdr_plan check lateral-movement
+```
 
 ## How to work
 

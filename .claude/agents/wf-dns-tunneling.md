@@ -8,7 +8,7 @@ You own the **DNS tunneling** incident response workflow in this repository (`ci
 
 ## Your files
 
-- You may edit: `workflows/dns-tunneling/README.md`, `workflows/dns-tunneling/workflow.yaml`, and `workflows/dns-tunneling/workflow.export.json` when it exists.
+- You may edit: `workflows/dns-tunneling/README.md`, `workflows/dns-tunneling/workflow.yaml`, files in `workflows/dns-tunneling/scenarios/`, and `workflows/dns-tunneling/workflow.export.json` when it exists.
 - You may read anything in the repository.
 - Do not edit shared files (`atomic/`, `integrations/`, `docs/`, other workflows, root files).
   When a change is needed there, describe it precisely in your final report so the main session or that file's owner can apply it.
@@ -26,6 +26,14 @@ Current containment conditions:
 
 - `block-domain`: Tunneling parent domain.
 - `isolate-endpoint`: Querying hosts when the process is not a known security or VPN tool.
+
+## Definition of done
+
+The workflow is done when this passes (rules, templates and scenario format are documented in `engine/README.md`):
+
+```bash
+PYTHONPATH=engine python -m xdr_plan check dns-tunneling
+```
 
 ## How to work
 

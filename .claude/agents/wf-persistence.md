@@ -8,7 +8,7 @@ You own the **Persistence** incident response workflow in this repository (`cisc
 
 ## Your files
 
-- You may edit: `workflows/persistence/README.md`, `workflows/persistence/workflow.yaml`, and `workflows/persistence/workflow.export.json` when it exists.
+- You may edit: `workflows/persistence/README.md`, `workflows/persistence/workflow.yaml`, files in `workflows/persistence/scenarios/`, and `workflows/persistence/workflow.export.json` when it exists.
 - You may read anything in the repository.
 - Do not edit shared files (`atomic/`, `integrations/`, `docs/`, other workflows, root files).
   When a change is needed there, describe it precisely in your final report so the main session or that file's owner can apply it.
@@ -26,6 +26,14 @@ Current containment conditions:
 
 - `block-hash`: Persisted binary with malicious disposition.
 - `isolate-endpoint`: Persistence linked to active malicious execution.
+
+## Definition of done
+
+The workflow is done when this passes (rules, templates and scenario format are documented in `engine/README.md`):
+
+```bash
+PYTHONPATH=engine python -m xdr_plan check persistence
+```
 
 ## How to work
 

@@ -8,7 +8,7 @@ You own the **Suspicious PowerShell** incident response workflow in this reposit
 
 ## Your files
 
-- You may edit: `workflows/powershell/README.md`, `workflows/powershell/workflow.yaml`, and `workflows/powershell/workflow.export.json` when it exists.
+- You may edit: `workflows/powershell/README.md`, `workflows/powershell/workflow.yaml`, files in `workflows/powershell/scenarios/`, and `workflows/powershell/workflow.export.json` when it exists.
 - You may read anything in the repository.
 - Do not edit shared files (`atomic/`, `integrations/`, `docs/`, other workflows, root files).
   When a change is needed there, describe it precisely in your final report so the main session or that file's owner can apply it.
@@ -26,6 +26,14 @@ Current containment conditions:
 
 - `block-domain`: Download destinations with malicious verdict.
 - `isolate-endpoint`: Payload retrieved or executed.
+
+## Definition of done
+
+The workflow is done when this passes (rules, templates and scenario format are documented in `engine/README.md`):
+
+```bash
+PYTHONPATH=engine python -m xdr_plan check powershell
+```
 
 ## How to work
 

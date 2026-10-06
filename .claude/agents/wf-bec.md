@@ -8,7 +8,7 @@ You own the **Business email compromise** incident response workflow in this rep
 
 ## Your files
 
-- You may edit: `workflows/bec/README.md`, `workflows/bec/workflow.yaml`, and `workflows/bec/workflow.export.json` when it exists.
+- You may edit: `workflows/bec/README.md`, `workflows/bec/workflow.yaml`, files in `workflows/bec/scenarios/`, and `workflows/bec/workflow.export.json` when it exists.
 - You may read anything in the repository.
 - Do not edit shared files (`atomic/`, `integrations/`, `docs/`, other workflows, root files).
   When a change is needed there, describe it precisely in your final report so the main session or that file's owner can apply it.
@@ -28,6 +28,14 @@ Current containment conditions:
 - `disable-user`: Confirmed compromise with ongoing abuse.
 - `quarantine-email`: Fraudulent messages to all recipients.
 - `block-domain`: Lookalike domains.
+
+## Definition of done
+
+The workflow is done when this passes (rules, templates and scenario format are documented in `engine/README.md`):
+
+```bash
+PYTHONPATH=engine python -m xdr_plan check bec
+```
 
 ## How to work
 

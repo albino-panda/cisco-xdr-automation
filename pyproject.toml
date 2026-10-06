@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cisco-xdr-automation"
+version = "0.1.0"
+description = "Cisco XDR response workflow specs with a plan engine that tests containment rules against guardrails."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["PyYAML>=6.0,<7.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.2"]
+
+[tool.setuptools.packages.find]
+where = ["engine"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["engine"]
+addopts = "-ra --strict-markers"

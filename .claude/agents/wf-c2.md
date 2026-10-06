@@ -8,7 +8,7 @@ You own the **Command and control** incident response workflow in this repositor
 
 ## Your files
 
-- You may edit: `workflows/c2/README.md`, `workflows/c2/workflow.yaml`, and `workflows/c2/workflow.export.json` when it exists.
+- You may edit: `workflows/c2/README.md`, `workflows/c2/workflow.yaml`, files in `workflows/c2/scenarios/`, and `workflows/c2/workflow.export.json` when it exists.
 - You may read anything in the repository.
 - Do not edit shared files (`atomic/`, `integrations/`, `docs/`, other workflows, root files).
   When a change is needed there, describe it precisely in your final report so the main session or that file's owner can apply it.
@@ -27,6 +27,14 @@ Current containment conditions:
 - `block-domain`: C2 domains.
 - `block-ip`: C2 IPs that are not shared hosting or CDN.
 - `isolate-endpoint`: Hosts with confirmed beaconing.
+
+## Definition of done
+
+The workflow is done when this passes (rules, templates and scenario format are documented in `engine/README.md`):
+
+```bash
+PYTHONPATH=engine python -m xdr_plan check c2
+```
 
 ## How to work
 

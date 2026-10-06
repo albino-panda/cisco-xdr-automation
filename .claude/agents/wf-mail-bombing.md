@@ -8,7 +8,7 @@ You own the **Mail bombing** incident response workflow in this repository (`cis
 
 ## Your files
 
-- You may edit: `workflows/mail-bombing/README.md`, `workflows/mail-bombing/workflow.yaml`, and `workflows/mail-bombing/workflow.export.json` when it exists.
+- You may edit: `workflows/mail-bombing/README.md`, `workflows/mail-bombing/workflow.yaml`, files in `workflows/mail-bombing/scenarios/`, and `workflows/mail-bombing/workflow.export.json` when it exists.
 - You may read anything in the repository.
 - Do not edit shared files (`atomic/`, `integrations/`, `docs/`, other workflows, root files).
   When a change is needed there, describe it precisely in your final report so the main session or that file's owner can apply it.
@@ -28,6 +28,14 @@ Current containment conditions:
 - `revoke-session`: When a password change or MFA prompt was buried in the flood.
 
 Detection comes from the sibling project `../Mail Bombing/cisco-xdr-mailbomb-detector`. Read its `workflows/xdr-response/README.md` before changing quarantine behaviour so the two stay compatible. Do not edit that project.
+
+## Definition of done
+
+The workflow is done when this passes (rules, templates and scenario format are documented in `engine/README.md`):
+
+```bash
+PYTHONPATH=engine python -m xdr_plan check mail-bombing
+```
 
 ## How to work
 

@@ -8,7 +8,7 @@ You own the **Password spray** incident response workflow in this repository (`c
 
 ## Your files
 
-- You may edit: `workflows/password-spray/README.md`, `workflows/password-spray/workflow.yaml`, and `workflows/password-spray/workflow.export.json` when it exists.
+- You may edit: `workflows/password-spray/README.md`, `workflows/password-spray/workflow.yaml`, files in `workflows/password-spray/scenarios/`, and `workflows/password-spray/workflow.export.json` when it exists.
 - You may read anything in the repository.
 - Do not edit shared files (`atomic/`, `integrations/`, `docs/`, other workflows, root files).
   When a change is needed there, describe it precisely in your final report so the main session or that file's owner can apply it.
@@ -27,6 +27,14 @@ Current containment conditions:
 - `block-ip`: Spray sources that are not shared infrastructure.
 - `revoke-session`: Any account with a successful sign-in from a spray source.
 - `disable-user`: Successful sign-in followed by suspicious activity.
+
+## Definition of done
+
+The workflow is done when this passes (rules, templates and scenario format are documented in `engine/README.md`):
+
+```bash
+PYTHONPATH=engine python -m xdr_plan check password-spray
+```
 
 ## How to work
 
