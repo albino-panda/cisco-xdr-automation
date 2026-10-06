@@ -1,0 +1,54 @@
+# Ransomware spreading to domain controllers (fake data only).
+name: ransomware_domain_controller
+description: >
+  The ransomware from TH-LT-1047 moved laterally to two domain controllers. TH-DC-02 matches the
+  domain_controller critical-asset class, so isolating it needs ELEVATED approval (a warning, never
+  a silent block). TH-DC-01 is on the never_block allow-list, so it is excluded with the reason.
+
+incident:
+  incident_id: XDR-RW-2002
+  title: Ransomware lateral movement to domain controllers
+  severity: CRITICAL
+  source: cisco_xdr
+  workflow_id: ransomware-containment
+  workflow_version: "1.0.0"
+  observables:
+    - {type: hostname, value: TH-LT-1047, source: secure_endpoint}
+    - {type: hostname, value: TH-DC-02, source: secure_endpoint}
+    - {type: hostname, value: TH-DC-01, source: secure_endpoint}
+  assets:
+    - {name: TH-LT-1047, kind: ENDPOINT, groups: [Workstations]}
+    - {name: TH-DC-02, kind: ENDPOINT, groups: [Domain Controllers], tags: [domain-controller]}
+    - {name: TH-DC-01, kind: ENDPOINT, groups: [Domain Controllers], tags: [domain-controller]}
+  users: [jsmith@example.com]
+  trigger: {source: cisco_xdr, rule: ransomware-lateral-movement}
+
+environment:
+  reputations:
+    - {type: hostname, value: TH-LT-1047, verdict: MALICIOUS, risk_score: 96, confidence: 92,
+       integrations: [secure_endpoint], summary: "Secure Endpoint: ransomware encryption activity"}
+    - {type: hostname, value: TH-DC-02, verdict: MALICIOUS, risk_score: 94, confidence: 88,
+       integrations: [secure_endpoint], summary: "Secure Endpoint: encryptor executed via PsExec from TH-LT-1047"}
+    - {type: hostname, value: TH-DC-01, verdict: MALICIOUS, risk_score: 80, confidence: 70,
+       integrations: [secure_endpoint], summary: "Secure Endpoint: suspicious service creation"}
+
+analyst:
+  decision: APPROVE_ALL
+  approvers: [lead]
+  comment: Domain controller isolation coordinated with the identity team.
+
+release:
+  decision: APPROVE_ALL
+  approvers: [lead]
+
+expect:
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - isolate_endpoint:TH-DC-02
+  elevated:
+    - isolate_endpoint:TH-DC-02
+  excluded:
+    - isolate_endpoint:TH-DC-01
+  containment: CONTAINED
+  controls: 2
+  restoration: RESTORED

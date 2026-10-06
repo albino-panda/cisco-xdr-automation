@@ -1,0 +1,65 @@
+# Account takeover (fake data only). The attacker IP is already blocked at the edge.
+name: account_takeover
+description: >
+  Impossible travel and an MFA-fatigue pattern for jsmith@example.com, followed by a sign-in from a
+  malicious IP. The IP is already blocked by an earlier change, so that action reports
+  ALREADY_CONTAINED and creates no temporary control.
+
+incident:
+  incident_id: XDR-AT-3310
+  title: Account takeover of jsmith@example.com
+  severity: HIGH
+  source: cisco_xdr
+  workflow_id: account-takeover
+  workflow_version: "1.0.0"
+  observables:
+    - {type: user, value: jsmith@example.com, source: entra}
+    - {type: ip, value: 198.51.100.77, source: entra}
+  users: [jsmith@example.com]
+  trigger: {source: entra, rule: impossible-travel, risk_level: high}
+
+environment:
+  reputations:
+    - type: user
+      value: jsmith@example.com
+      verdict: MALICIOUS
+      risk_score: 90
+      confidence: 85
+      integrations: [entra]
+      summary: "Entra ID: impossible travel and 14 MFA prompts in 5 minutes"
+    - type: ip
+      value: 198.51.100.77
+      verdict: MALICIOUS
+      risk_score: 86
+      confidence: 80
+      integrations: [virustotal]
+      summary: "Known credential-stuffing infrastructure"
+  findings:
+    - action_type: investigate_authentication
+      subject: jsmith@example.com
+      items:
+        - {summary: "Successful sign-in from 198.51.100.77 after MFA approval", ip: 198.51.100.77}
+  preexisting:
+    - {action_type: block_ip, target: 198.51.100.77}
+
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+  comment: Takeover confirmed with the user by phone.
+
+release:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+  comment: Password and MFA reset; account can be re-enabled.
+
+expect:
+  actions:
+    - disable_user:jsmith@example.com
+    - revoke_sessions:jsmith@example.com
+    - block_ip:198.51.100.77
+  already_contained:
+    - block_ip:198.51.100.77
+  elevated: []
+  containment: CONTAINED
+  controls: 1
+  restoration: RESTORED

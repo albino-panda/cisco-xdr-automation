@@ -1,0 +1,86 @@
+# Credential phishing campaign (fake data only).
+name: phishing
+description: >
+  A payroll-themed phishing email reached jsmith@example.com, who clicked the credential-harvesting
+  link. The message, URL and domain are malicious; the user's sign-in risk is elevated. The analyst
+  approves the email, URL, domain and session actions but rejects disabling the account.
+
+incident:
+  incident_id: XDR-PH-2207
+  title: Payroll credential phishing clicked by jsmith@example.com
+  severity: HIGH
+  source: cisco_xdr
+  workflow_id: phishing-response
+  workflow_version: "1.0.0"
+  observables:
+    - {type: email_message_id, value: "<20260115.7781@mail.contoso-payroll.example>", source: secure_email}
+    - {type: url, value: "https://login.contoso-payroll.example/reset", source: secure_email}
+    - {type: domain, value: contoso-payroll.example, source: secure_email}
+    - {type: email_address, value: payroll@contoso-payroll.example, source: secure_email}
+    - {type: user, value: jsmith@example.com, source: secure_email}
+  users: [jsmith@example.com]
+  trigger: {source: secure_email, rule: credential-phish-clicked, message_count: 1}
+
+environment:
+  reputations:
+    - type: email_message_id
+      value: "<20260115.7781@mail.contoso-payroll.example>"
+      verdict: MALICIOUS
+      risk_score: 88
+      confidence: 90
+      integrations: [secure_email]
+      summary: "Secure Email: phishing verdict, spoofed payroll sender"
+    - type: url
+      value: "https://login.contoso-payroll.example/reset"
+      verdict: MALICIOUS
+      risk_score: 92
+      confidence: 85
+      integrations: [umbrella, virustotal]
+      summary: "Credential-harvesting page imitating the payroll portal"
+    - type: domain
+      value: contoso-payroll.example
+      verdict: MALICIOUS
+      risk_score: 85
+      confidence: 80
+      integrations: [umbrella]
+      summary: "Newly registered look-alike domain"
+    - type: user
+      value: jsmith@example.com
+      verdict: SUSPICIOUS
+      risk_score: 68
+      confidence: 70
+      integrations: [entra]
+      summary: "Sign-in from a new device two minutes after the click"
+  findings:
+    - action_type: investigate_email
+      subject: "<20260115.7781@mail.contoso-payroll.example>"
+      items:
+        - {summary: "1 recipient, link clicked at 11:42 UTC", recipients: 1}
+
+analyst:
+  decision: APPROVE_SELECTED
+  approvers: [analyst]
+  select:
+    - "quarantine_email:<20260115.7781@mail.contoso-payroll.example>"
+    - "block_url:https://login.contoso-payroll.example/reset"
+    - "block_domain:contoso-payroll.example"
+    - "revoke_sessions:jsmith@example.com"
+  comment: Keep the account enabled; sessions revoked and password reset handled by the help desk.
+
+release:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+
+expect:
+  actions:
+    - "quarantine_email:<20260115.7781@mail.contoso-payroll.example>"
+    - "block_url:https://login.contoso-payroll.example/reset"
+    - "block_domain:contoso-payroll.example"
+    - "disable_user:jsmith@example.com"
+    - "revoke_sessions:jsmith@example.com"
+  rejected:
+    - "disable_user:jsmith@example.com"
+  elevated: []
+  containment: CONTAINED
+  controls: 3
+  restoration: RESTORED

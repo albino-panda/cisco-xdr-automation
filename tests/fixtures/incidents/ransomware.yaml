@@ -1,0 +1,89 @@
+# Ransomware on a workstation (fake data only: documentation IP ranges, .example domains, fake hash).
+name: ransomware
+description: >
+  Secure Endpoint detects mass file encryption on TH-LT-1047 (user jsmith@example.com). The
+  encryptor hash, its command-and-control domain and IP are malicious. The user's own sign-in risk
+  is low, so no identity action is recommended.
+
+incident:
+  incident_id: XDR-RW-1047
+  title: Ransomware encryption activity on TH-LT-1047
+  severity: CRITICAL
+  source: cisco_xdr
+  workflow_id: ransomware-containment
+  workflow_version: "1.0.0"
+  observables:
+    - {type: hostname, value: TH-LT-1047, source: secure_endpoint}
+    - {type: user, value: jsmith@example.com, source: cisco_xdr}
+    - {type: sha256, value: 5c1d7e0b9a8f6e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d, source: secure_endpoint}
+    - {type: domain, value: c2.ransom-ops.example, source: umbrella}
+    - {type: ip, value: 198.51.100.23, source: cisco_xdr}
+  assets:
+    - {name: TH-LT-1047, kind: ENDPOINT, groups: [Workstations], tags: [finance]}
+  users: [jsmith@example.com]
+  trigger: {source: cisco_xdr, rule: ransomware-behaviour, detection_id: det-0001}
+
+environment:
+  reputations:
+    - type: hostname
+      value: TH-LT-1047
+      verdict: MALICIOUS
+      risk_score: 96
+      confidence: 92
+      integrations: [secure_endpoint]
+      summary: "Secure Endpoint: ransomware behaviour on TH-LT-1047 (1,204 files renamed to *.locked)"
+    - type: sha256
+      value: 5c1d7e0b9a8f6e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d
+      verdict: MALICIOUS
+      risk_score: 95
+      confidence: 88
+      integrations: [secure_endpoint, virustotal]
+      summary: "Encryptor binary svch0st.exe flagged malicious"
+    - type: domain
+      value: c2.ransom-ops.example
+      verdict: MALICIOUS
+      risk_score: 90
+      confidence: 85
+      integrations: [umbrella, virustotal]
+      summary: "Command-and-control domain contacted by svch0st.exe"
+    - type: ip
+      value: 198.51.100.23
+      verdict: SUSPICIOUS
+      risk_score: 72
+      confidence: 70
+      integrations: [virustotal]
+      summary: "C2 IP resolved from c2.ransom-ops.example"
+    - type: user
+      value: jsmith@example.com
+      verdict: SUSPICIOUS
+      risk_score: 35
+      confidence: 50
+      integrations: [entra]
+      summary: "Normal sign-in pattern; one failed MFA prompt"
+  findings:
+    - action_type: investigate_endpoint
+      subject: TH-LT-1047
+      items:
+        - {summary: "svch0st.exe launched from %APPDATA% by WINWORD.EXE", process: svch0st.exe}
+        - {summary: "Volume shadow copies deleted with vssadmin", process: vssadmin.exe}
+
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+  comment: Confirmed ransomware; contain now.
+
+release:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+  comment: Endpoint reimaged and verified clean.
+
+expect:
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - block_hash:5c1d7e0b9a8f6e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d
+    - block_domain:c2.ransom-ops.example
+    - block_ip:198.51.100.23
+  elevated: []
+  containment: CONTAINED
+  controls: 4
+  restoration: RESTORED
