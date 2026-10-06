@@ -6,12 +6,14 @@
 *.key
 *.p12
 *.pfx
-secrets/
+/secrets/
 guardrails.yaml
+config/integrations.yaml
 !docs/deployment/guardrails.example.yaml
 
-# Runtime output
-logs/
+# Runtime output (root-level only: src/xdr_response/logs and src/xdr_response/secrets are source packages)
+/logs/
+var/
 *.log
 exports/
 
