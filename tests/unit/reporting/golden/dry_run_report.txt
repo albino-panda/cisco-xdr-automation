@@ -1,0 +1,5 @@
+DRY RUN
+Would isolate: TH-LT-1047
+Would block: evil.example.com
+Would revoke sessions: jsmith@example.com
+No containment actions executed.

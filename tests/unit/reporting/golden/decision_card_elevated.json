@@ -1,0 +1,163 @@
+{
+  "blast_radius": {
+    "domains": 1,
+    "endpoints": 1,
+    "hashes": 0,
+    "ips": 0,
+    "messages": 0,
+    "other_indicators": 1,
+    "summary": "1 endpoint, 1 user, 1 domain, 1 other indicator",
+    "urls": 0,
+    "users": 1
+  },
+  "confidence_score": 70,
+  "decision_options": [
+    {
+      "decision": "APPROVE_ALL",
+      "label": "APPROVE ALL"
+    },
+    {
+      "decision": "APPROVE_SELECTED",
+      "label": "APPROVE SELECTED"
+    },
+    {
+      "decision": "REQUEST_MORE_INVESTIGATION",
+      "label": "REQUEST MORE INVESTIGATION"
+    },
+    {
+      "decision": "REJECT",
+      "label": "REJECT"
+    }
+  ],
+  "elevated_warnings": [
+    {
+      "action_key": "XDR-83921:isolate_endpoint:DC-01",
+      "action_type": "isolate_endpoint",
+      "asset": "DC-01",
+      "asset_class": "domain_controller",
+      "detail": "isolate_endpoint on DC-01 (domain controller)",
+      "potential_impact": "Isolating a domain controller can stop authentication, Group Policy and DNS for the whole domain.",
+      "reason": null,
+      "role": "Active Directory domain controller",
+      "target": "DC-01"
+    },
+    {
+      "action_key": "XDR-83921:remove_privileged_role:jsmith@example.com/62e90394-69f5-4237-9190-012177145e10",
+      "action_type": "remove_privileged_role",
+      "asset": "jsmith@example.com/62e90394-69f5-4237-9190-012177145e10",
+      "asset_class": null,
+      "detail": null,
+      "potential_impact": null,
+      "reason": "remove_privileged_role always requires elevated approval",
+      "role": null,
+      "target": "jsmith@example.com/62e90394-69f5-4237-9190-012177145e10"
+    }
+  ],
+  "endpoints": [
+    "DC-01"
+  ],
+  "evidence": [
+    {
+      "number": 1,
+      "observed_at": "2026-01-15T11:45:00Z",
+      "reference": "xdr-sighting-0001",
+      "source": "cisco_xdr",
+      "summary": "DC-01 contacted evil.example.com over HTTPS"
+    },
+    {
+      "number": 2,
+      "observed_at": "2026-01-15T11:35:00Z",
+      "reference": "signin-0001",
+      "source": "entra",
+      "summary": "jsmith@example.com signed in from 203.0.113.50 (unfamiliar location)"
+    },
+    {
+      "number": 3,
+      "observed_at": "2026-01-15T11:42:00Z",
+      "reference": "umb-0001",
+      "source": "umbrella",
+      "summary": "TH-LT-1047 resolved evil.example.com (category: malware)"
+    }
+  ],
+  "evidence_total": 3,
+  "excluded_targets": [
+    {
+      "action_type": "block_domain",
+      "reason": "allowlists.never_block.domains: example.com",
+      "target": "example.com"
+    }
+  ],
+  "incident_id": "XDR-83921",
+  "kind": "decision_card",
+  "package": {
+    "created_at": "2026-01-15T12:00:00Z",
+    "dry_run": false,
+    "evidence_snapshot_hash": "2eafc69c97563f91dc08be89ce7fcea9a046f1b88dbc3625a8687b8c0d4b1447",
+    "expires_at": "2026-01-15T16:00:00Z",
+    "package_id": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+    "purpose": "containment",
+    "requested_by": "automation:package_builder",
+    "workflow_id": "ransomware",
+    "workflow_version": "1.0.0"
+  },
+  "recommended_actions": [
+    {
+      "action_type": "isolate_endpoint",
+      "approval_level": "ELEVATED",
+      "confidence_score": 70,
+      "evidence": [
+        1
+      ],
+      "idempotency_key": "XDR-83921:isolate_endpoint:DC-01",
+      "integration": "cisco_xdr",
+      "label": "isolate_endpoint DC-01",
+      "params": {
+        "integration": "cisco_xdr"
+      },
+      "rationale": "isolate_endpoint on DC-01",
+      "risk_score": 88,
+      "target": "DC-01"
+    },
+    {
+      "action_type": "remove_privileged_role",
+      "approval_level": "ELEVATED",
+      "confidence_score": 80,
+      "evidence": [
+        2
+      ],
+      "idempotency_key": "XDR-83921:remove_privileged_role:jsmith@example.com/62e90394-69f5-4237-9190-012177145e10",
+      "integration": "entra",
+      "label": "remove_privileged_role jsmith@example.com/62e90394-69f5-4237-9190-012177145e10",
+      "params": {
+        "integration": "entra"
+      },
+      "rationale": "remove_privileged_role on jsmith@example.com/62e90394-69f5-4237-9190-012177145e10",
+      "risk_score": 85,
+      "target": "jsmith@example.com/62e90394-69f5-4237-9190-012177145e10"
+    },
+    {
+      "action_type": "block_domain",
+      "approval_level": "STANDARD",
+      "confidence_score": 92,
+      "evidence": [
+        3
+      ],
+      "idempotency_key": "XDR-83921:block_domain:evil.example.com",
+      "integration": "umbrella",
+      "label": "block_domain evil.example.com",
+      "params": {
+        "integration": "umbrella"
+      },
+      "rationale": "block_domain on evil.example.com",
+      "risk_score": 90,
+      "target": "evil.example.com"
+    }
+  ],
+  "risk_band": "CRITICAL",
+  "risk_score": 88,
+  "severity": "HIGH",
+  "title": "Domain controller beaconing to evil.example.com",
+  "users": [
+    "jsmith@example.com"
+  ]
+}

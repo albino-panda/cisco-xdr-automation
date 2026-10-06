@@ -1,0 +1,96 @@
+{
+  "decision_options": [
+    {
+      "decision": "APPROVE_ALL",
+      "label": "APPROVE RELEASE"
+    },
+    {
+      "decision": "REJECT",
+      "label": "REJECT"
+    }
+  ],
+  "elevated_warnings": [
+    {
+      "action_key": "XDR-83921:restore_privileged_role:jsmith@example.com/62e90394-69f5-4237-9190-012177145e10",
+      "action_type": "restore_privileged_role",
+      "asset": "jsmith@example.com/62e90394-69f5-4237-9190-012177145e10",
+      "asset_class": null,
+      "detail": null,
+      "potential_impact": null,
+      "reason": "restore_privileged_role always requires elevated approval",
+      "role": null,
+      "target": "jsmith@example.com/62e90394-69f5-4237-9190-012177145e10"
+    }
+  ],
+  "evidence": [
+    {
+      "number": 1,
+      "observed_at": "2026-01-15T16:00:00Z",
+      "reference": "registry",
+      "source": "temporary_control_registry",
+      "summary": "3 ACTIVE temporary controls for XDR-83921"
+    }
+  ],
+  "evidence_total": 1,
+  "incident_id": "XDR-83921",
+  "kind": "release_checklist",
+  "notice": "Controls not listed here stay ACTIVE. Closing the incident never removes controls.",
+  "package": {
+    "created_at": "2026-01-15T16:00:00Z",
+    "dry_run": false,
+    "evidence_snapshot_hash": "9fb35d578e0744aca2a4c9c31d70afeff3a585896413fc8ba36d02f82b716115",
+    "expires_at": "2026-01-15T20:00:00Z",
+    "package_id": "1a2b3c4d5e6f708192a3b4c5d6e7f809",
+    "purpose": "release",
+    "requested_by": "analyst.one@example.com",
+    "workflow_id": "ransomware",
+    "workflow_version": "1.0.0"
+  },
+  "release_actions": [
+    {
+      "action_type": "release_endpoint",
+      "approval_level": "STANDARD",
+      "idempotency_key": "XDR-83921:release_endpoint:TH-LT-1047",
+      "integration": "secure_endpoint",
+      "params": {
+        "connector_guid": "11111111-2222-3333-4444-555555555555",
+        "integration": "secure_endpoint",
+        "restores": "XDR-83921:isolate_endpoint:TH-LT-1047"
+      },
+      "restores": "XDR-83921:isolate_endpoint:TH-LT-1047",
+      "step": "Restore endpoint connectivity: TH-LT-1047",
+      "target": "TH-LT-1047"
+    },
+    {
+      "action_type": "unblock_domain",
+      "approval_level": "STANDARD",
+      "idempotency_key": "XDR-83921:unblock_domain:evil.example.com",
+      "integration": "umbrella",
+      "params": {
+        "destination_id": "7654321",
+        "destination_list_id": "1234567",
+        "integration": "umbrella",
+        "restores": "XDR-83921:block_domain:evil.example.com"
+      },
+      "restores": "XDR-83921:block_domain:evil.example.com",
+      "step": "Remove temporary Umbrella domain block: evil.example.com",
+      "target": "evil.example.com"
+    },
+    {
+      "action_type": "restore_privileged_role",
+      "approval_level": "ELEVATED",
+      "idempotency_key": "XDR-83921:restore_privileged_role:jsmith@example.com/62e90394-69f5-4237-9190-012177145e10",
+      "integration": "entra",
+      "params": {
+        "directoryScopeId": "/",
+        "integration": "entra",
+        "restores": "XDR-83921:remove_privileged_role:jsmith@example.com/62e90394-69f5-4237-9190-012177145e10",
+        "roleDefinitionId": "62e90394-69f5-4237-9190-012177145e10"
+      },
+      "restores": "XDR-83921:remove_privileged_role:jsmith@example.com/62e90394-69f5-4237-9190-012177145e10",
+      "step": "Restore privileged role assignment: jsmith@example.com/62e90394-69f5-4237-9190-012177145e10",
+      "target": "jsmith@example.com/62e90394-69f5-4237-9190-012177145e10"
+    }
+  ],
+  "title": "Release temporary controls for XDR-83921"
+}

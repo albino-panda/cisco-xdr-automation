@@ -1,0 +1,136 @@
+{
+  "blast_radius": {
+    "domains": 1,
+    "endpoints": 1,
+    "hashes": 0,
+    "ips": 0,
+    "messages": 0,
+    "other_indicators": 0,
+    "summary": "1 endpoint, 1 user, 1 domain",
+    "urls": 0,
+    "users": 1
+  },
+  "confidence_score": 94,
+  "decision_options": [
+    {
+      "decision": "APPROVE_ALL",
+      "label": "APPROVE ALL"
+    },
+    {
+      "decision": "APPROVE_SELECTED",
+      "label": "APPROVE SELECTED"
+    },
+    {
+      "decision": "REQUEST_MORE_INVESTIGATION",
+      "label": "REQUEST MORE INVESTIGATION"
+    },
+    {
+      "decision": "REJECT",
+      "label": "REJECT"
+    }
+  ],
+  "elevated_warnings": [],
+  "endpoints": [
+    "TH-LT-1047"
+  ],
+  "evidence": [
+    {
+      "number": 1,
+      "observed_at": "2026-01-15T11:35:00Z",
+      "reference": "signin-0001",
+      "source": "entra",
+      "summary": "jsmith@example.com signed in from 203.0.113.50 (unfamiliar location)"
+    },
+    {
+      "number": 2,
+      "observed_at": "2026-01-15T11:40:00Z",
+      "reference": "se-evt-0001",
+      "source": "secure_endpoint",
+      "summary": "Ransomware detection Win.Ransomware.Example on TH-LT-1047 (sha256 aaaaaaaa...)"
+    },
+    {
+      "number": 3,
+      "observed_at": "2026-01-15T11:42:00Z",
+      "reference": "umb-0001",
+      "source": "umbrella",
+      "summary": "TH-LT-1047 resolved evil.example.com (category: malware)"
+    }
+  ],
+  "evidence_total": 3,
+  "excluded_targets": [],
+  "incident_id": "XDR-83921",
+  "kind": "decision_card",
+  "package": {
+    "created_at": "2026-01-15T12:00:00Z",
+    "dry_run": false,
+    "evidence_snapshot_hash": "65331dd11ad3e547a02049ed61e7ffbae9669afa04fc2815b09e9ac280b1a313",
+    "expires_at": "2026-01-15T16:00:00Z",
+    "package_id": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+    "purpose": "containment",
+    "requested_by": "automation:package_builder",
+    "workflow_id": "ransomware",
+    "workflow_version": "1.0.0"
+  },
+  "recommended_actions": [
+    {
+      "action_type": "isolate_endpoint",
+      "approval_level": "STANDARD",
+      "confidence_score": 94,
+      "evidence": [
+        2,
+        3
+      ],
+      "idempotency_key": "XDR-83921:isolate_endpoint:TH-LT-1047",
+      "integration": "secure_endpoint",
+      "label": "isolate_endpoint TH-LT-1047",
+      "params": {
+        "connector_guid": "11111111-2222-3333-4444-555555555555",
+        "integration": "secure_endpoint"
+      },
+      "rationale": "isolate_endpoint on TH-LT-1047",
+      "risk_score": 97,
+      "target": "TH-LT-1047"
+    },
+    {
+      "action_type": "block_domain",
+      "approval_level": "STANDARD",
+      "confidence_score": 92,
+      "evidence": [
+        3
+      ],
+      "idempotency_key": "XDR-83921:block_domain:evil.example.com",
+      "integration": "umbrella",
+      "label": "block_domain evil.example.com",
+      "params": {
+        "integration": "umbrella"
+      },
+      "rationale": "block_domain on evil.example.com",
+      "risk_score": 90,
+      "target": "evil.example.com"
+    },
+    {
+      "action_type": "revoke_sessions",
+      "approval_level": "STANDARD",
+      "confidence_score": 75,
+      "evidence": [
+        1
+      ],
+      "idempotency_key": "XDR-83921:revoke_sessions:jsmith@example.com",
+      "integration": "entra",
+      "label": "revoke_sessions jsmith@example.com",
+      "params": {
+        "integration": "entra"
+      },
+      "rationale": "revoke_sessions on jsmith@example.com",
+      "risk_score": 80,
+      "target": "jsmith@example.com"
+    }
+  ],
+  "risk_band": "CRITICAL",
+  "risk_score": 97,
+  "severity": "CRITICAL",
+  "title": "Potential ransomware",
+  "users": [
+    "jsmith@example.com"
+  ]
+}
