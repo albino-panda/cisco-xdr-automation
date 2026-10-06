@@ -1,0 +1,40 @@
+name: Endpoint security product using DNS lookups
+description: >-
+  An approved antivirus product queries its cloud reputation service through long encoded DNS labels, which
+  looks like tunneling and lands in the DNS Tunneling VPN category with high volume. Enrichment rates the
+  domain clean and the querying process is listed in allowlist.approved_dns_tools, so the plan is empty:
+  nothing is blocked and no host is isolated.
+incident:
+  id: INC-TEST-DNS-0002
+  title: High-volume encoded DNS queries to av-cloudlookup.example
+  severity: medium
+  source: Cisco Umbrella
+  observables:
+    - {type: domain, value: av-cloudlookup.example}
+    - {type: hostname, value: ws-eng-0310}
+  context:
+    unique_subdomains_24h: 52000
+    mean_label_entropy: 4.1
+results:
+  enrich-domain:
+    - domain: av-cloudlookup.example
+      verdict: clean
+      categories: [DNS Tunneling VPN, Computer Security]
+      first_seen: "2019-04-11"
+      internal_queries: 52000
+      error: ""
+  investigate-host:
+    - host: ws-eng-0310
+      connector_guid: 3f6c1a2e-0000-4000-8000-000000000310
+      detections: []
+      trajectory:
+        - {event: dns_query, process: ExampleAV.exe, domain: 0a9f3c.h.av-cloudlookup.example, count: 52000}
+      isolation_capable: true
+      is_protected: false
+      error: ""
+guardrails:
+  allowlist:
+    approved_dns_tools: [ExampleAV.exe, ExampleVPN.exe]
+expect:
+  escalate: false
+  actions: []

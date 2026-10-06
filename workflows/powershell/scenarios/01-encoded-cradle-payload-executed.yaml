@@ -1,0 +1,54 @@
+name: Encoded download cradle retrieved and ran a malicious payload
+description: >
+  True positive. An Office application started an encoded PowerShell command that downloaded a file from
+  an unknown, newly seen domain and ran it. The domain is malicious, the payload hash is malicious and seen
+  only on this host. The plan blocks the download domain and isolates the host, both behind approval.
+incident:
+  id: INC-TEST-PS-0001
+  title: Encoded PowerShell downloaded and ran a payload on ws-fin-014
+  severity: high
+  source: Cisco Secure Endpoint
+  observables:
+    - {type: domain, value: cdn-update.test}
+    - {type: sha256, value: aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11}
+    - {type: host, value: ws-fin-014}
+    - {type: user, value: j.doe@example.com}
+  targets:
+    - {type: endpoint, value: ws-fin-014}
+  context:
+    parent_process: Office application
+    script_traits: [encoded command, download from unknown domain, file written to user temp folder]
+results:
+  enrich-domain:
+    - {domain: cdn-update.test, verdict: malicious, categories: [Malware], first_seen: "2026-10-04", internal_queries: 2, error: ""}
+  enrich-hash:
+    - sha256: aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11
+      disposition: malicious
+      prevalence: 1
+      hosts: [4b1c7a10-0000-4000-8000-000000000014, ws-fin-014]
+      error: ""
+  investigate-host:
+    - host: ws-fin-014
+      connector_guid: 4b1c7a10-0000-4000-8000-000000000014
+      detections:
+        - {name: Malicious file executed from user temp folder, disposition: malicious}
+      trajectory:
+        - {event: Office application started an encoded PowerShell command}
+        - {event: Outbound HTTPS to cdn-update.test}
+        - {event: Unsigned executable written and started}
+      isolation_capable: true
+      is_protected: false
+      error: ""
+  investigate-user:
+    - user: j.doe@example.com
+      profile: {department: Finance, groups: [Finance Users]}
+      risk_level: low
+      signins: []
+      anomalies: []
+      is_protected: false
+      error: ""
+expect:
+  escalate: false
+  actions:
+    - {atomic: block-domain, target: cdn-update.test, status: planned, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 4b1c7a10-0000-4000-8000-000000000014, status: planned, requires_approval: true}

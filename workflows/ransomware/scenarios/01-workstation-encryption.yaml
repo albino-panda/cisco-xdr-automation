@@ -1,0 +1,61 @@
+name: Ransomware encrypting one workstation, payload staged on a second
+description: >
+  True positive. Secure Endpoint flags the encrypting process on ws-fin-014 and the payload hash is
+  malicious with prevalence 2: it was also dropped on ws-fin-022, which has no detection yet. Both hosts
+  are isolated (the second through the payload rule), the hash is blocked, the account on the affected
+  host loses its sessions and, because Entra rates it high risk with anomalies, is disabled.
+incident:
+  id: INC-TEST-RW-0001
+  title: Ransomware detected on finance workstation
+  severity: critical
+  source: Cisco Secure Endpoint
+  observables:
+    - {type: sha256, value: 3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d}
+    - {type: hostname, value: ws-fin-014}
+    - {type: domain, value: cdn-update.test}
+    - {type: user, value: fin.analyst01@example.com}
+  targets:
+    - type: endpoint
+      observables:
+        - {type: hostname, value: ws-fin-014}
+        - {type: user, value: fin.analyst01@example.com}
+  context:
+    detection: Ransomware.Generic (malicious activity protection)
+results:
+  enrich-hash:
+    - sha256: 3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d
+      disposition: malicious
+      prevalence: 2
+      hosts: [00000000-0000-4000-8000-00000000f014, 00000000-0000-4000-8000-00000000f022]
+  enrich-domain:
+    - {domain: cdn-update.test, verdict: malicious, categories: [Malware], first_seen: "2026-10-02", internal_queries: 4}
+  investigate-host:
+    - host: ws-fin-014
+      connector_guid: 00000000-0000-4000-8000-00000000f014
+      detections:
+        - {name: Ransomware.Generic, disposition: malicious}
+        - {name: Shadow copy deletion, disposition: malicious}
+      trajectory: []
+      isolation_capable: true
+      is_protected: false
+    - host: ws-fin-022
+      connector_guid: 00000000-0000-4000-8000-00000000f022
+      detections: []
+      trajectory: []
+      isolation_capable: true
+      is_protected: false
+  investigate-user:
+    - user: fin.analyst01@example.com
+      profile: {department: Finance, groups: [Finance Users]}
+      risk_level: high
+      signins: [{ip: 203.0.113.40, location: Unknown, app: VPN, result: success}]
+      anomalies: [unfamiliar location]
+      is_protected: false
+expect:
+  escalate: false
+  actions:
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000f014, status: planned, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000f022, status: planned, requires_approval: true}
+    - {atomic: block-hash, target: 3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d, status: planned, requires_approval: true}
+    - {atomic: revoke-session, target: fin.analyst01@example.com, status: planned, requires_approval: false}
+    - {atomic: disable-user, target: fin.analyst01@example.com, status: planned, requires_approval: true}

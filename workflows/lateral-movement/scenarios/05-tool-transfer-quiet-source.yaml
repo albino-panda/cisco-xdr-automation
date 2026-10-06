@@ -1,0 +1,49 @@
+name: Tool transferred to a file server from a source with no detections
+description: >
+  Edge case for lateral movement (T1570). A tool is copied over an admin share to a file server but has not
+  run yet, so neither host has a detection. enrich-hash rates the file malicious and lists the file server,
+  so the destination is isolated. The source used only built-in tools and has no detection of its own, but
+  the detection names it in source_hosts (upper case, matched case-insensitively), so it is isolated too
+  instead of being left active. A third clean host in the incident is not touched. The account used is not
+  flagged by Entra, so its sessions are revoked but it is not disabled.
+incident:
+  id: INC-TEST-LM-0005
+  title: Unknown executable copied to srv-file-01 over C$ share
+  severity: high
+  source: Cisco Secure Endpoint
+  observables:
+    - {type: hostname, value: ws-eng-12}
+    - {type: hostname, value: srv-file-01}
+    - {type: hostname, value: ws-eng-15}
+    - {type: user, value: k.ng@example.com}
+    - {type: sha256, value: deadbeef0000111122223333444455556666777788889999aaaabbbbccccdddd}
+  context:
+    protocol: SMB
+    share: C$
+    source_hosts: [WS-ENG-12]
+results:
+  enrich-hash:
+    - sha256: deadbeef0000111122223333444455556666777788889999aaaabbbbccccdddd
+      disposition: malicious
+      prevalence: 1
+      hosts: [00000000-0000-4000-8000-000000000502]
+      error: ""
+  investigate-host:
+    - {host: ws-eng-12, connector_guid: 00000000-0000-4000-8000-000000000501, detections: [], trajectory: [{event: SMB write, destination: srv-file-01}], isolation_capable: true, is_protected: false, error: ""}
+    - {host: srv-file-01, connector_guid: 00000000-0000-4000-8000-000000000502, detections: [], trajectory: [{event: file created, source: ws-eng-12}], isolation_capable: true, is_protected: false, error: ""}
+    - {host: ws-eng-15, connector_guid: 00000000-0000-4000-8000-000000000503, detections: [], trajectory: [], isolation_capable: true, is_protected: false, error: ""}
+  investigate-user:
+    - user: k.ng@example.com
+      profile: {department: Engineering, groups: [Engineering Users]}
+      risk_level: none
+      signins:
+        - {ip: 10.20.8.12, location: Head office, app: Windows Sign In, result: success}
+      anomalies: []
+      is_protected: false
+      error: ""
+expect:
+  escalate: false
+  actions:
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000502, status: planned, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000501, status: planned, requires_approval: true}
+    - {atomic: revoke-session, target: k.ng@example.com, status: planned, requires_approval: false}

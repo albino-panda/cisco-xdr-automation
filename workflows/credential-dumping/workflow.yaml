@@ -46,57 +46,81 @@ steps:
 - id: load_incident
   phase: intake
   action: XDR - Incident - Get Incident Summary
-  note: Collect observables, targets and existing notes from the triggering incident.
+  note: Collect observables, targets and existing notes from the triggering incident. Put the accounts
+    with an interactive or cached logon on the affected hosts in the lookback window into
+    incident.context.logged_on_users (Secure Endpoint or Splunk logon events).
+  on_error: stop
 - id: load_guardrails
   phase: intake
   action: Core - Read guardrails
   note: Protected hosts/users, allow-lists and blast-radius limits (docs/deployment/guardrails.example.yaml).
+  on_error: stop
 - id: enrich_hash
   phase: enrich
   atomic: enrich-hash
   for_each: sha256
+  on_error: continue
 - id: investigate_host
   phase: investigate
   atomic: investigate-host
   for_each: host
+  on_error: continue
 - id: investigate_user
   phase: investigate
   atomic: investigate-user
   for_each: user
+  note: Users named in the incident plus every account in incident.context.logged_on_users.
+  on_error: continue
 - id: build_plan
   phase: decide
-  note: Build the containment plan from enrichment verdicts, investigation results and guardrails. Drop
-    any target that is protected, allow-listed or over the blast-radius limit.
+  note: Build the containment plan from the rules in `plan`. Credential access is confirmed on a host
+    when a Secure Endpoint detection on it is malicious or a malicious hash was seen on it. Drop any
+    target that is protected, allow-listed or over the blast-radius limit. When a protected host (domain
+    controller) has confirmed credential access, plan no account actions and escalate to the incident
+    commander.
+  on_error: escalate
 - id: approval
   phase: decide
   action: Approval Task
   note: Show the plan to an approver. Skipped when dry_run is true (plan is only recorded).
   skip_if: dry_run == true
+  on_error: escalate
 - id: isolate_endpoint
   phase: contain
   atomic: isolate-endpoint
-  when: Source host.
+  when: Investigated host where credential access is confirmed (malicious detection on the host, or a
+    malicious hash seen on it) and the connector policy allows isolation.
   requires_approval: true
+  on_error: escalate
 - id: revoke_session
   phase: contain
   atomic: revoke-session
-  when: Accounts logged on to the host in the lookback window.
+  when: Accounts in incident.context.logged_on_users (logged on to the host in the lookback window) when
+    credential access is confirmed on an affected host and no protected host (domain controller) is
+    confirmed.
   requires_approval: false
+  on_error: escalate
 - id: disable_user
   phase: contain
   atomic: disable-user
-  when: Privileged accounts exposed on the host, after approver review.
+  when: The same exposed accounts when they hold a privileged role (profile.privileged_roles not empty),
+    after approver review.
   requires_approval: true
+  on_error: escalate
 - id: incident_note
   phase: record
   action: XDR - Incident - Add Note to Incident
-  note: Write enrichment summary, plan, approvals and per-action results.
+  note: Write enrichment summary, plan, approvals, per-action results, rollback per action and the
+    credential-reset plan for accounts cached on the host.
+  on_error: continue
 - id: create_ticket
   phase: record
   atomic: create-ticket
+  on_error: continue
 - id: notify_soc
   phase: notify
   atomic: notify-soc
+  on_error: continue
 integrations:
 - cisco-xdr
 - secure-endpoint
@@ -107,3 +131,102 @@ integrations:
 related_workflows:
 - lateral-movement
 - privilege-escalation
+plan:
+- id: isolate_confirmed_hosts
+  description: Hosts where credential access is confirmed (malicious detection on the host, or a malicious
+    hash seen on it) and the connector policy allows isolation. Domain controllers and other protected
+    hosts are skipped by the guardrails and escalated.
+  atomic: isolate-endpoint
+  for_each: "results['investigate-host']"
+  when: >-
+    item.isolation_capable
+    and (any(d.disposition == 'malicious' for d in item.detections)
+    or any(x.disposition == 'malicious' and (item.connector_guid in x.hosts or item.host in x.hosts)
+    for x in results['enrich-hash']))
+  target: item.connector_guid
+  args:
+    reason: "'Credential dumping: credential material accessed on ' + item.host + ' (' + incident.title + ')'"
+- id: revoke_exposed_sessions
+  description: Accounts logged on to an affected host in the lookback window, when credential access is
+    confirmed on a host and no protected host (domain controller) is confirmed.
+  atomic: revoke-session
+  for_each: "results['investigate-user']"
+  when: >-
+    lower(item.user) in [lower(u) for u in get(incident.context, 'logged_on_users', [])]
+    and any(any(d.disposition == 'malicious' for d in h.detections)
+    or any(x.disposition == 'malicious' and (h.connector_guid in x.hosts or h.host in x.hosts)
+    for x in results['enrich-hash']) for h in results['investigate-host'])
+    and not any(h.is_protected and (any(d.disposition == 'malicious' for d in h.detections)
+    or any(x.disposition == 'malicious' and (h.connector_guid in x.hosts or h.host in x.hosts)
+    for x in results['enrich-hash'])) for h in results['investigate-host'])
+  target: item.user
+- id: disable_exposed_privileged_accounts
+  description: Exposed accounts (same scope as revoke_exposed_sessions) that hold a privileged role.
+    Approver review is required.
+  atomic: disable-user
+  for_each: "results['investigate-user']"
+  when: >-
+    len(get(item.profile, 'privileged_roles', [])) > 0
+    and lower(item.user) in [lower(u) for u in get(incident.context, 'logged_on_users', [])]
+    and any(any(d.disposition == 'malicious' for d in h.detections)
+    or any(x.disposition == 'malicious' and (h.connector_guid in x.hosts or h.host in x.hosts)
+    for x in results['enrich-hash']) for h in results['investigate-host'])
+    and not any(h.is_protected and (any(d.disposition == 'malicious' for d in h.detections)
+    or any(x.disposition == 'malicious' and (h.connector_guid in x.hosts or h.host in x.hosts)
+    for x in results['enrich-hash'])) for h in results['investigate-host'])
+  target: item.user
+  args:
+    reason: "'Credential dumping: privileged account exposed on a compromised host (' + incident.title + ')'"
+templates:
+  approval: |
+    Credential dumping on {incident.title} ({incident.id}, severity {incident.severity}).
+    Credential material was accessed on the host. Exposed accounts (logged on in the lookback window):
+    {incident.context.logged_on_users}.
+
+    Planned containment:
+    {plan.actions}
+
+    Escalation required: {plan.escalate} {plan.reasons}
+    Approve to isolate the host and disable the privileged accounts listed above. Session revocation
+    is not reversible. A protected host (domain controller) is never actioned here; it goes to the
+    incident commander.
+  incident_note: |
+    Workflow {workflow.name} ({workflow.id}) ran for {incident.id}. Dry run: {workflow.dry_run}.
+    Approver: {approver.name}, decision {approver.decision}.
+
+    Containment results:
+    {plan.actions}
+    Escalation: {plan.escalate} {plan.reasons}
+
+    Rollback:
+    - isolate-endpoint: stop isolation for the connector GUID in Secure Endpoint. The unlock code is
+      recorded below this note only.
+    - revoke-session: not reversible; the user signs in again after the password reset.
+    - disable-user: set accountEnabled back to true in Entra ID once the password is reset.
+
+    Credential-reset plan for accounts cached on the host ({incident.context.logged_on_users}):
+    1. Treat every listed account as compromised, including accounts skipped by guardrails.
+    2. Reset the password of each account, privileged and service accounts first; rotate service
+       account secrets and the host's local administrator password.
+    3. Re-enable disabled accounts only after the reset and an MFA method review.
+    4. Rebuild or reimage the host before it leaves isolation.
+    5. If a domain controller or a protected account is involved, the incident commander owns the
+       reset, including a domain-wide reset of privileged accounts and of the Kerberos ticket-granting
+       account (twice). Nothing in that case is automated.
+  ticket_title: "[Critical] Credential dumping on {incident.title} ({incident.id})"
+  ticket_body: |
+    Incident {incident.id} from {incident.source}: {incident.title}.
+    Severity {incident.severity}. MITRE T1003.001, T1003.002, T1003.003.
+
+    Exposed accounts (logged on to the host in the lookback window): {incident.context.logged_on_users}
+
+    Containment plan and results:
+    {plan.actions}
+    Escalation to incident commander: {plan.escalate} {plan.reasons}
+
+    Required follow-up: password reset of every exposed account (privileged first), rotation of
+    service account secrets and the host's local administrator password, host reimage, and review of
+    sign-ins by the exposed accounts since the first detection.
+  notification: |
+    Credential dumping ({incident.severity}): {incident.title}. Incident {incident.id}, ticket
+    {ticket.ticket_id} {ticket.ticket_url}. Escalate to incident commander: {plan.escalate}.

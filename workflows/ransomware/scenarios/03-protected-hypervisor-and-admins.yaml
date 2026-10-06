@@ -1,0 +1,84 @@
+name: Ransomware reaches a hypervisor, a domain controller and the OT network
+description: >
+  Guardrails. Encryption is detected on hv-esx-02, dc-01 and an OT host in 10.0.10.0/24, and on one
+  ordinary workstation. The investigation does not mark the infrastructure hosts as protected, so the
+  engine's own host patterns and CIDR must catch them. The accounts on those hosts are a break-glass
+  account and a Domain Admins member; both are high risk, and both must be skipped rather than revoked
+  or disabled. Only the workstation and the payload hash are planned.
+incident:
+  id: INC-TEST-RW-0003
+  title: Ransomware on virtualisation and identity infrastructure
+  severity: critical
+  source: Cisco XDR
+  observables:
+    - {type: sha256, value: 6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f}
+  targets:
+    - type: endpoint
+      observables:
+        - {type: hostname, value: hv-esx-02}
+        - {type: user, value: breakglass-01@example.com}
+    - type: endpoint
+      observables:
+        - {type: hostname, value: dc-01}
+        - {type: user, value: infra.admin@example.com}
+    - type: endpoint
+      observables:
+        - {type: hostname, value: ws-eng-031}
+  context:
+    detection: Ransomware.Generic
+results:
+  enrich-hash:
+    - sha256: 6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f
+      disposition: malicious
+      prevalence: 4
+      hosts: [00000000-0000-4000-8000-0000000e5002, 00000000-0000-4000-8000-00000000dc01, 00000000-0000-4000-8000-00000000a025, 00000000-0000-4000-8000-00000000e031]
+  investigate-host:
+    - host: hv-esx-02
+      connector_guid: 00000000-0000-4000-8000-0000000e5002
+      detections: [{name: Ransomware.Generic, disposition: malicious}]
+      trajectory: []
+      isolation_capable: true
+      is_protected: false
+    - host: dc-01
+      connector_guid: 00000000-0000-4000-8000-00000000dc01
+      detections: [{name: Ransomware.Generic, disposition: malicious}]
+      trajectory: []
+      isolation_capable: true
+      is_protected: false
+    - host: 10.0.10.25
+      connector_guid: 00000000-0000-4000-8000-00000000a025
+      detections: [{name: Ransomware.Generic, disposition: malicious}]
+      trajectory: []
+      isolation_capable: true
+      is_protected: false
+    - host: ws-eng-031
+      connector_guid: 00000000-0000-4000-8000-00000000e031
+      detections: [{name: Ransomware.Generic, disposition: malicious}]
+      trajectory: []
+      isolation_capable: true
+      is_protected: false
+  investigate-user:
+    - user: breakglass-01@example.com
+      profile: {department: IT Security, groups: [Emergency Access]}
+      risk_level: high
+      signins: [{ip: 198.51.100.23, location: Unknown, app: Azure Portal, result: success}]
+      anomalies: [unfamiliar location]
+      is_protected: false
+    - user: infra.admin@example.com
+      profile: {department: IT Operations, groups: [Domain Admins]}
+      risk_level: high
+      signins: [{ip: 198.51.100.23, location: Unknown, app: VPN, result: success}]
+      anomalies: [impossible travel]
+      is_protected: false
+expect:
+  escalate: false
+  actions:
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-0000000e5002, status: skipped_protected}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000dc01, status: skipped_protected}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000a025, status: skipped_protected}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000e031, status: planned, requires_approval: true}
+    - {atomic: block-hash, target: 6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f, status: planned, requires_approval: true}
+    - {atomic: revoke-session, target: breakglass-01@example.com, status: skipped_protected}
+    - {atomic: revoke-session, target: infra.admin@example.com, status: skipped_protected}
+    - {atomic: disable-user, target: breakglass-01@example.com, status: skipped_protected}
+    - {atomic: disable-user, target: infra.admin@example.com, status: skipped_protected}

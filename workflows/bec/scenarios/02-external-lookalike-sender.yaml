@@ -1,0 +1,41 @@
+name: External lookalike-domain sender impersonates the CFO
+description: >-
+  BEC by impersonation (T1656) with no internal compromise. A newly seen lookalike domain sends payment
+  requests to finance. The plan blocks the lookalike domain and quarantines its messages across all
+  recipients. The external sender address has no tenant account, so no identity action is planned, and
+  the targeted finance user shows no compromise evidence.
+incident:
+  id: INC-TEST-BEC-0002
+  title: Lookalike domain requesting urgent wire transfer
+  severity: high
+  source: Secure Email Threat Defense
+  observables:
+    - {type: email, value: cfo@examp1e.test}
+    - {type: domain, value: examp1e.test}
+    - {type: ip, value: 198.51.100.23}
+  targets:
+    - {type: user, value: ap-clerk-02@example.com}
+  context:
+    fraud_senders: [cfo@examp1e.test]
+    lookalike_domains: [examp1e.test]
+    mailbox_rules: []
+results:
+  enrich-domain:
+    - {domain: examp1e.test, verdict: unknown, categories: [Newly Seen Domains], first_seen: "2026-10-04", internal_queries: 0, error: ""}
+  enrich-ip:
+    - {ip: 198.51.100.23, verdict: suspicious, sources: [], internal_sightings: 0, is_internal: false, error: ""}
+  investigate-user:
+    - {user: cfo@examp1e.test, profile: {}, risk_level: "", signins: [], anomalies: [], is_protected: false, error: "user not found in tenant"}
+    - user: ap-clerk-02@example.com
+      profile: {department: Finance, groups: [Finance-AP]}
+      risk_level: none
+      signins:
+        - {ip: 10.20.30.41, location: Office, app: Outlook, result: success}
+      anomalies: []
+      is_protected: false
+      error: ""
+expect:
+  escalate: false
+  actions:
+    - {atomic: block-domain, target: examp1e.test, status: planned, requires_approval: true}
+    - {atomic: quarantine-email, target: examp1e.test, status: planned, requires_approval: true}

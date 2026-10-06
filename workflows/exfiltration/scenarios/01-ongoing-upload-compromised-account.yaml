@@ -1,0 +1,58 @@
+name: Ongoing upload to an unknown drop site from a compromised account
+description: >-
+  True positive. A finance laptop is still uploading archives to a domain and IP with no reputation,
+  and the signed-in account has Entra risk high with an unfamiliar-location sign-in. Every rule that
+  applies fires: both destinations are blocked, the source host is isolated while the transfer runs,
+  and the account is disabled. All actions wait for approval.
+incident:
+  id: INC-TEST-EXF-0001
+  title: Large outbound transfer to unknown file drop from finance laptop
+  severity: critical
+  source: Cisco Umbrella / Secure Access and Cisco Secure Endpoint
+  observables:
+    - {type: domain, value: files-drop.example}
+    - {type: ip, value: 203.0.113.45}
+    - {type: hostname, value: fin-lt-07}
+    - {type: email, value: j.doe@example.com}
+  targets:
+    - {type: endpoint, value: fin-lt-07}
+  context:
+    destination_domains: [files-drop.example]
+    destination_ips: [203.0.113.45]
+    source_hosts: [fin-lt-07]
+    actor_users: [j.doe@example.com]
+    transfer_ongoing: true
+    transfer_started: "2026-10-06T08:12:00Z"
+    transfer_last_seen: "2026-10-06T09:40:00Z"
+    bytes_out: 4831838208
+    file_count: 1260
+    data_types: [customer invoices, payment reconciliation reports]
+    insider_risk: false
+results:
+  enrich-domain:
+    - {domain: files-drop.example, verdict: unknown, categories: [Newly Seen Domains], first_seen: "2026-10-05", internal_queries: 1, error: ""}
+  enrich-ip:
+    - {ip: 203.0.113.45, verdict: unknown, sources: [], internal_sightings: 1, is_internal: false, error: ""}
+  investigate-host:
+    - host: fin-lt-07
+      connector_guid: 00000000-0000-4000-8000-00000000e701
+      detections: []
+      trajectory: [{event: archive created, detail: many files compressed before upload}]
+      isolation_capable: true
+      is_protected: false
+      error: ""
+  investigate-user:
+    - user: j.doe@example.com
+      profile: {department: Finance, manager: m.ruiz@example.com, groups: [Finance]}
+      risk_level: high
+      signins: [{ip: 192.0.2.77, location: unfamiliar, app: Office 365, result: success}]
+      anomalies: [unfamiliar location]
+      is_protected: false
+      error: ""
+expect:
+  escalate: false
+  actions:
+    - {atomic: block-domain, target: files-drop.example, status: planned, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.45, status: planned, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000e701, status: planned, requires_approval: true}
+    - {atomic: disable-user, target: j.doe@example.com, status: planned, requires_approval: true}

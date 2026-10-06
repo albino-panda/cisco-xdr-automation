@@ -1,0 +1,36 @@
+name: Cradle reached a malicious domain but no payload landed
+description: >
+  Edge case. Script block logging shows an encoded command contacting a malicious domain, but the download
+  never completed: there is no payload hash and the host has no malicious detection. The domain is blocked
+  to stop a retry; the host is not isolated because neither "payload retrieved" nor "payload executed" is
+  shown. This keeps isolation from firing on encoding or a bad destination alone.
+incident:
+  id: INC-TEST-PS-0006
+  title: Encoded PowerShell contacted a malicious domain from ws-sal-030
+  severity: medium
+  source: Splunk script block logging
+  observables:
+    - {type: domain, value: stage-loader.test}
+    - {type: host, value: ws-sal-030}
+  targets:
+    - {type: endpoint, value: ws-sal-030}
+  context:
+    script_traits: [encoded command, download from unknown domain]
+    download_completed: false
+results:
+  enrich-domain:
+    - {domain: stage-loader.test, verdict: malicious, categories: [Malware], first_seen: "2026-10-05", internal_queries: 1, error: ""}
+  investigate-host:
+    - host: ws-sal-030
+      connector_guid: 4b1c7a10-0000-4000-8000-000000000030
+      detections: []
+      trajectory:
+        - {event: Encoded PowerShell command started}
+        - {event: DNS query for stage-loader.test, connection not completed}
+      isolation_capable: true
+      is_protected: false
+      error: ""
+expect:
+  escalate: false
+  actions:
+    - {atomic: block-domain, target: stage-loader.test, status: planned, requires_approval: true}

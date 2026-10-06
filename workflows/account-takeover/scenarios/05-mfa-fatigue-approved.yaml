@@ -1,0 +1,46 @@
+name: MFA fatigue ends in an approved push
+description: >
+  T1621. The attacker holds the password and sends repeated MFA pushes from one IP until the user approves
+  one. The source IP is new and has no reputation (verdict unknown) and Entra only rates the risk medium,
+  so the plain risk and verdict tests would miss it. The MFA fatigue tests catch it: sessions are revoked,
+  and the source of the denied prompts is blocked with approval. A second, unrelated IP with unknown
+  reputation that sent no prompts is not blocked.
+incident:
+  id: INC-TEST-ATO-0005
+  title: MFA fatigue pattern followed by successful sign-in
+  severity: high
+  source: Splunk
+  observables:
+    - {type: user, value: sales-rep-02@example.com}
+    - {type: ip, value: 203.0.113.80}
+    - {type: ip, value: 192.0.2.61}
+  targets:
+    - {type: user, value: sales-rep-02@example.com}
+  context:
+    detection: mfaFatigue
+    denied_prompts: 6
+results:
+  enrich-ip:
+    - {ip: 203.0.113.80, verdict: unknown, sources: [], internal_sightings: 0, is_internal: false, error: ""}
+    - {ip: 192.0.2.61, verdict: unknown, sources: [], internal_sightings: 0, is_internal: false, error: ""}
+  investigate-user:
+    - user: sales-rep-02@example.com
+      profile: {department: Sales, manager: sales-lead@example.com, groups: [Sales Users], privileged_roles: []}
+      risk_level: medium
+      signins:
+        - {ip: 203.0.113.80, location: Unfamiliar city, app: Office 365 Exchange Online, result: mfa_denied}
+        - {ip: 203.0.113.80, location: Unfamiliar city, app: Office 365 Exchange Online, result: mfa_denied}
+        - {ip: 203.0.113.80, location: Unfamiliar city, app: Office 365 Exchange Online, result: mfa_denied}
+        - {ip: 203.0.113.80, location: Unfamiliar city, app: Office 365 Exchange Online, result: mfa_denied}
+        - {ip: 203.0.113.80, location: Unfamiliar city, app: Office 365 Exchange Online, result: mfa_denied}
+        - {ip: 203.0.113.80, location: Unfamiliar city, app: Office 365 Exchange Online, result: mfa_denied}
+        - {ip: 203.0.113.80, location: Unfamiliar city, app: Office 365 Exchange Online, result: success}
+        - {ip: 192.0.2.61, location: Home ISP, app: Microsoft Teams, result: failure}
+      anomalies: [mfa_fatigue, unfamiliar_location]
+      is_protected: false
+      error: ""
+expect:
+  escalate: false
+  actions:
+    - {atomic: revoke-session, target: sales-rep-02@example.com, status: planned, requires_approval: false}
+    - {atomic: block-ip, target: 203.0.113.80, status: planned, requires_approval: true}

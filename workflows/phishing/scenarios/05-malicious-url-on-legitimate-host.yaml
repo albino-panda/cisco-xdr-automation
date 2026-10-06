@@ -1,0 +1,42 @@
+name: Malicious URLs hosted on legitimate file-sharing sites
+description: >
+  Phishing edge case. A compromised internal mailbox sends a lure with two malicious URLs on otherwise
+  legitimate hosts: a public file-sharing site (clean verdict, not allow-listed) and the organisation's
+  own share site (allow-listed). Only the exact URLs are candidates, never the domains. The public URL
+  is planned, the allow-listed one is skipped for a human, and the help link in the same message is not
+  touched because it is not listed as malicious. Quarantine matches the internal sender plus the
+  subject, so other mail from that colleague is not pulled.
+incident:
+  id: INC-TEST-PH-0005
+  title: Internal mailbox sends shared-document lure
+  severity: medium
+  source: Secure Email Threat Defense
+  observables:
+    - {type: email, value: ap-clerk-07@example.com}
+    - {type: email_subject, value: "Remittance advice shared with you"}
+    - {type: url, value: "https://files.docs-share.test/s/Qx2Pa/remittance.html"}
+    - {type: url, value: "https://share.example.com/s/r8Kd2/remittance.html"}
+    - {type: url, value: "https://docs-share.test/help"}
+    - {type: domain, value: files.docs-share.test}
+    - {type: domain, value: docs-share.test}
+    - {type: domain, value: share.example.com}
+  context:
+    sender: ap-clerk-07@example.com
+    subject: "Remittance advice shared with you"
+    email_verdict: malicious
+    malicious_urls:
+      - "https://files.docs-share.test/s/Qx2Pa/remittance.html"
+      - "https://share.example.com/s/r8Kd2/remittance.html"
+results:
+  enrich-domain:
+    - {domain: files.docs-share.test, verdict: clean, categories: [File Storage], first_seen: "2014-02-20", internal_queries: 830, error: ""}
+    - {domain: docs-share.test, verdict: clean, categories: [File Storage], first_seen: "2014-02-20", internal_queries: 1204, error: ""}
+    - {domain: share.example.com, verdict: clean, categories: [Business], first_seen: "2012-08-14", internal_queries: 5120, error: ""}
+  investigate-user:
+    - {user: ap-clerk-07@example.com, risk_level: high, signins: [], anomalies: [unfamiliar location], is_protected: false, error: ""}
+expect:
+  escalate: false
+  actions:
+    - {atomic: quarantine-email, target: ap-clerk-07@example.com, status: planned, requires_approval: true}
+    - {atomic: block-url, target: "https://files.docs-share.test/s/Qx2Pa/remittance.html", status: planned, requires_approval: true}
+    - {atomic: block-url, target: "https://share.example.com/s/r8Kd2/remittance.html", status: skipped_allowlisted, requires_approval: true}

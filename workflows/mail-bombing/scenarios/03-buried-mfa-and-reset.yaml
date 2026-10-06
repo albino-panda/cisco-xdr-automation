@@ -1,0 +1,62 @@
+name: Password reset and MFA prompt buried in the flood
+description: >
+  The case mail bombing is used for: while 140 sign-up confirmations from 60 domains bury the inbox, a
+  self-service password reset and an unexpected MFA prompt hit the same account inside the detection
+  window. The burst is quarantined behind approval and the recipient's sessions are revoked without
+  approval (revoke-session needs none). The ticket and note send the analyst to account-takeover.
+incident:
+  id: INC-TEST-MB-0003
+  title: "[CRITICAL] Possible email bombing of payroll-officer@example.com: 140 msgs / 60 domains in 5 min"
+  severity: critical
+  source: cisco-xdr-mailbomb-detector
+  observables:
+    - {type: email, value: payroll-officer@example.com}
+    - {type: domain, value: account-confirm.example}
+    - {type: ip, value: 198.51.100.40}
+  targets:
+    - {type: email, value: payroll-officer@example.com}
+  context:
+    event_type: mailbomb.detection
+    schema_version: 1
+    detection_id: mailbomb-0000000000000003
+    detected_at: "2026-10-05T11:20:00.000Z"
+    risk_score: 92
+    is_escalation: false
+    matched_rules: ["threshold:critical", "threshold:high", "threshold:medium"]
+    recipient: payroll-officer@example.com
+    recipient_domain: example.com
+    xdr_incident_id: null
+    metrics:
+      window_start: "2026-10-05T11:15:00.000Z"
+      window_end: "2026-10-05T11:20:00.000Z"
+      window_minutes: 5.0
+      total_messages: 140
+      unique_senders: 128
+      unique_sender_domains: 60
+      unique_source_ips: 44
+      unique_subjects: 139
+      neutral_count: 118
+      graymail_count: 12
+      spam_count: 10
+      malicious_count: 0
+      messages_per_minute: 28.0
+      acceleration: 2.6
+results:
+  enrich-domain:
+    - {domain: account-confirm.example, verdict: unknown, categories: [], first_seen: "2026-09-30", internal_queries: 0}
+  investigate-user:
+    - user: payroll-officer@example.com
+      profile: {department: Finance, manager: finance-lead@example.com, privileged_roles: [], groups: [Payroll]}
+      risk_level: medium
+      signins:
+        - {ip: 192.0.2.77, location: Unfamiliar, app: Office 365 Exchange Online, result: interrupted, time: "2026-10-05T11:17:30Z"}
+      anomalies:
+        - {type: password_reset, time: "2026-10-05T11:17:05Z", detail: Self-service password reset requested}
+        - {type: mfa_prompt, time: "2026-10-05T11:17:40Z", detail: Push prompt not tied to a sign-in by the user}
+      is_protected: false
+      error: ""
+expect:
+  escalate: false
+  actions:
+    - {atomic: quarantine-email, target: payroll-officer@example.com, status: planned, requires_approval: true}
+    - {atomic: revoke-session, target: payroll-officer@example.com, status: planned, requires_approval: false}

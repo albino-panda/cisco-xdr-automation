@@ -1,0 +1,45 @@
+name: Mass file modification from the sanctioned backup agent
+description: >
+  Benign. A nightly backup job re-encrypts its archive set and trips the mass file modification alert.
+  The agent binary is clean and on thousands of endpoints, the host has no malicious detection and the
+  service owner shows no risk. The plan must be empty: no isolation, no block, no account action.
+incident:
+  id: INC-TEST-RW-0002
+  title: Mass file modification on backup server
+  severity: high
+  source: Cisco XDR
+  observables:
+    - {type: sha256, value: 9d4b2e7f1a0c6e8d3b5f7a9c1e2d4b6f9d4b2e7f1a0c6e8d3b5f7a9c1e2d4b6f}
+    - {type: hostname, value: srv-bkp-02}
+    - {type: user, value: backup.operator@example.com}
+  targets:
+    - type: endpoint
+      observables:
+        - {type: hostname, value: srv-bkp-02}
+        - {type: user, value: backup.operator@example.com}
+  context:
+    detection: Mass file modification
+results:
+  enrich-hash:
+    - sha256: 9d4b2e7f1a0c6e8d3b5f7a9c1e2d4b6f9d4b2e7f1a0c6e8d3b5f7a9c1e2d4b6f
+      disposition: clean
+      prevalence: 3800
+      hosts: [00000000-0000-4000-8000-0000000b0002]
+  investigate-host:
+    - host: srv-bkp-02
+      connector_guid: 00000000-0000-4000-8000-0000000b0002
+      detections:
+        - {name: Mass file modification, disposition: clean}
+      trajectory: []
+      isolation_capable: true
+      is_protected: false
+  investigate-user:
+    - user: backup.operator@example.com
+      profile: {department: IT Operations, groups: [Backup Operators]}
+      risk_level: none
+      signins: [{ip: 10.20.0.15, location: Head office, app: Backup console, result: success}]
+      anomalies: []
+      is_protected: false
+expect:
+  escalate: false
+  actions: []

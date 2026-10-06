@@ -1,0 +1,43 @@
+name: Phishing campaign with rotating domains exceeds the indicator cap
+description: >
+  Blast-radius escalation. One campaign message links to several rotating lookalike domains and carries
+  a malicious attachment. The tenant caps indicator blocks at 3 per run (lowered here so the scenario
+  stays small; the default is 50). Four indicator blocks exceed the cap, so every block-domain and
+  block-hash action becomes skipped_limit and the plan escalates to a human. Quarantine is not part of
+  the indicator cap and stays planned.
+incident:
+  id: INC-TEST-PH-0004
+  title: Shipping-notice phishing campaign across many mailboxes
+  severity: high
+  source: Secure Email Threat Defense
+  observables:
+    - {type: email, value: tracking@parcel-notice.test}
+    - {type: email_subject, value: "Delivery attempt failed - reschedule"}
+    - {type: url, value: "https://parcel-notice.test/track"}
+    - {type: domain, value: parcel-notice.test}
+    - {type: domain, value: parcel-redelivery.test}
+    - {type: domain, value: parcel-status.test}
+    - {type: sha256, value: 5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a}
+  context:
+    sender: tracking@parcel-notice.test
+    subject: "Delivery attempt failed - reschedule"
+    email_verdict: malicious
+    malicious_urls: ["https://parcel-notice.test/track"]
+    delivered_copies: 380
+results:
+  enrich-domain:
+    - {domain: parcel-notice.test, verdict: malicious, categories: [Phishing], first_seen: "2026-10-04", internal_queries: 41, error: ""}
+    - {domain: parcel-redelivery.test, verdict: malicious, categories: [Phishing], first_seen: "2026-10-04", internal_queries: 12, error: ""}
+    - {domain: parcel-status.test, verdict: malicious, categories: [Phishing], first_seen: "2026-10-05", internal_queries: 7, error: ""}
+  enrich-hash:
+    - {sha256: 5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a, disposition: malicious, prevalence: 0, hosts: [], error: ""}
+guardrails:
+  blast_radius: {max_indicators_blocked: 3}
+expect:
+  escalate: true
+  actions:
+    - {atomic: quarantine-email, target: tracking@parcel-notice.test, status: planned, requires_approval: true}
+    - {atomic: block-domain, target: parcel-notice.test, status: skipped_limit, requires_approval: true}
+    - {atomic: block-domain, target: parcel-redelivery.test, status: skipped_limit, requires_approval: true}
+    - {atomic: block-domain, target: parcel-status.test, status: skipped_limit, requires_approval: true}
+    - {atomic: block-hash, target: 5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a, status: skipped_limit, requires_approval: true}

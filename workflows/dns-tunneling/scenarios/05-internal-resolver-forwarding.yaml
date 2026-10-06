@@ -1,0 +1,50 @@
+name: Tunnel seen through the internal DNS resolver
+description: >-
+  DNS-specific edge case. Umbrella attributes the tunnel queries to the internal resolver ns-02 because it
+  forwards every client query, so the incident names the resolver. Resolver logs (Splunk) identify the real
+  client ws-0217. The resolver's dns.exe only forwards queries and must not be isolated even though its
+  hostname is not on the protected list (isolating it would take DNS down for the site). Only the client is
+  isolated; the parent domain is blocked once even though the hosts queried many different subdomains.
+incident:
+  id: INC-TEST-DNS-0005
+  title: DNS tunneling category hit attributed to resolver ns-02
+  severity: high
+  source: Cisco Umbrella
+  observables:
+    - {type: domain, value: img-cache.test}
+    - {type: hostname, value: ns-02}
+    - {type: ip, value: 10.20.0.53}
+  context:
+    umbrella_identity: ns-02 (internal forwarder)
+    client_found_in_resolver_logs: ws-0217
+results:
+  enrich-domain:
+    - domain: img-cache.test
+      verdict: suspicious
+      categories: [DNS Tunneling VPN, Newly Seen Domains]
+      first_seen: "2026-10-05"
+      internal_queries: 12800
+      error: ""
+  investigate-host:
+    - host: ns-02
+      connector_guid: 3f6c1a2e-0000-4000-8000-0000000000d2
+      detections: []
+      trajectory:
+        - {event: dns_query, process: dns.exe, domain: 7d1e44c0.img-cache.test, count: 12800}
+      isolation_capable: true
+      is_protected: false
+      error: ""
+    - host: ws-0217
+      connector_guid: 3f6c1a2e-0000-4000-8000-000000000217
+      detections: []
+      trajectory:
+        - {event: dns_query, process: svc-helper.exe, domain: 7d1e44c0.img-cache.test, count: 6400}
+        - {event: dns_query, process: svc-helper.exe, domain: 0b93aa51.img-cache.test, count: 6400}
+      isolation_capable: true
+      is_protected: false
+      error: ""
+expect:
+  escalate: false
+  actions:
+    - {atomic: block-domain, target: img-cache.test, status: planned, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 3f6c1a2e-0000-4000-8000-000000000217, status: planned, requires_approval: true}

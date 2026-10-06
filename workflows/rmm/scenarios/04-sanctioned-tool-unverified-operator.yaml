@@ -1,0 +1,36 @@
+name: Sanctioned ExampleRMM abused by an unverified operator after a fake help-desk call
+description: >-
+  RMM-specific edge case. The attacker poses as the help desk and has the user join a session of the
+  sanctioned tool ExampleRMM from an attacker-controlled account. Blocking the relay domain or the
+  installer would break IT's own remote support fleet-wide, so neither is planned. The live session by
+  an unverified operator is what matters, so the host is isolated anyway.
+incident:
+  id: INC-TEST-RMM-0004
+  title: ExampleRMM session from unverified operator on ws-sales-031 after help-desk call
+  severity: high
+  source: Cisco XDR
+  observables:
+    - {type: domain, value: relay.examplermm.example}
+    - {type: sha256, value: e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1}
+    - {type: host, value: ws-sales-031}
+    - {type: user, value: user03@example.com}
+  context:
+    initial_contact: Phone call from a caller posing as the IT help desk; no matching service desk ticket
+    rmm_tool: ExampleRMM
+    rmm_relay_domains: [relay.examplermm.example]
+    rmm_installer_sha256: [e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1]
+    rmm_sessions:
+      - {host: ws-sales-031, active: true, operator_verified: false, peer_ip: 192.0.2.77}
+results:
+  enrich-domain:
+    - {domain: relay.examplermm.example, verdict: clean, categories: [Remote Access], first_seen: "2019-05-14", internal_queries: 2310}
+  enrich-hash:
+    - {sha256: e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1, disposition: clean, prevalence: 1480, hosts: [ws-sales-031]}
+  investigate-host:
+    - {host: ws-sales-031, connector_guid: 00000000-0000-4000-8000-00000000c031, detections: [], trajectory: [], isolation_capable: true, is_protected: false}
+  investigate-user:
+    - {user: user03@example.com, profile: {department: Sales}, risk_level: medium, signins: [], anomalies: [], is_protected: false}
+expect:
+  escalate: false
+  actions:
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000c031, status: planned, requires_approval: true}

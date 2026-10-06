@@ -1,0 +1,56 @@
+name: Tunnel reaches a protected hypervisor host
+description: >-
+  The same malicious parent domain is queried by a workstation and by a hypervisor management host that
+  matches the protected pattern hv-*. The workstation is isolated, the hypervisor is skipped by the
+  protected-host guardrail and left to a human, and a third host whose connector policy does not allow
+  isolation produces no action at all.
+incident:
+  id: INC-TEST-DNS-0003
+  title: DNS tunneling to sync-telemetry.test from three hosts
+  severity: high
+  source: Cisco XDR
+  observables:
+    - {type: domain, value: sync-telemetry.test}
+    - {type: hostname, value: ws-0201}
+    - {type: hostname, value: hv-03}
+    - {type: hostname, value: kiosk-07}
+  context: {}
+results:
+  enrich-domain:
+    - domain: sync-telemetry.test
+      verdict: malicious
+      categories: [DNS Tunneling VPN]
+      first_seen: "2026-10-01"
+      internal_queries: 7400
+      error: ""
+  investigate-host:
+    - host: ws-0201
+      connector_guid: 3f6c1a2e-0000-4000-8000-000000000201
+      detections: []
+      trajectory:
+        - {event: dns_query, process: svc-helper.exe, domain: 9c2e7a.sync-telemetry.test, count: 3900}
+      isolation_capable: true
+      is_protected: false
+      error: ""
+    - host: hv-03
+      connector_guid: 3f6c1a2e-0000-4000-8000-0000000000a3
+      detections: []
+      trajectory:
+        - {event: dns_query, process: vmupd.exe, domain: 51bd0f.sync-telemetry.test, count: 3300}
+      isolation_capable: true
+      is_protected: true
+      error: ""
+    - host: kiosk-07
+      connector_guid: 3f6c1a2e-0000-4000-8000-0000000000c7
+      detections: []
+      trajectory:
+        - {event: dns_query, process: svc-helper.exe, domain: e04d.sync-telemetry.test, count: 200}
+      isolation_capable: false
+      is_protected: false
+      error: ""
+expect:
+  escalate: false
+  actions:
+    - {atomic: block-domain, target: sync-telemetry.test, status: planned, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 3f6c1a2e-0000-4000-8000-000000000201, status: planned, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 3f6c1a2e-0000-4000-8000-0000000000a3, status: skipped_protected, requires_approval: true}

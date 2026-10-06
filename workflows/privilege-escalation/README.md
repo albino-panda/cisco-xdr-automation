@@ -45,9 +45,42 @@ Typical alerts that should route to this workflow:
 
 | Action | When | Approval |
 |---|---|---|
-| [`isolate-endpoint`](../../atomic/isolate-endpoint/README.md) | Host where an exploit ran. | yes |
-| [`revoke-session`](../../atomic/revoke-session/README.md) | Escalated account. | no |
-| [`disable-user`](../../atomic/disable-user/README.md) | Account created or elevated by the attacker. | yes |
+| [`isolate-endpoint`](../../atomic/isolate-endpoint/README.md) | Host is isolation-capable and has a malicious detection (exploit prevention, UAC bypass), or a file that `enrich-hash` rates malicious was seen on it. | yes |
+| [`revoke-session`](../../atomic/revoke-session/README.md) | Account that was created or gained a role or group, or that granted one to another account, with no approved change request covering the change. | no |
+| [`disable-user`](../../atomic/disable-user/README.md) | Account created outside an approved change, or elevated outside an approved change while its Entra risk level is high or `investigate-user` reports anomalies. | yes |
+
+### Error handling
+
+Every step sets `on_error`. Intake failures (`load_incident`, `load_guardrails`) stop the run, because containment without the incident or the guardrails is unsafe.
+Enrichment and investigation failures continue, so the plan is built from whatever data is available.
+Plan building, approval and every containment step escalate to a human. The incident note escalates too, because it is the only place the isolation unlock code is kept.
+Ticket creation continues; the SOC notification escalates so a silent run cannot go unnoticed.
+
+### Incident context
+
+The rules read `incident.context.privilege_changes`, which intake fills from the detection source (Entra ID audit log, Windows security events through Splunk, or the XDR incident). One entry per change:
+
+| Field | Meaning |
+|---|---|
+| `user` | UPN that was created, or that gained the role or group. |
+| `change` | `role_assigned`, `group_added` or `account_created`. |
+| `role` / `group` | What was granted. Informational. |
+| `actor` | UPN that made the change. |
+| `approved_change` | Number of an approved change request whose window covers the change, otherwise empty. |
+
+`investigate_user` runs for the user observables and for every `user` and `actor` in this list.
+
+## Containment rules
+
+The `plan` rules in [`workflow.yaml`](workflow.yaml) turn the conditions above into expressions the [plan engine](../../engine/README.md) evaluates. Guardrails (protected hosts, users and groups, blast-radius caps) apply after a rule matches.
+
+| Rule id | Atomic | Condition |
+|---|---|---|
+| `isolate_exploited_hosts` | `isolate-endpoint` | For each investigated host: isolation is possible, and either a detection on it is malicious or a malicious hash from `enrich-hash` lists its connector GUID or hostname. Target is the connector GUID. |
+| `revoke_unapproved_privilege_sessions` | `revoke-session` | For each investigated user: the user is the subject or the actor of a privilege change that has no approved change number. |
+| `disable_attacker_accounts` | `disable-user` | For each investigated user: the user is the subject of a privilege change with no approved change number, and the change created the account or the user's risk level is high or the user has sign-in anomalies. |
+
+An actor who granted rights without approval loses sessions but is not disabled automatically; the approver decides from the investigation.
 
 ## Inputs
 
@@ -66,7 +99,21 @@ Typical alerts that should route to this workflow:
 
 ## Notes
 
-- Reverse unauthorised role or group changes manually and record them in the ticket.
+- Reverse unauthorised role or group changes manually and record them in the ticket: remove the role assignment or group membership in Entra ID or Active Directory, and delete or keep disabled any account created outside an approved change. The incident note and ticket templates carry this step.
+- An account the attacker added to a protected group (for example `Domain Admins`) is skipped by the protected-group guardrail, because investigation reads the membership after the change. The approval text warns about this; remove the membership by hand before anything else. Scenario 04 pins this behaviour.
+- A host that is not isolation-capable is never isolated by the plan, even with a malicious detection. Contain it by hand.
+
+## Scenarios
+
+Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them with `PYTHONPATH=engine python -m xdr_plan check privilege-escalation` from the repository root.
+
+| File | What it proves |
+|---|---|
+| [`01-exploit-then-rogue-admin.yaml`](scenarios/01-exploit-then-rogue-admin.yaml) | True positive: exploit host isolated, sessions revoked for the acting account and the new account, new account disabled. The actor is not disabled. |
+| [`02-approved-change-window.yaml`](scenarios/02-approved-change-window.yaml) | Benign: a role assignment covered by an approved change request and a host with only clean detections produce no actions. |
+| [`03-protected-dc-and-breakglass.yaml`](scenarios/03-protected-dc-and-breakglass.yaml) | Guardrails: a domain controller (`dc-*`) and a break-glass account match every rule but are `skipped_protected`. |
+| [`04-elevated-into-protected-group.yaml`](scenarios/04-elevated-into-protected-group.yaml) | Edge case: an account self-added to `Domain Admins` is `skipped_protected` for revoke and disable, while the UAC-bypass host is still isolated. |
+| [`05-mass-account-creation.yaml`](scenarios/05-mass-account-creation.yaml) | Blast radius: four attacker-created accounts exceed `max_users_disabled`, so disable-user becomes `skipped_limit` and the plan escalates; revoke-session still runs; a non-isolation-capable host is not isolated. |
 
 ## Related workflows
 

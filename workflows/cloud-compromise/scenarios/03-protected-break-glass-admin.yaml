@@ -1,0 +1,33 @@
+name: Protected break-glass admin signs in from a malicious IP
+description: >
+  A break-glass Global Administrator shows high risk and a successful sign-in from a malicious IP. The
+  revoke and disable rules match, but the account is in protected.users, so both actions are
+  skipped_protected and left to a human. The attacker IP is still blocked behind approval.
+incident:
+  id: INC-TEST-0303
+  title: Unusual admin activity from new location on emergency access account
+  severity: critical
+  source: Microsoft Entra ID Protection
+  observables:
+    - {type: user, value: breakglass-01@example.com}
+    - {type: ip, value: 203.0.113.99}
+  context:
+    account_type: emergency_access
+results:
+  enrich-ip:
+    - {ip: 203.0.113.99, verdict: malicious, sources: [], internal_sightings: 0, is_internal: false, error: ""}
+  investigate-user:
+    - user: breakglass-01@example.com
+      profile: {department: IT, groups: [Cloud Emergency Access], privileged_roles: [Global Administrator]}
+      risk_level: high
+      signins:
+        - {ip: 203.0.113.99, location: Unknown, app: Azure Portal, result: success}
+      anomalies: [unfamiliar_location]
+      is_protected: true
+      error: ""
+expect:
+  escalate: false
+  actions:
+    - {atomic: revoke-session, target: breakglass-01@example.com, status: skipped_protected, requires_approval: false}
+    - {atomic: disable-user, target: breakglass-01@example.com, status: skipped_protected, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.99, status: planned, requires_approval: true}

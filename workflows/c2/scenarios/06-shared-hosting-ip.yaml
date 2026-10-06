@@ -1,0 +1,42 @@
+name: C2 domain fronted by a shared hosting or CDN address
+description: >
+  C2 edge case. The C2 domain is malicious but resolves to a CDN address that also serves legitimate
+  sites, recorded in incident.context.shared_infrastructure_ips. The domain is blocked and the infected
+  host isolated, but the shared IP is not blocked. A second infected host whose connector policy does
+  not allow isolation is left for manual handling.
+incident:
+  id: INC-TEST-C2-0006
+  title: Encrypted beaconing from wks-0520 to static-assets.test behind a CDN
+  severity: high
+  source: Cisco XDR
+  observables:
+    - {type: domain, value: static-assets.test}
+    - {type: ip, value: 198.51.100.80}
+  targets:
+    - {type: endpoint, value: wks-0520}
+    - {type: endpoint, value: kiosk-0007}
+  context:
+    shared_infrastructure_ips: [198.51.100.80]
+results:
+  enrich-domain:
+    - {domain: static-assets.test, verdict: malicious, categories: [Command and Control], first_seen: "2026-09-28", internal_queries: 96}
+  enrich-ip:
+    - {ip: 198.51.100.80, verdict: malicious, sources: [], internal_sightings: 950, is_internal: false}
+  investigate-host:
+    - host: wks-0520
+      connector_guid: 0f3c2a10-0000-4000-8000-000000000520
+      detections: [{name: W32.C2.Beacon, disposition: malicious}]
+      trajectory: []
+      isolation_capable: true
+      is_protected: false
+    - host: kiosk-0007
+      connector_guid: 0f3c2a10-0000-4000-8000-000000000007
+      detections: [{name: W32.C2.Beacon, disposition: malicious}]
+      trajectory: []
+      isolation_capable: false
+      is_protected: false
+expect:
+  escalate: false
+  actions:
+    - {atomic: block-domain, target: static-assets.test, status: planned, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 0f3c2a10-0000-4000-8000-000000000520, status: planned, requires_approval: true}

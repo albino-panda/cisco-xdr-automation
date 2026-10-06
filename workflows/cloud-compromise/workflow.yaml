@@ -51,52 +51,171 @@ steps:
   phase: intake
   action: XDR - Incident - Get Incident Summary
   note: Collect observables, targets and existing notes from the triggering incident.
+  on_error: stop
 - id: load_guardrails
   phase: intake
   action: Core - Read guardrails
   note: Protected hosts/users, allow-lists and blast-radius limits (docs/deployment/guardrails.example.yaml).
+    Without guardrails nothing may be contained, so the run stops.
+  on_error: stop
 - id: enrich_ip
   phase: enrich
   atomic: enrich-ip
   for_each: ip
+  on_error: continue
 - id: investigate_user
   phase: investigate
   atomic: investigate-user
   for_each: user
+  on_error: continue
 - id: build_plan
   phase: decide
-  note: Build the containment plan from enrichment verdicts, investigation results and guardrails. Drop
-    any target that is protected, allow-listed or over the blast-radius limit.
+  note: Build the containment plan from the `plan` rules below, enrichment verdicts, investigation results
+    and guardrails. Drop any target that is protected, allow-listed or over the blast-radius limit.
+  on_error: escalate
 - id: approval
   phase: decide
   action: Approval Task
   note: Show the plan to an approver. Skipped when dry_run is true (plan is only recorded).
   skip_if: dry_run == true
+  on_error: escalate
 - id: revoke_session
   phase: contain
   atomic: revoke-session
-  when: Affected user accounts.
+  when: Investigated user with high identity risk, medium risk plus at least one sign-in anomaly, or a
+    successful sign-in from an IP enriched as malicious.
   requires_approval: false
+  on_error: escalate
 - id: disable_user
   phase: contain
   atomic: disable-user
-  when: Compromised accounts with admin roles.
+  when: Investigated user holding a privileged role, with high identity risk or a successful sign-in from
+    an IP enriched as malicious.
   requires_approval: true
+  on_error: escalate
 - id: block_ip
   phase: contain
   atomic: block-ip
-  when: Attacker IPs.
+  when: IP enriched as malicious, or suspicious and used for a successful sign-in by a high-risk user.
+    Internal and allow-listed ranges are skipped by the guardrails.
   requires_approval: true
+  note: A perimeter block is a secondary control for cloud identities (tokens can be replayed from other
+    addresses), so a failure is recorded and the run continues to the note and ticket.
+  on_error: continue
 - id: incident_note
   phase: record
   action: XDR - Incident - Add Note to Incident
-  note: Write enrichment summary, plan, approvals and per-action results.
+  note: Write enrichment summary, plan, approvals, per-action results and rollbacks.
+  on_error: continue
 - id: create_ticket
   phase: record
   atomic: create-ticket
+  note: The ticket carries the manual removal of rogue app credentials and OAuth consents, so a failure
+    escalates instead of silently dropping that follow-up.
+  on_error: escalate
 - id: notify_soc
   phase: notify
   atomic: notify-soc
+  on_error: continue
+plan:
+- id: revoke_compromised_user_sessions
+  description: Sign out every investigated user whose identity shows compromise, including users who
+    granted a risky OAuth consent. Revocation also invalidates refresh tokens issued to apps for that user.
+  atomic: revoke-session
+  for_each: "results['investigate-user']"
+  when: >-
+    lower(item.risk_level) == 'high'
+    or (lower(item.risk_level) == 'medium' and len(item.anomalies) > 0)
+    or any(s.result == 'success' and s.ip in [r.ip for r in results['enrich-ip'] if r.verdict == 'malicious'] for s in item.signins)
+  target: item.user
+- id: disable_compromised_privileged_users
+  description: Disable compromised accounts that hold a privileged directory role, because they can add
+    app credentials and grant tenant-wide consent.
+  atomic: disable-user
+  for_each: "results['investigate-user']"
+  when: >-
+    len(get(item.profile, 'privileged_roles', [])) > 0
+    and (lower(item.risk_level) == 'high'
+    or any(s.result == 'success' and s.ip in [r.ip for r in results['enrich-ip'] if r.verdict == 'malicious'] for s in item.signins))
+  target: item.user
+  args:
+    reason: >-
+      'Cloud compromise: privileged account with '
+      + ('high identity risk' if lower(item.risk_level) == 'high' else 'a successful sign-in from a malicious IP')
+      + ' (' + incident.title + ')'
+- id: block_attacker_ips
+  description: Block external IPs enriched as malicious, and suspicious IPs that a high-risk user
+    signed in from successfully.
+  atomic: block-ip
+  for_each: "results['enrich-ip']"
+  when: >-
+    item.verdict == 'malicious'
+    or (item.verdict == 'suspicious'
+    and any(lower(u.risk_level) == 'high' and any(s.ip == item.ip and s.result == 'success' for s in u.signins) for u in results['investigate-user']))
+  target: item.ip
+  args:
+    expires_hours: "get(get(guardrails, 'expiry_hours', []), 'block-ip', 168)"
+templates:
+  approval: |
+    Cloud compromise containment for {incident.id}: {incident.title} (severity {incident.severity}).
+    Dry run: {workflow.dry_run}.
+
+    Planned actions:
+    {plan.actions_table}
+
+    Skipped by guardrails (protected, internal or over the blast-radius limit):
+    {plan.skipped_table}
+    Escalation required: {plan.escalate} {plan.reasons}
+
+    Approve to run the actions that need approval. Session revocation is not reversible (users sign in
+    again); account disable and IP blocks can be rolled back as written in the incident note.
+    Rogue app credentials and OAuth consents are NOT removed by this workflow; they are a manual task in
+    the ticket.
+  incident_note: |
+    Workflow {workflow.name} ({workflow.id}), run {workflow.run_id}, dry run {workflow.dry_run}.
+    Approver: {approver.name} at {approver.time}.
+
+    Enrichment: {plan.enrichment_summary}
+    Investigation: {plan.investigation_summary}
+
+    Actions and results:
+    {plan.results_table}
+
+    Rollback:
+    - revoke-session: not reversible; the user signs in again with MFA.
+    - disable-user: set accountEnabled back to true in Entra ID once credentials are reset and MFA is re-registered.
+    - block-ip: remove the Meraki rule or Cloudflare list item; blocks expire after {plan.block_ip_expiry_hours} hours.
+
+    Manual follow-up (tracked in {ticket.id}): remove rogue app credentials and OAuth consents as listed in the ticket.
+  ticket_title: "[{incident.severity}] Cloud compromise: {incident.title} ({incident.id})"
+  ticket_body: |
+    ## Summary
+    Cloud identity, app credential or OAuth consent abuse reported by {incident.source}.
+    XDR incident: {incident.id} {incident.url}
+
+    ## Containment plan and results
+    {plan.results_table}
+    Escalation required: {plan.escalate} {plan.reasons}
+
+    ## Rollback
+    - revoke-session: not reversible; the user signs in again.
+    - disable-user: set accountEnabled back to true after credential reset and MFA re-registration.
+    - block-ip: remove the Meraki rule or Cloudflare list item (auto-expiry {plan.block_ip_expiry_hours} hours).
+
+    ## Manual tasks: rogue app credentials and OAuth consents
+    Automation covers user identities and IPs only. In the Entra admin center:
+    1. Review the app registrations and service principals named in the incident ({incident.context}),
+       plus any changed by the accounts above during the incident window, in the directory audit log.
+    2. Remove client secrets and certificates added during the window that are not linked to an approved change.
+    3. Revoke delegated OAuth permission grants and app role assignments given to the suspicious app;
+       disable or delete its service principal if it is not a sanctioned application.
+    4. Review cloud storage and mailbox access by the app and the affected accounts (T1530).
+    5. Reset credentials and re-register MFA for disabled accounts before re-enabling them.
+    Record each removed credential or consent in this ticket.
+  notification: >-
+    [{incident.severity}] Cloud compromise {incident.id}: {plan.planned_count} actions planned,
+    {plan.skipped_count} skipped, escalate={plan.escalate}. Manual removal of app credentials and
+    OAuth consents pending in {ticket.id} {ticket.url}
 integrations:
 - cisco-xdr
 - umbrella

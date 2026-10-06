@@ -1,0 +1,45 @@
+name: Sanctioned admin patching over WinRM from a jump host
+description: >
+  Benign. An IT administrator runs a change-approved patch script over WinRM from the admin jump host to two
+  web servers, which trips the "remote logons across many hosts" signal. No host has a malicious detection,
+  the script hash is clean and the account shows no risk or anomalies, so the movement is not confirmed
+  malicious. The jump host is listed as a source, but the source rule is gated on confirmed malicious
+  movement, so the plan is empty.
+incident:
+  id: INC-TEST-LM-0002
+  title: WinRM sessions from jump-01 to multiple web servers
+  severity: medium
+  source: Splunk
+  observables:
+    - {type: hostname, value: jump-01}
+    - {type: hostname, value: srv-web-01}
+    - {type: hostname, value: srv-web-02}
+    - {type: user, value: it.admin@example.com}
+    - {type: sha256, value: feedface00000000feedface00000000feedface00000000feedface00000000}
+  context:
+    protocol: WinRM
+    source_hosts: [jump-01]
+    change_ticket: CHG-TEST-0042
+results:
+  enrich-hash:
+    - sha256: feedface00000000feedface00000000feedface00000000feedface00000000
+      disposition: clean
+      prevalence: 40
+      hosts: [jump-01, srv-web-01, srv-web-02]
+      error: ""
+  investigate-host:
+    - {host: jump-01, connector_guid: 00000000-0000-4000-8000-000000000201, detections: [], trajectory: [{event: outbound WinRM, destination: srv-web-01}], isolation_capable: true, is_protected: false, error: ""}
+    - {host: srv-web-01, connector_guid: 00000000-0000-4000-8000-000000000202, detections: [], trajectory: [{event: inbound WinRM, source: jump-01}], isolation_capable: true, is_protected: false, error: ""}
+    - {host: srv-web-02, connector_guid: 00000000-0000-4000-8000-000000000203, detections: [], trajectory: [{event: inbound WinRM, source: jump-01}], isolation_capable: true, is_protected: false, error: ""}
+  investigate-user:
+    - user: it.admin@example.com
+      profile: {department: IT Operations, groups: [Server Admins]}
+      risk_level: none
+      signins:
+        - {ip: 10.20.5.10, location: Head office, app: Windows Sign In, result: success}
+      anomalies: []
+      is_protected: false
+      error: ""
+expect:
+  escalate: false
+  actions: []

@@ -1,0 +1,44 @@
+name: Every spray attempt failed
+description: >
+  Edge case specific to password spray. Smart lockout held and no attempt succeeded, so only the spray
+  sources are blocked. One targeted account has Entra risk level high from the spray detection itself.
+  This shows that risk alone never revokes or disables an account without a successful sign-in from a spray source.
+  A third source IP is not blocked because its enrichment failed, so shared infrastructure cannot be ruled out.
+incident:
+  id: INC-TEST-PS-0005
+  title: Password spray blocked by smart lockout
+  severity: medium
+  source: Microsoft Entra ID Protection
+  observables:
+    - {type: ip, value: 192.0.2.20}
+    - {type: ip, value: 192.0.2.21}
+    - {type: ip, value: 192.0.2.22}
+    - {type: user, value: h.berg@example.com}
+    - {type: user, value: c.osei@example.com}
+  context: {detection: Password spray, failed_signins: 75, successful_signins: 0, smart_lockout_events: 9}
+results:
+  enrich-ip:
+    - {ip: 192.0.2.20, verdict: malicious, sources: [], internal_sightings: 0, is_internal: false, error: ""}
+    - {ip: 192.0.2.21, verdict: suspicious, sources: [], internal_sightings: 0, is_internal: false, error: ""}
+    - {ip: 192.0.2.22, verdict: unknown, sources: [], internal_sightings: 0, is_internal: false, error: "reputation lookup timed out"}
+  investigate-user:
+    - user: h.berg@example.com
+      risk_level: high
+      is_protected: false
+      signins:
+        - {ip: 192.0.2.20, result: failure, app: Office 365 Exchange Online, location: BR}
+        - {ip: 192.0.2.21, result: failure, app: Office 365 Exchange Online, location: BR}
+        - {ip: 192.0.2.22, result: failure, app: Office 365 Exchange Online, location: BR}
+      anomalies:
+        - {type: unfamiliar_location, detail: Failed attempts from BR}
+    - user: c.osei@example.com
+      risk_level: low
+      is_protected: false
+      signins:
+        - {ip: 192.0.2.21, result: failure, app: Office 365 Exchange Online, location: BR}
+      anomalies: []
+expect:
+  escalate: false
+  actions:
+    - {atomic: block-ip, target: 192.0.2.20, status: planned, requires_approval: true}
+    - {atomic: block-ip, target: 192.0.2.21, status: planned, requires_approval: true}

@@ -1,0 +1,47 @@
+name: Spray success followed by MFA fatigue and a new device
+description: >
+  Two accounts had a successful sign-in from a spray source. One was followed by MFA fatigue prompts and a
+  new device registration with Entra risk level high, so it is disabled (with approval) as well as having
+  its sessions revoked. The other shows only an unfamiliar location, so its sessions are revoked and it
+  stays enabled. Both spray IPs are blocked.
+incident:
+  id: INC-TEST-PS-0006
+  title: Password spray with follow-on MFA fatigue
+  severity: high
+  source: Microsoft Entra ID Protection
+  observables:
+    - {type: ip, value: 198.51.100.60}
+    - {type: ip, value: 198.51.100.61}
+    - {type: user, value: s.okafor@example.com}
+    - {type: user, value: t.vance@example.com}
+  context: {detection: Password spray, failed_signins: 52, targeted_accounts: 12}
+results:
+  enrich-ip:
+    - {ip: 198.51.100.60, verdict: malicious, sources: [], internal_sightings: 0, is_internal: false, error: ""}
+    - {ip: 198.51.100.61, verdict: suspicious, sources: [], internal_sightings: 0, is_internal: false, error: ""}
+  investigate-user:
+    - user: s.okafor@example.com
+      risk_level: high
+      is_protected: false
+      profile: {department: Finance, groups: [Finance, AP Approvers]}
+      signins:
+        - {ip: 198.51.100.61, result: success, app: Office 365 Exchange Online, location: RO}
+      anomalies:
+        - {type: mfa_fatigue, detail: 14 push prompts in 6 minutes}
+        - {type: new_device, detail: Device registered after sign-in}
+    - user: t.vance@example.com
+      risk_level: low
+      is_protected: false
+      profile: {department: Marketing, groups: [Marketing]}
+      signins:
+        - {ip: 198.51.100.60, result: success, app: Microsoft Teams, location: RO}
+      anomalies:
+        - {type: unfamiliar_location, detail: First sign-in from RO}
+expect:
+  escalate: false
+  actions:
+    - {atomic: block-ip, target: 198.51.100.60, status: planned, requires_approval: true}
+    - {atomic: block-ip, target: 198.51.100.61, status: planned, requires_approval: true}
+    - {atomic: revoke-session, target: s.okafor@example.com, status: planned, requires_approval: false}
+    - {atomic: revoke-session, target: t.vance@example.com, status: planned, requires_approval: false}
+    - {atomic: disable-user, target: s.okafor@example.com, status: planned, requires_approval: true}

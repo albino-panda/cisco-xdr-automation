@@ -47,56 +47,155 @@ steps:
   phase: intake
   action: XDR - Incident - Get Incident Summary
   note: Collect observables, targets and existing notes from the triggering incident.
+  on_error: stop
 - id: load_guardrails
   phase: intake
   action: Core - Read guardrails
   note: Protected hosts/users, allow-lists and blast-radius limits (docs/deployment/guardrails.example.yaml).
+    Without guardrails no containment may be planned, so a failure ends the run.
+  on_error: stop
 - id: enrich_ip
   phase: enrich
   atomic: enrich-ip
   for_each: ip
+  on_error: continue
 - id: enrich_domain
   phase: enrich
   atomic: enrich-domain
   for_each: domain
+  on_error: continue
 - id: investigate_host
   phase: investigate
   atomic: investigate-host
   for_each: host
+  on_error: continue
 - id: build_plan
   phase: decide
-  note: Build the containment plan from enrichment verdicts, investigation results and guardrails. Drop
-    any target that is protected, allow-listed or over the blast-radius limit.
+  note: Build the containment plan from the plan rules below, using enrichment verdicts, investigation
+    results and guardrails. Drop any target that is protected, allow-listed or over the blast-radius limit.
+    A failure here means no plan, so a human decides.
+  on_error: escalate
 - id: approval
   phase: decide
   action: Approval Task
-  note: Show the plan to an approver. Skipped when dry_run is true (plan is only recorded).
+  note: Show the plan to an approver; isolation also needs the web server owner's agreement. Skipped
+    when dry_run is true (plan is only recorded). Containment never runs without an approved plan.
   skip_if: dry_run == true
+  on_error: escalate
 - id: block_ip
   phase: contain
   atomic: block-ip
-  when: Attacking sources at the Cloudflare edge.
+  when: External source IP from the incident whose enrich-ip verdict is malicious or suspicious and
+    that is not in incident.context.authorized_scanners. Internal, allow-listed or private addresses
+    are skipped by the guardrails. Expires after guardrails expiry_hours.block-ip.
   requires_approval: true
+  on_error: escalate
 - id: block_url
   phase: contain
   atomic: block-url
-  when: Targeted vulnerable endpoint while a fix is pending.
+  when: Endpoint listed in incident.context.targeted_endpoints that is known vulnerable
+    (vulnerable is true) while its fix is still pending (fix_pending is true). Virtual patch at the
+    edge until the fix ships; URLs on allow-listed domains are skipped by the guardrails.
   requires_approval: true
+  on_error: escalate
 - id: isolate_endpoint
   phase: contain
   atomic: isolate-endpoint
-  when: Web server with a confirmed web shell, after owner approval.
+  when: Investigated web server with a detection of disposition malicious and technique T1505.003
+    (confirmed web shell) whose connector allows isolation. Scanning or exploit attempts alone never
+    isolate. Runs only after the approver and the server owner accept the plan.
   requires_approval: true
+  on_error: escalate
 - id: incident_note
   phase: record
   action: XDR - Incident - Add Note to Incident
-  note: Write enrichment summary, plan, approvals and per-action results.
+  note: Write enrichment summary, plan, approvals, per-action results and the rollback for every
+    containment action. The rollback record is mandatory, so a failure is escalated.
+  on_error: escalate
 - id: create_ticket
   phase: record
   atomic: create-ticket
+  on_error: continue
 - id: notify_soc
   phase: notify
   atomic: notify-soc
+  on_error: continue
+plan:
+- id: block_attacking_sources
+  description: External source IPs with a malicious or suspicious reputation that attacked the
+    application, except sources the incident lists as authorised scanners.
+  atomic: block-ip
+  for_each: "results['enrich-ip']"
+  when: "item.verdict in ['malicious', 'suspicious'] and item.ip not in get(incident.context, 'authorized_scanners', [])"
+  target: "item.ip"
+  args:
+    expires_hours: "get(get(guardrails, 'expiry_hours', None), 'block-ip', 168)"
+- id: block_vulnerable_endpoint
+  description: Targeted application endpoints that are known vulnerable while the fix is pending
+    (virtual patch at the edge).
+  atomic: block-url
+  for_each: "get(incident.context, 'targeted_endpoints', [])"
+  when: "get(item, 'vulnerable', False) and get(item, 'fix_pending', False)"
+  target: "item.url"
+- id: isolate_web_shell_host
+  description: Web servers with a confirmed web shell (malicious T1505.003 detection) whose connector
+    allows isolation.
+  atomic: isolate-endpoint
+  for_each: "results['investigate-host']"
+  when: "item.isolation_capable and any(d.disposition == 'malicious' and get(d, 'technique', '') == 'T1505.003' for d in item.detections)"
+  target: "item.connector_guid"
+  args:
+    reason: "'Confirmed web shell on ' + get(item, 'host', item.connector_guid) + ': ' + incident.title"
+templates:
+  approval: |
+    {workflow.name}: containment plan for {incident.id} ({incident.severity}) - {incident.title}
+
+    Planned actions:
+    {plan.actions}
+
+    Skipped by guardrails: {plan.skipped}
+    Escalation needed: {plan.escalate} {plan.reasons}
+
+    Isolation of a web server needs the server owner's agreement before you approve.
+    Every action is reversible; the rollback is written to the incident note.
+    Approve to run, reject to keep the plan as a record only.
+  incident_note: |
+    {workflow.name} run for {incident.id} (dry_run: {workflow.dry_run})
+
+    Source: {incident.source}
+    Enrichment summary: {plan.enrichment_summary}
+    Investigation summary: {plan.investigation_summary}
+
+    Plan and results:
+    {plan.actions}
+    Skipped by guardrails: {plan.skipped}
+    Escalation: {plan.escalate} {plan.reasons}
+    Approved by: {approver.name} at {approver.time}
+
+    Rollback:
+    - block-ip: remove the IP from the Cloudflare IP list or restore the saved Meraki rule set. Blocks expire after {plan.block_ip_expiry_hours} hours.
+    - block-url: remove the URL from the Cloudflare and Umbrella block lists once the fix is deployed.
+    - isolate-endpoint: stop isolation in Secure Endpoint for the connector GUID. Unlock codes: {plan.unlock_codes}
+
+    Ticket: {ticket.id} {ticket.url}
+  ticket_title: "[{incident.severity}] Web application attack: {incident.title} ({incident.id})"
+  ticket_body: |
+    Incident: {incident.id} - {incident.title}
+    Severity: {incident.severity}  Source: {incident.source}
+    Workflow: {workflow.name} (dry_run: {workflow.dry_run})
+
+    Enrichment: {plan.enrichment_summary}
+    Investigation: {plan.investigation_summary}
+
+    Containment plan:
+    {plan.actions}
+    Skipped by guardrails: {plan.skipped}
+    Escalation: {plan.escalate} {plan.reasons}
+    Approved by: {approver.name}
+
+    Follow-up for the application owner: deploy the fix for any blocked endpoint, review the web root of
+    any isolated server, and remove edge blocks when no longer needed. Rollback steps are in the XDR incident note.
+  notification: "{workflow.name} | {incident.severity} | {incident.id} {incident.title} | {plan.summary} | escalate: {plan.escalate} | ticket {ticket.id} {ticket.url}"
 integrations:
 - cisco-xdr
 - umbrella

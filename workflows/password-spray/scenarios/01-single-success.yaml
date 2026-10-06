@@ -1,0 +1,54 @@
+name: Spray with one successful sign-in
+description: >
+  True positive. Two external IPs sprayed three accounts. One account had a successful sign-in from a
+  spray source with only an unfamiliar-location anomaly, so its sessions are revoked but it is not
+  disabled. A second account only failed, and a third signed in successfully from its usual home IP,
+  which is not a spray source. Both spray IPs are blocked behind approval.
+incident:
+  id: INC-TEST-PS-0001
+  title: Password spray against Microsoft 365 accounts
+  severity: medium
+  source: Microsoft Entra ID Protection
+  observables:
+    - {type: ip, value: 203.0.113.10}
+    - {type: ip, value: 203.0.113.11}
+    - {type: user, value: j.doe@example.com}
+    - {type: user, value: a.smith@example.com}
+    - {type: user, value: m.lee@example.com}
+  context: {detection: Password spray, failed_signins: 41, targeted_accounts: 3}
+results:
+  enrich-ip:
+    - {ip: 203.0.113.10, verdict: malicious, sources: [], internal_sightings: 0, is_internal: false, error: ""}
+    - {ip: 203.0.113.11, verdict: unknown, sources: [], internal_sightings: 0, is_internal: false, error: ""}
+  investigate-user:
+    - user: j.doe@example.com
+      risk_level: medium
+      is_protected: false
+      profile: {department: Sales, groups: [Sales]}
+      signins:
+        - {ip: 203.0.113.10, result: failure, app: Office 365 Exchange Online, location: NL}
+        - {ip: 203.0.113.11, result: success, app: Office 365 Exchange Online, location: NL}
+      anomalies:
+        - {type: unfamiliar_location, detail: First sign-in from NL}
+    - user: a.smith@example.com
+      risk_level: low
+      is_protected: false
+      profile: {department: Finance, groups: [Finance]}
+      signins:
+        - {ip: 203.0.113.10, result: failure, app: Office 365 Exchange Online, location: NL}
+        - {ip: 203.0.113.11, result: failure, app: Office 365 Exchange Online, location: NL}
+      anomalies: []
+    - user: m.lee@example.com
+      risk_level: none
+      is_protected: false
+      profile: {department: Engineering, groups: [Engineering]}
+      signins:
+        - {ip: 203.0.113.10, result: failure, app: Office 365 Exchange Online, location: NL}
+        - {ip: 198.51.100.25, result: success, app: Microsoft Teams, location: home}
+      anomalies: []
+expect:
+  escalate: false
+  actions:
+    - {atomic: block-ip, target: 203.0.113.10, status: planned, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.11, status: planned, requires_approval: true}
+    - {atomic: revoke-session, target: j.doe@example.com, status: planned, requires_approval: false}

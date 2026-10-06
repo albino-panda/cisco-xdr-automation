@@ -1,0 +1,37 @@
+name: Unapproved tool on a domain controller with an allow-listed installer hash
+description: >-
+  FictiDesk is installed on a domain controller and a session is active. The relay domain is still
+  blocked, but the guardrails win for the other two actions: dc-01 matches protected.hosts so
+  isolation is skipped_protected, and the installer hash was previously allow-listed (overridden here)
+  so the hash block is skipped_allowlisted. A human must handle the domain controller.
+incident:
+  id: INC-TEST-RMM-0003
+  title: Unapproved remote access tool FictiDesk on dc-01
+  severity: critical
+  source: Cisco Secure Endpoint
+  observables:
+    - {type: domain, value: relay.fictidesk.example}
+    - {type: sha256, value: 5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe}
+    - {type: host, value: dc-01}
+  context:
+    rmm_tool: FictiDesk
+    rmm_relay_domains: [relay.fictidesk.example]
+    rmm_installer_sha256: [5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe]
+    rmm_sessions:
+      - {host: dc-01, active: true, operator_verified: false, peer_ip: 198.51.100.23}
+results:
+  enrich-domain:
+    - {domain: relay.fictidesk.example, verdict: suspicious, categories: [Remote Access], first_seen: "2026-03-02", internal_queries: 6}
+  enrich-hash:
+    - {sha256: 5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe, disposition: unknown, prevalence: 1, hosts: [dc-01]}
+  investigate-host:
+    - {host: dc-01, connector_guid: 00000000-0000-4000-8000-0000000dc001, detections: [], trajectory: [], isolation_capable: true, is_protected: true}
+guardrails:
+  allowlist:
+    hashes: [5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe]
+expect:
+  escalate: false
+  actions:
+    - {atomic: block-domain, target: relay.fictidesk.example, status: planned, requires_approval: true}
+    - {atomic: block-hash, target: 5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe, status: skipped_allowlisted}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-0000000dc001, status: skipped_protected}

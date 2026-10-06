@@ -1,0 +1,40 @@
+name: Web shell on a protected server with internal and allow-listed targets
+description: >
+  A web shell is confirmed on the payments web server, which the guardrails protect, so isolation is
+  skipped and left to a human. One source is an internal address seen through the load balancer and
+  is skipped as internal, while the external source is still blocked. The targeted endpoint lives on
+  the organisation's allow-listed domain, so the URL block is skipped as allow-listed.
+incident:
+  id: INC-TEST-WEB-0004
+  title: Web shell detected on protected payments web server
+  severity: high
+  source: Cisco Secure Endpoint
+  observables:
+    - {type: ip, value: 203.0.113.80}
+    - {type: ip, value: 10.20.30.40}
+    - {type: url, value: "https://pay.example.com/upload"}
+    - {type: hostname, value: web-pay-01}
+  context:
+    targeted_endpoints:
+      - {url: "https://pay.example.com/upload", vulnerable: true, fix_pending: true}
+results:
+  enrich-ip:
+    - {ip: 203.0.113.80, verdict: malicious, sources: [{name: Talos, verdict: malicious}], internal_sightings: 0, is_internal: false, error: ""}
+    - {ip: 10.20.30.40, verdict: suspicious, sources: [], internal_sightings: 4, is_internal: true, error: ""}
+  investigate-host:
+    - host: web-pay-01
+      connector_guid: 00000000-0000-4000-8000-000000000201
+      detections:
+        - {name: Web shell file written to web root, disposition: malicious, technique: T1505.003}
+      trajectory:
+        - Web server worker process wrote a new script file to the web root
+      isolation_capable: true
+      is_protected: true
+      error: ""
+expect:
+  escalate: false
+  actions:
+    - {atomic: block-ip, target: 203.0.113.80, status: planned, requires_approval: true}
+    - {atomic: block-ip, target: 10.20.30.40, status: skipped_internal, requires_approval: true}
+    - {atomic: block-url, target: "https://pay.example.com/upload", status: skipped_allowlisted, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000201, status: skipped_protected, requires_approval: true}

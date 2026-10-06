@@ -48,66 +48,188 @@ steps:
 - id: load_incident
   phase: intake
   action: XDR - Incident - Get Incident Summary
-  note: Collect observables, targets and existing notes from the triggering incident.
+  note: Collect observables, targets and existing notes from the triggering incident, plus the message
+    facts the plan reads from incident.context (sender, subject, email_verdict, malicious_urls).
+  on_error: stop
 - id: load_guardrails
   phase: intake
   action: Core - Read guardrails
   note: Protected hosts/users, allow-lists and blast-radius limits (docs/deployment/guardrails.example.yaml).
+  on_error: stop
 - id: enrich_domain
   phase: enrich
   atomic: enrich-domain
   for_each: domain
+  on_error: continue
 - id: enrich_ip
   phase: enrich
   atomic: enrich-ip
   for_each: ip
+  on_error: continue
 - id: enrich_hash
   phase: enrich
   atomic: enrich-hash
   for_each: sha256
+  on_error: continue
 - id: investigate_user
   phase: investigate
   atomic: investigate-user
   for_each: user
+  on_error: continue
 - id: build_plan
   phase: decide
-  note: Build the containment plan from enrichment verdicts, investigation results and guardrails. Drop
-    any target that is protected, allow-listed or over the blast-radius limit.
+  note: Build the containment plan from the plan rules below, enrichment verdicts, investigation results
+    and guardrails. Drop any target that is protected, allow-listed or over the blast-radius limit.
+  on_error: escalate
 - id: approval
   phase: decide
   action: Approval Task
-  note: Show the plan to an approver. Skipped when dry_run is true (plan is only recorded).
+  note: Show the plan (templates.approval) to an approver. Skipped when dry_run is true (plan is only
+    recorded).
   skip_if: dry_run == true
+  on_error: escalate
 - id: quarantine_email
   phase: contain
   atomic: quarantine-email
-  when: All delivered copies matching sender and subject or URL.
+  when: The message is confirmed malicious (Secure Email verdict malicious, a URL listed in
+    incident.context.malicious_urls, a malicious enrich-domain verdict or a malicious enrich-hash
+    disposition) and incident.context has a sender plus a subject or malicious URL to match. Quarantines
+    delivered copies from that sender that match the subject or a malicious URL, capped at
+    blast_radius.max_messages_quarantined (rule quarantine_malicious_message).
   requires_approval: true
+  on_error: escalate
 - id: block_url
   phase: contain
   atomic: block-url
-  when: Malicious URLs on otherwise legitimate domains.
+  when: A URL observable listed in incident.context.malicious_urls whose host and enriched parent domains
+    have no malicious enrich-domain verdict, so only the URL is blocked and the legitimate domain stays
+    reachable. URL hosts on the allow-list are skipped by the guardrail (rule
+    block_malicious_url_on_legitimate_domain).
   requires_approval: true
+  on_error: escalate
 - id: block_domain
   phase: contain
   atomic: block-domain
-  when: Domains with a malicious verdict that are not allow-listed.
+  when: enrich-domain verdict is malicious and the lookup had no error. Allow-listed domains are skipped
+    by the guardrail (rule block_malicious_domain).
   requires_approval: true
+  on_error: escalate
 - id: block_hash
   phase: contain
   atomic: block-hash
-  when: Malicious attachments.
+  when: enrich-hash disposition of an attachment SHA-256 is malicious and the lookup had no error.
+    Allow-listed hashes are skipped by the guardrail (rule block_malicious_attachment).
   requires_approval: true
+  on_error: escalate
 - id: incident_note
   phase: record
   action: XDR - Incident - Add Note to Incident
-  note: Write enrichment summary, plan, approvals and per-action results.
+  note: Write enrichment summary, plan, approvals, per-action results and rollback steps
+    (templates.incident_note).
+  on_error: continue
 - id: create_ticket
   phase: record
   atomic: create-ticket
+  on_error: continue
 - id: notify_soc
   phase: notify
   atomic: notify-soc
+  on_error: continue
+plan:
+- id: quarantine_malicious_message
+  description: Quarantine every delivered copy of a message that is confirmed malicious. The search is
+    the sender plus the subject or a malicious URL, so a compromised internal sender does not pull
+    unrelated mail and benign links in the message are not search terms. Capped at
+    blast_radius.max_messages_quarantined.
+  atomic: quarantine-email
+  when: "get(incident.context, 'sender', '') != ''
+    and (get(incident.context, 'subject', '') != '' or len(get(incident.context, 'malicious_urls', [])) > 0)
+    and (get(incident.context, 'email_verdict', '') == 'malicious'
+    or len(get(incident.context, 'malicious_urls', [])) > 0
+    or any(d.verdict == 'malicious' for d in results['enrich-domain'])
+    or any(h.disposition == 'malicious' for h in results['enrich-hash']))"
+  target: "lower(incident.context.sender)"
+  args:
+    search: "['from:' + lower(incident.context.sender)]
+      + (['subject:' + incident.context.subject] if get(incident.context, 'subject', '') else [])
+      + ['url:' + u for u in get(incident.context, 'malicious_urls', [])]"
+    max_messages: "guardrails.blast_radius.max_messages_quarantined"
+- id: block_malicious_url_on_legitimate_domain
+  description: Block a single malicious URL when its host is otherwise legitimate, meaning no malicious
+    enrich-domain verdict for the host or an enriched parent domain. URLs on malicious domains are
+    covered by block_malicious_domain instead.
+  atomic: block-url
+  for_each: "[o.value for o in incident.observables if o.type == 'url']"
+  when: "item in get(incident.context, 'malicious_urls', [])
+    and not any(d.verdict == 'malicious'
+    and (domain_of(item) == lower(d.domain) or endswith(domain_of(item), '.' + lower(d.domain)))
+    for d in results['enrich-domain'])"
+  target: "item"
+- id: block_malicious_domain
+  description: Block a domain from the message that enrich-domain rates malicious. Suspicious, unknown
+    and clean domains are left to the analyst.
+  atomic: block-domain
+  for_each: "results['enrich-domain']"
+  when: "item.verdict == 'malicious' and not get(item, 'error', '')"
+  target: "lower(item.domain)"
+  args:
+    expires_hours: "guardrails.expiry_hours['block-domain']"
+- id: block_malicious_attachment
+  description: Block an attachment SHA-256 that enrich-hash rates malicious.
+  atomic: block-hash
+  for_each: "results['enrich-hash']"
+  when: "item.disposition == 'malicious' and not get(item, 'error', '')"
+  target: "lower(item.sha256)"
+  args:
+    description: "'Phishing attachment, XDR incident ' + get(incident, 'id', 'unknown')"
+templates:
+  approval: |
+    {workflow.name}: containment approval for {incident.id} ({incident.severity})
+    {incident.title}
+
+    Planned actions:
+    {plan.actions}
+
+    Skipped by guardrails: {plan.skipped}
+    Escalated (blast radius exceeded): {plan.escalate} {plan.reasons}
+    Dry run: {workflow.dry_run}
+
+    Approving quarantines the matching messages in Secure Email and blocks the listed URLs, domains
+    and hashes. Every action is reversible; rollback steps go into the incident note.
+  incident_note: |
+    ## {workflow.name} run for {incident.id}
+    Dry run: {workflow.dry_run}. Approver: {approver.name} at {approver.time}.
+
+    ### Enrichment and investigation
+    {plan.enrichment_summary}
+
+    ### Containment results
+    {plan.results}
+    Escalated: {plan.escalate} {plan.reasons}
+
+    ### Rollback
+    - quarantine-email: release the quarantined messages back to the inbox in Secure Email ({plan.quarantined_messages}).
+    - block-url: remove each URL from the Umbrella / Cloudflare block list ({plan.blocked_urls}).
+    - block-domain: remove each domain from the automation block list ({plan.blocked_domains}).
+    - block-hash: delete each SHA-256 from the Secure Endpoint simple custom detection list ({plan.blocked_hashes}).
+
+    ### Follow-up
+    - Recipients who clicked or entered credentials go to the account-takeover workflow ({plan.clicked_users}).
+  ticket_title: "[{incident.severity}] Phishing: {incident.title} ({incident.id})"
+  ticket_body: |
+    XDR incident: {incident.id} - {incident.title}
+    Severity: {incident.severity}. Source: {incident.source}. Dry run: {workflow.dry_run}.
+
+    Findings:
+    {plan.enrichment_summary}
+
+    Containment (approved by {approver.name}):
+    {plan.results}
+    Escalated to a human: {plan.escalate} {plan.reasons}
+
+    Rollback is in the XDR incident note.
+  notification: "{workflow.name} | {incident.severity} | {incident.id} {incident.title} | planned: {plan.planned_count},
+    skipped: {plan.skipped_count}, escalate: {plan.escalate} | ticket {ticket.id} {ticket.url}"
 integrations:
 - cisco-xdr
 - umbrella

@@ -1,0 +1,64 @@
+name: Four privileged admins compromised exceeds the disable limit
+description: >
+  Consent phishing hits the cloud admin team: four privileged accounts sign in successfully from the same
+  malicious IP. Sessions are revoked for all four (no cap on revocation), but four disables exceed
+  blast_radius.max_users_disabled (3), so every disable becomes skipped_limit and the plan escalates to
+  a human. The IP block is unaffected.
+incident:
+  id: INC-TEST-0305
+  title: Risky OAuth consent and admin sign-ins from one unfamiliar IP
+  severity: critical
+  source: Cisco XDR
+  observables:
+    - {type: ip, value: 198.51.100.120}
+    - {type: user, value: cloud-admin-01@example.com}
+    - {type: user, value: cloud-admin-02@example.com}
+    - {type: user, value: cloud-admin-03@example.com}
+    - {type: user, value: cloud-admin-04@example.com}
+  context:
+    app_display_name: Document Viewer Plus (test)
+    consent_type: delegated
+results:
+  enrich-ip:
+    - {ip: 198.51.100.120, verdict: malicious, sources: [], internal_sightings: 0, is_internal: false, error: ""}
+  investigate-user:
+    - user: cloud-admin-01@example.com
+      profile: {department: IT, groups: [Cloud Operations], privileged_roles: [Privileged Role Administrator]}
+      risk_level: medium
+      signins: [{ip: 198.51.100.120, location: Unknown, app: Document Viewer Plus (test), result: success}]
+      anomalies: []
+      is_protected: false
+      error: ""
+    - user: cloud-admin-02@example.com
+      profile: {department: IT, groups: [Cloud Operations], privileged_roles: [Application Administrator]}
+      risk_level: high
+      signins: [{ip: 198.51.100.120, location: Unknown, app: Document Viewer Plus (test), result: success}]
+      anomalies: [unfamiliar_location]
+      is_protected: false
+      error: ""
+    - user: cloud-admin-03@example.com
+      profile: {department: IT, groups: [Cloud Operations], privileged_roles: [Exchange Administrator]}
+      risk_level: low
+      signins: [{ip: 198.51.100.120, location: Unknown, app: Document Viewer Plus (test), result: success}]
+      anomalies: []
+      is_protected: false
+      error: ""
+    - user: cloud-admin-04@example.com
+      profile: {department: IT, groups: [Cloud Operations], privileged_roles: [Cloud Application Administrator]}
+      risk_level: high
+      signins: [{ip: 198.51.100.120, location: Unknown, app: Document Viewer Plus (test), result: success}]
+      anomalies: [unfamiliar_location, new_device]
+      is_protected: false
+      error: ""
+expect:
+  escalate: true
+  actions:
+    - {atomic: revoke-session, target: cloud-admin-01@example.com, status: planned, requires_approval: false}
+    - {atomic: revoke-session, target: cloud-admin-02@example.com, status: planned, requires_approval: false}
+    - {atomic: revoke-session, target: cloud-admin-03@example.com, status: planned, requires_approval: false}
+    - {atomic: revoke-session, target: cloud-admin-04@example.com, status: planned, requires_approval: false}
+    - {atomic: disable-user, target: cloud-admin-01@example.com, status: skipped_limit, requires_approval: true}
+    - {atomic: disable-user, target: cloud-admin-02@example.com, status: skipped_limit, requires_approval: true}
+    - {atomic: disable-user, target: cloud-admin-03@example.com, status: skipped_limit, requires_approval: true}
+    - {atomic: disable-user, target: cloud-admin-04@example.com, status: skipped_limit, requires_approval: true}
+    - {atomic: block-ip, target: 198.51.100.120, status: planned, requires_approval: true}

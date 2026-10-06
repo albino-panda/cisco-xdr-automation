@@ -1,0 +1,42 @@
+name: Workstation beaconing to a confirmed C2 domain and IP
+description: >
+  True positive. Umbrella flags cdn-update.test as Command and Control and Secure Endpoint shows a
+  malicious detection on the host that resolves it. The plan blocks the domain and its IP and isolates
+  the infected host. A second host that queried the domain once but has no detection is investigated
+  and left alone.
+incident:
+  id: INC-TEST-C2-0001
+  title: Periodic HTTPS beaconing from wks-0142 to cdn-update.test
+  severity: high
+  source: Cisco Umbrella
+  observables:
+    - {type: domain, value: cdn-update.test}
+    - {type: ip, value: 203.0.113.45}
+  targets:
+    - {type: endpoint, value: wks-0142}
+    - {type: endpoint, value: wks-0177}
+  context: {beacon_interval_seconds: 60}
+results:
+  enrich-domain:
+    - {domain: cdn-update.test, verdict: malicious, categories: [Command and Control, Malware], first_seen: "2026-10-02", internal_queries: 412}
+  enrich-ip:
+    - {ip: 203.0.113.45, verdict: malicious, sources: [], internal_sightings: 2, is_internal: false}
+  investigate-host:
+    - host: wks-0142
+      connector_guid: 0f3c2a10-0000-4000-8000-000000000142
+      detections: [{name: W32.C2.Beacon, disposition: malicious}]
+      trajectory: []
+      isolation_capable: true
+      is_protected: false
+    - host: wks-0177
+      connector_guid: 0f3c2a10-0000-4000-8000-000000000177
+      detections: []
+      trajectory: []
+      isolation_capable: true
+      is_protected: false
+expect:
+  escalate: false
+  actions:
+    - {atomic: block-domain, target: cdn-update.test, status: planned, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.45, status: planned, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 0f3c2a10-0000-4000-8000-000000000142, status: planned, requires_approval: true}

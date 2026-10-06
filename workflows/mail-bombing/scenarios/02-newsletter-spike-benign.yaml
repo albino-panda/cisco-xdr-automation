@@ -1,0 +1,58 @@
+name: Legitimate newsletter resend loop
+description: >
+  A vendor newsletter platform resends the same issue 160 times to one events mailbox. The detector's
+  extreme-volume rule fires on volume alone, but there is a single sender domain and no hidden identity
+  event. This is not a subscription bomb: nothing is quarantined or revoked, and the analyst adds the
+  platform to the detector exclusions instead.
+incident:
+  id: INC-TEST-MB-0002
+  title: "[CRITICAL] Possible email bombing of events-team@example.com: 160 msgs / 1 domains in 5 min"
+  severity: critical
+  source: cisco-xdr-mailbomb-detector
+  observables:
+    - {type: email, value: events-team@example.com}
+    - {type: domain, value: mailer.vendor-news.test}
+    - {type: ip, value: 203.0.113.25}
+  targets:
+    - {type: email, value: events-team@example.com}
+  context:
+    event_type: mailbomb.detection
+    schema_version: 1
+    detection_id: mailbomb-0000000000000002
+    detected_at: "2026-10-05T14:05:00.000Z"
+    risk_score: 41
+    is_escalation: false
+    matched_rules: ["extreme_volume", "threshold:critical"]
+    recipient: events-team@example.com
+    recipient_domain: example.com
+    xdr_incident_id: null
+    metrics:
+      window_start: "2026-10-05T14:00:00.000Z"
+      window_end: "2026-10-05T14:05:00.000Z"
+      window_minutes: 5.0
+      total_messages: 160
+      unique_senders: 1
+      unique_sender_domains: 1
+      unique_source_ips: 2
+      unique_subjects: 1
+      neutral_count: 160
+      graymail_count: 0
+      spam_count: 0
+      malicious_count: 0
+      messages_per_minute: 32.0
+      acceleration: 1.0
+results:
+  enrich-domain:
+    - {domain: mailer.vendor-news.test, verdict: clean, categories: [Marketing], first_seen: "2017-02-20", internal_queries: 140}
+  investigate-user:
+    - user: events-team@example.com
+      profile: {department: Marketing, manager: marketing-lead@example.com, privileged_roles: [], groups: [Marketing]}
+      risk_level: none
+      signins:
+        - {ip: 203.0.113.10, location: Office, app: Outlook, result: success, time: "2026-10-05T13:30:00Z"}
+      anomalies: []
+      is_protected: false
+      error: ""
+expect:
+  escalate: false
+  actions: []

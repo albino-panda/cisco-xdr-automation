@@ -1,0 +1,60 @@
+name: Ransomware spreading to seven workstations in one run
+description: >
+  Blast radius. The same payload encrypts seven operations workstations. Seven isolations exceed
+  max_hosts_isolated (5), so every isolation becomes skipped_limit and the plan escalates to a human,
+  who decides on segment-level containment. The hash block and the session revocation are outside that
+  cap and stay planned, so spread is still slowed while the human decides.
+incident:
+  id: INC-TEST-RW-0004
+  title: Ransomware outbreak in operations
+  severity: critical
+  source: Cisco Secure Endpoint
+  observables:
+    - {type: sha256, value: b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0}
+  targets:
+    - type: endpoint
+      observables:
+        - {type: hostname, value: ws-ops-001}
+        - {type: user, value: ops.lead@example.com}
+  context:
+    detection: Ransomware.Generic on multiple endpoints
+results:
+  enrich-hash:
+    - sha256: b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0
+      disposition: malicious
+      prevalence: 7
+      hosts:
+        - 00000000-0000-4000-8000-000000000001
+        - 00000000-0000-4000-8000-000000000002
+        - 00000000-0000-4000-8000-000000000003
+        - 00000000-0000-4000-8000-000000000004
+        - 00000000-0000-4000-8000-000000000005
+        - 00000000-0000-4000-8000-000000000006
+        - 00000000-0000-4000-8000-000000000007
+  investigate-host:
+    - {host: ws-ops-001, connector_guid: 00000000-0000-4000-8000-000000000001, detections: [{name: Ransomware.Generic, disposition: malicious}], trajectory: [], isolation_capable: true, is_protected: false}
+    - {host: ws-ops-002, connector_guid: 00000000-0000-4000-8000-000000000002, detections: [{name: Ransomware.Generic, disposition: malicious}], trajectory: [], isolation_capable: true, is_protected: false}
+    - {host: ws-ops-003, connector_guid: 00000000-0000-4000-8000-000000000003, detections: [{name: Ransomware.Generic, disposition: malicious}], trajectory: [], isolation_capable: true, is_protected: false}
+    - {host: ws-ops-004, connector_guid: 00000000-0000-4000-8000-000000000004, detections: [{name: Ransomware.Generic, disposition: malicious}], trajectory: [], isolation_capable: true, is_protected: false}
+    - {host: ws-ops-005, connector_guid: 00000000-0000-4000-8000-000000000005, detections: [{name: Ransomware.Generic, disposition: malicious}], trajectory: [], isolation_capable: true, is_protected: false}
+    - {host: ws-ops-006, connector_guid: 00000000-0000-4000-8000-000000000006, detections: [{name: Ransomware.Generic, disposition: malicious}], trajectory: [], isolation_capable: true, is_protected: false}
+    - {host: ws-ops-007, connector_guid: 00000000-0000-4000-8000-000000000007, detections: [{name: Ransomware.Generic, disposition: malicious}], trajectory: [], isolation_capable: true, is_protected: false}
+  investigate-user:
+    - user: ops.lead@example.com
+      profile: {department: Operations, groups: [Operations Users]}
+      risk_level: medium
+      signins: [{ip: 10.30.0.21, location: Head office, app: Office 365, result: success}]
+      anomalies: []
+      is_protected: false
+expect:
+  escalate: true
+  actions:
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000001, status: skipped_limit}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000002, status: skipped_limit}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000003, status: skipped_limit}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000004, status: skipped_limit}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000005, status: skipped_limit}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000006, status: skipped_limit}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000007, status: skipped_limit}
+    - {atomic: block-hash, target: b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0, status: planned, requires_approval: true}
+    - {atomic: revoke-session, target: ops.lead@example.com, status: planned, requires_approval: false}

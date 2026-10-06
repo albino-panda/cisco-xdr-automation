@@ -1,0 +1,39 @@
+name: Confirmed takeover from attacker infrastructure
+description: >
+  A standard user signs in successfully from an IP that enrichment rates malicious, and Entra rates the
+  user high risk. Sessions are revoked without an approval wait, because the guardrails auto-approve
+  revoke-session for this workflow. The attacker IP is blocked with approval. A second IP, a commercial VPN
+  exit that internal hosts also use, is suspicious but shared infrastructure, so it is not blocked.
+  The user is not privileged and was not revoked before, so the account is not disabled.
+incident:
+  id: INC-TEST-ATO-0001
+  title: Entra high-risk sign-in from anonymising infrastructure
+  severity: high
+  source: Microsoft Entra ID Protection
+  observables:
+    - {type: user, value: ap-clerk-04@example.com}
+    - {type: ip, value: 203.0.113.45}
+    - {type: ip, value: 198.51.100.20}
+  targets:
+    - {type: user, value: ap-clerk-04@example.com}
+  context:
+    detection: riskySignIn
+results:
+  enrich-ip:
+    - {ip: 203.0.113.45, verdict: malicious, sources: [{source: Cisco XDR, verdict: malicious}], internal_sightings: 0, is_internal: false, error: ""}
+    - {ip: 198.51.100.20, verdict: suspicious, sources: [{source: Umbrella, verdict: suspicious}], internal_sightings: 14, is_internal: false, error: ""}
+  investigate-user:
+    - user: ap-clerk-04@example.com
+      profile: {department: Finance, manager: finance-lead@example.com, groups: [Finance Users], privileged_roles: []}
+      risk_level: high
+      signins:
+        - {ip: 198.51.100.20, location: Office VPN exit, app: Outlook, result: success}
+        - {ip: 203.0.113.45, location: Unfamiliar country, app: Office 365 Exchange Online, result: success}
+      anomalies: [impossible_travel, unfamiliar_location, anonymizing_ip]
+      is_protected: false
+      error: ""
+expect:
+  escalate: false
+  actions:
+    - {atomic: revoke-session, target: ap-clerk-04@example.com, status: planned, requires_approval: false}
+    - {atomic: block-ip, target: 203.0.113.45, status: planned, requires_approval: true}

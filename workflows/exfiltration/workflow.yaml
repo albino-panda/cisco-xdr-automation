@@ -47,66 +47,229 @@ steps:
 - id: load_incident
   phase: intake
   action: XDR - Incident - Get Incident Summary
-  note: Collect observables, targets and existing notes from the triggering incident.
+  note: Collect observables, targets and existing notes from the triggering incident, plus the transfer
+    facts the detection source reports in incident.context (destination_domains, destination_ips,
+    source_hosts, actor_users, transfer_ongoing, insider_risk, data_types, bytes_out, file_count,
+    transfer_started, transfer_last_seen).
+  on_error: stop
 - id: load_guardrails
   phase: intake
   action: Core - Read guardrails
   note: Protected hosts/users, allow-lists and blast-radius limits (docs/deployment/guardrails.example.yaml).
+    Sanctioned backup, file-transfer and partner services belong in allowlist.domains.
+  on_error: stop
 - id: enrich_domain
   phase: enrich
   atomic: enrich-domain
   for_each: domain
+  on_error: continue
 - id: enrich_ip
   phase: enrich
   atomic: enrich-ip
   for_each: ip
+  on_error: continue
 - id: investigate_host
   phase: investigate
   atomic: investigate-host
   for_each: host
+  on_error: continue
 - id: investigate_user
   phase: investigate
   atomic: investigate-user
   for_each: user
+  on_error: continue
 - id: build_plan
   phase: decide
-  note: Build the containment plan from enrichment verdicts, investigation results and guardrails. Drop
-    any target that is protected, allow-listed or over the blast-radius limit.
+  note: Evaluate the plan rules below against enrichment verdicts, investigation results and
+    incident.context, then apply the guardrails. Protected, allow-listed, internal and over-limit targets
+    stay in the plan with a skipped_* status so the approver sees them. Records whose enrichment or
+    investigation returned an error are never actioned.
+  on_error: escalate
 - id: approval
   phase: decide
   action: Approval Task
   note: Show the plan to an approver. Skipped when dry_run is true (plan is only recorded).
   skip_if: dry_run == true
+  on_error: escalate
 - id: block_domain
   phase: contain
   atomic: block-domain
-  when: Destination when not a sanctioned service.
+  when: Domain with enrich-domain verdict malicious or suspicious, or a transfer destination
+    (incident.context.destination_domains) with verdict unknown. Clean destinations are not blocked at
+    the domain level; sanctioned services are allow-listed and skipped by the guardrails.
   requires_approval: true
+  on_error: escalate
 - id: block_ip
   phase: contain
   atomic: block-ip
-  when: Destination IP when not shared infrastructure.
+  when: IP seen from at most 3 internal hosts (internal_sightings <= 3, so not shared infrastructure)
+    with enrich-ip verdict malicious or suspicious, or a transfer destination
+    (incident.context.destination_ips) with verdict unknown. Internal and allow-listed ranges are skipped
+    by the guardrails.
   requires_approval: true
+  on_error: escalate
 - id: isolate_endpoint
   phase: contain
   atomic: isolate-endpoint
-  when: Source host while transfer is ongoing.
+  when: Isolation-capable source host while incident.context.transfer_ongoing is true and the transfer
+    shows exfiltration evidence (a destination domain or IP whose verdict is not clean, a malicious
+    endpoint detection on the host, or incident.context.insider_risk). Finished transfers are not
+    isolated. Protected hosts are skipped.
   requires_approval: true
+  on_error: escalate
 - id: disable_user
   phase: contain
   atomic: disable-user
-  when: Insider or compromised account driving the transfer.
+  when: Account driving the transfer that is compromised (Entra risk high, or risk medium with at least
+    one sign-in anomaly), or that the source flags as insider risk (incident.context.insider_risk with the
+    user named in incident.context.actor_users). Protected users and groups are skipped.
   requires_approval: true
+  on_error: escalate
 - id: incident_note
   phase: record
   action: XDR - Incident - Add Note to Incident
-  note: Write enrichment summary, plan, approvals and per-action results.
+  note: Write enrichment summary, plan, approvals, per-action results and the rollback for every action.
+  on_error: continue
 - id: create_ticket
   phase: record
   atomic: create-ticket
+  note: The ticket carries data types, volumes and the transfer window for legal and privacy review.
+  on_error: continue
 - id: notify_soc
   phase: notify
   atomic: notify-soc
+  on_error: continue
+plan:
+- id: block_exfil_domains
+  description: Domains with a malicious or suspicious verdict, and transfer destination domains with no
+    reputation yet (verdict unknown, typical for a fresh drop site). Clean destinations are left alone;
+    sanctioned services are allow-listed and skipped by the guardrail.
+  atomic: block-domain
+  for_each: "results['enrich-domain']"
+  when: >-
+    not get(item, 'error', '')
+    and (item.verdict in ['malicious', 'suspicious']
+    or (item.verdict == 'unknown' and item.domain in get(incident.context, 'destination_domains', [])))
+  target: "item.domain"
+  args:
+    expires_hours: "get(get(guardrails, 'expiry_hours', None), 'block-domain', 720)"
+- id: block_exfil_ips
+  description: IPs with a malicious or suspicious verdict, and transfer destination IPs with verdict
+    unknown, that at most 3 internal hosts talk to. Wider use means shared infrastructure (CDN, cloud
+    front door) and is left to the approver. Internal and allow-listed ranges are skipped by the guardrail.
+  atomic: block-ip
+  for_each: "results['enrich-ip']"
+  when: >-
+    not get(item, 'error', '')
+    and item.internal_sightings <= 3
+    and (item.verdict in ['malicious', 'suspicious']
+    or (item.verdict == 'unknown' and item.ip in get(incident.context, 'destination_ips', [])))
+  target: "item.ip"
+  args:
+    expires_hours: "get(get(guardrails, 'expiry_hours', None), 'block-ip', 168)"
+- id: isolate_active_source_hosts
+  description: Source hosts of a transfer that is still running, when the transfer shows exfiltration
+    evidence (a destination domain or IP that is not clean, a malicious detection on the host, or an
+    insider-risk flag from the source).
+    When incident.context.source_hosts is absent every investigated host counts as a source.
+  atomic: isolate-endpoint
+  for_each: "results['investigate-host']"
+  when: >-
+    not get(item, 'error', '')
+    and get(incident.context, 'transfer_ongoing', False)
+    and item.isolation_capable
+    and item.host in get(incident.context, 'source_hosts', [item.host])
+    and (any(d.verdict != 'clean' for d in results['enrich-domain'] if d.domain in get(incident.context, 'destination_domains', []))
+    or any(i.verdict != 'clean' for i in results['enrich-ip'] if i.ip in get(incident.context, 'destination_ips', []))
+    or any(get(x, 'disposition', '') == 'malicious' for x in item.detections)
+    or get(incident.context, 'insider_risk', False))
+  target: "item.connector_guid"
+  args:
+    reason: "'Ongoing data exfiltration: ' + incident.title"
+- id: disable_compromised_actor
+  description: Accounts driving the transfer that look compromised. Entra risk high, or risk medium
+    with at least one sign-in anomaly. When incident.context.actor_users is absent every investigated
+    user counts as an actor.
+  atomic: disable-user
+  for_each: "results['investigate-user']"
+  when: >-
+    not get(item, 'error', '')
+    and item.user in get(incident.context, 'actor_users', [item.user])
+    and (item.risk_level == 'high' or (item.risk_level == 'medium' and len(item.anomalies) > 0))
+  target: "item.user"
+  args:
+    reason: "'Compromised account driving data exfiltration: ' + incident.title"
+- id: disable_insider_actor
+  description: Accounts the detection source flags as insider risk (incident.context.insider_risk) and
+    names explicitly in incident.context.actor_users. There is no default actor here, so an insider
+    decision never spreads to other users in the incident.
+  atomic: disable-user
+  for_each: "results['investigate-user']"
+  when: >-
+    not get(item, 'error', '')
+    and get(incident.context, 'insider_risk', False)
+    and item.user in get(incident.context, 'actor_users', [])
+  target: "item.user"
+  args:
+    reason: "'Insider data exfiltration, legal and HR review via ticket: ' + incident.title"
+templates:
+  approval: |
+    Approve containment for {incident.id}: {incident.title} (severity {incident.severity}).
+    Workflow {workflow.name}, dry run {plan.dry_run}.
+    Transfer: {incident.context.bytes_out} bytes in {incident.context.file_count} files to
+    {incident.context.destination_domains} {incident.context.destination_ips}.
+    Still running: {incident.context.transfer_ongoing}. Data types: {incident.context.data_types}.
+    Planned actions:
+    {plan.actions}
+    Skipped by guardrails:
+    {plan.skipped}
+    Escalation: {plan.escalate} {plan.reasons}
+    Every action is reversible; the rollback for each is written to the incident note.
+  incident_note: |
+    Workflow {workflow.name} ({workflow.id}) ran for {incident.id}. Dry run: {plan.dry_run}.
+    Transfer: {incident.context.bytes_out} bytes, {incident.context.file_count} files,
+    {incident.context.transfer_started} to {incident.context.transfer_last_seen}, ongoing {incident.context.transfer_ongoing}.
+    Destinations: {incident.context.destination_domains} {incident.context.destination_ips}.
+    Enrichment summary:
+    {plan.enrichment_summary}
+    Plan and results:
+    {plan.action_results}
+    Skipped: {plan.skipped}
+    Escalation: {plan.escalate} {plan.reasons}
+    Approval: {approver.decision} by {approver.name} at {approver.time}.
+    Evidence: isolation keeps the host powered on with the management channel open. Do not reimage
+    before forensic collection and legal sign-off.
+    Rollback:
+    - block-domain: remove the domain from the automation block list in Umbrella / Secure Access and,
+      when used, the Cloudflare Gateway list. Blocks auto-expire after the planned expires_hours.
+    - block-ip: remove the Meraki MX rule or Cloudflare IP list item; Meraki restores from the saved
+      rule set. Blocks auto-expire after the planned expires_hours.
+    - isolate-endpoint: stop isolation for the connector GUID in Secure Endpoint (Stop Isolation API,
+      endpoint not yet verified against vendor docs). Unlock codes: {plan.unlock_codes}
+    - disable-user: set accountEnabled back to true in Entra ID (Microsoft Graph, not yet verified
+      against vendor docs) once the owner, and for insider cases HR and legal, agree.
+    Ticket: {ticket.id} {ticket.url}
+  ticket_title: "[Exfiltration] {incident.title} ({incident.id})"
+  ticket_body: |
+    Data exfiltration for {incident.id}: {incident.title}.
+    Severity: {incident.severity}. Workflow: {workflow.name}. Dry run: {plan.dry_run}.
+    Legal and privacy review:
+    - Data types: {incident.context.data_types}
+    - Volume: {incident.context.bytes_out} bytes in {incident.context.file_count} files
+    - Transfer window: {incident.context.transfer_started} to {incident.context.transfer_last_seen} (ongoing {incident.context.transfer_ongoing})
+    - Destinations: {incident.context.destination_domains} {incident.context.destination_ips}
+    - Source hosts: {incident.context.source_hosts}. Accounts: {incident.context.actor_users}
+    - Insider risk flagged by source: {incident.context.insider_risk}
+    Enrichment:
+    {plan.enrichment_summary}
+    Containment actions and status:
+    {plan.action_results}
+    Skipped by guardrails: {plan.skipped}
+    Escalation required: {plan.escalate} {plan.reasons}
+    Approved by: {approver.name}
+    Next steps: legal and privacy decide on notification obligations from the data types and volumes
+    above. Evidence is preserved on the isolated host. Rollback steps are in the XDR incident note.
+  notification: "Exfiltration {incident.severity}: {incident.title} ({incident.id}). {incident.context.bytes_out} bytes, ongoing {incident.context.transfer_ongoing}. {plan.summary} Escalate: {plan.escalate}. Ticket {ticket.id} {ticket.url}"
 integrations:
 - cisco-xdr
 - umbrella

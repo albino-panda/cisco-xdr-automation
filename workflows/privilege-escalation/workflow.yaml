@@ -47,57 +47,153 @@ steps:
 - id: load_incident
   phase: intake
   action: XDR - Incident - Get Incident Summary
-  note: Collect observables, targets and existing notes from the triggering incident.
+  note: Collect observables, targets and existing notes from the triggering incident. Normalise the
+    source's role, group and account-creation events into incident.context.privilege_changes (see the
+    plan section below).
+  on_error: stop
 - id: load_guardrails
   phase: intake
   action: Core - Read guardrails
   note: Protected hosts/users, allow-lists and blast-radius limits (docs/deployment/guardrails.example.yaml).
+  on_error: stop
 - id: enrich_hash
   phase: enrich
   atomic: enrich-hash
   for_each: sha256
+  on_error: continue
 - id: investigate_host
   phase: investigate
   atomic: investigate-host
   for_each: host
+  on_error: continue
 - id: investigate_user
   phase: investigate
   atomic: investigate-user
   for_each: user
+  note: Investigate the user observables and every account named in incident.context.privilege_changes,
+    as subject or as actor.
+  on_error: continue
 - id: build_plan
   phase: decide
-  note: Build the containment plan from enrichment verdicts, investigation results and guardrails. Drop
-    any target that is protected, allow-listed or over the blast-radius limit.
+  note: Build the containment plan from the plan rules below, enrichment verdicts, investigation results
+    and guardrails. Drop any target that is protected, allow-listed or over the blast-radius limit.
+  on_error: escalate
 - id: approval
   phase: decide
   action: Approval Task
   note: Show the plan to an approver. Skipped when dry_run is true (plan is only recorded).
   skip_if: dry_run == true
+  on_error: escalate
 - id: isolate_endpoint
   phase: contain
   atomic: isolate-endpoint
-  when: Host where an exploit ran.
+  when: Host is isolation-capable and has a malicious detection (exploit prevention, UAC bypass), or a
+    file that enrich-hash rates malicious was seen on it.
   requires_approval: true
+  on_error: escalate
 - id: revoke_session
   phase: contain
   atomic: revoke-session
-  when: Escalated account.
+  when: Account that was created or gained a role or group, or that granted one to another account, with
+    no approved change request covering the change.
   requires_approval: false
+  on_error: escalate
 - id: disable_user
   phase: contain
   atomic: disable-user
-  when: Account created or elevated by the attacker.
+  when: Account created outside an approved change, or elevated outside an approved change while its
+    Entra risk level is high or investigate-user reports anomalies.
   requires_approval: true
+  on_error: escalate
 - id: incident_note
   phase: record
   action: XDR - Incident - Add Note to Incident
-  note: Write enrichment summary, plan, approvals and per-action results.
+  note: Write enrichment summary, plan, approvals, per-action results and rollback steps. The isolation
+    unlock code is stored only here, so a failure escalates.
+  on_error: escalate
 - id: create_ticket
   phase: record
   atomic: create-ticket
+  on_error: continue
 - id: notify_soc
   phase: notify
   atomic: notify-soc
+  on_error: escalate
+# incident.context.privilege_changes is set at intake from the detection source (Entra ID audit log,
+# Windows security events via Splunk, the XDR incident). One entry per change:
+#   user:            UPN that was created, or that gained the role or group
+#   change:          role_assigned | group_added | account_created
+#   role / group:    what was granted (informational)
+#   actor:           UPN that made the change
+#   approved_change: number of an approved change request whose window covers the change, else ""
+plan:
+- id: isolate_exploited_hosts
+  description: Hosts where an exploit or UAC bypass ran, shown by a malicious detection or a malicious
+    file from enrich-hash, and where the connector policy allows isolation.
+  atomic: isolate-endpoint
+  for_each: "results['investigate-host']"
+  when: "item.isolation_capable and (any(get(d, 'disposition') == 'malicious' for d in item.detections)
+    or any(h.disposition == 'malicious' and (item.connector_guid in h.hosts or item.host in h.hosts) for
+    h in results['enrich-hash']))"
+  target: item.connector_guid
+  args:
+    reason: "'Privilege escalation (' + incident.id + '): exploit or UAC bypass on ' + item.host"
+- id: revoke_unapproved_privilege_sessions
+  description: Accounts that were created or gained privileges, or that granted them, with no approved
+    change request. Ends live sessions so the new rights cannot be used with an existing token.
+  atomic: revoke-session
+  for_each: "results['investigate-user']"
+  when: "any((lower(c.user) == lower(item.user) or lower(get(c, 'actor', '')) == lower(item.user)) and
+    not get(c, 'approved_change', '') for c in get(incident.context, 'privilege_changes', []))"
+  target: item.user
+- id: disable_attacker_accounts
+  description: Accounts created outside an approved change, or elevated outside one while showing
+    compromise signs (Entra risk level high or sign-in anomalies).
+  atomic: disable-user
+  for_each: "results['investigate-user']"
+  when: "any(lower(c.user) == lower(item.user) and not get(c, 'approved_change', '') and (c.change ==
+    'account_created' or lower(get(item, 'risk_level', '')) == 'high' or len(get(item, 'anomalies', []))
+    > 0) for c in get(incident.context, 'privilege_changes', []))"
+  target: item.user
+  args:
+    reason: "'Privilege escalation (' + incident.id + '): account created or elevated outside an approved
+      change'"
+templates:
+  approval: |
+    Privilege escalation response for {incident.id}: {incident.title} (severity {incident.severity}).
+    Dry run: {workflow.dry_run}. Proposed actions:
+    {plan.actions}
+    Skipped by guardrails or limits: {plan.skipped}. Needs a human: {plan.escalate} {plan.reasons}
+    Check before approving: an account that was just added to a protected group (for example Domain
+    Admins) is skipped_protected by the group guardrail. Reverse that membership manually first.
+    Approve to run the planned actions. Reject to keep the plan as a record only.
+  incident_note: |
+    Workflow {workflow.name} on {incident.id}. Dry run: {workflow.dry_run}.
+    Approver: {approver.name}, decision {approver.decision} at {approver.time}.
+    Privilege changes: {plan.privilege_changes}
+    Findings: {plan.findings}
+    Actions and results: {plan.results}
+    Rollback:
+    - isolate-endpoint: stop isolation in Secure Endpoint for the connector GUID. Unlock codes:
+      {plan.unlock_codes}
+    - disable-user: set accountEnabled back to true in Entra ID once the account is confirmed legitimate.
+    - revoke-session: not reversible; the user signs in again.
+    Manual step: reverse every unauthorised role or group change listed above (remove the role
+    assignment or group membership in Entra ID or Active Directory, and delete or keep disabled any
+    account created outside an approved change). Record each reversal in ticket {ticket.id}.
+  ticket_title: "[{incident.severity}] Privilege escalation: {incident.title} ({incident.id})"
+  ticket_body: |
+    XDR incident: {incident.id} ({incident.title}), source {incident.source}.
+    Privilege changes: {plan.privilege_changes}
+    Enrichment and investigation: {plan.findings}
+    Containment plan and results: {plan.results}
+    Approver: {approver.name} ({approver.decision}). Needs a human: {plan.escalate} {plan.reasons}
+    Rollback: stop isolation with the unlock code in the incident note; re-enable disabled accounts by
+    setting accountEnabled to true; session revocation is not reversible.
+    Manual follow-up (required): reverse each unauthorised role or group change, delete or keep disabled
+    accounts created outside an approved change, and record before and after membership here.
+  notification: "Privilege escalation {incident.id} ({incident.severity}): {plan.summary}. Needs a human:
+    {plan.escalate}. Ticket {ticket.url}"
 integrations:
 - cisco-xdr
 - secure-endpoint

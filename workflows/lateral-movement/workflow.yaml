@@ -50,61 +50,190 @@ steps:
 - id: load_incident
   phase: intake
   action: XDR - Incident - Get Incident Summary
-  note: Collect observables, targets and existing notes from the triggering incident.
+  note: Collect observables, targets and existing notes from the triggering incident, plus the hosts that
+    initiated the remote logons (incident.context.source_hosts) when the detection provides them.
+  on_error: stop
 - id: load_guardrails
   phase: intake
   action: Core - Read guardrails
   note: Protected hosts/users, allow-lists and blast-radius limits (docs/deployment/guardrails.example.yaml).
+  on_error: stop
 - id: enrich_ip
   phase: enrich
   atomic: enrich-ip
   for_each: ip
+  on_error: continue
 - id: enrich_hash
   phase: enrich
   atomic: enrich-hash
   for_each: sha256
+  on_error: continue
 - id: investigate_host
   phase: investigate
   atomic: investigate-host
   for_each: host
+  note: Run for every source and destination host of the movement, not only the newest one.
+  on_error: continue
 - id: investigate_user
   phase: investigate
   atomic: investigate-user
   for_each: user
+  on_error: continue
 - id: build_plan
   phase: decide
-  note: Build the containment plan from enrichment verdicts, investigation results and guardrails. Drop
-    any target that is protected, allow-listed or over the blast-radius limit.
+  note: Build the containment plan from the `plan` rules below. Drop any target that is protected, allow-listed
+    or over the blast-radius limit.
+  on_error: escalate
 - id: approval
   phase: decide
   action: Approval Task
   note: Show the plan to an approver. Skipped when dry_run is true (plan is only recorded).
   skip_if: dry_run == true
+  on_error: escalate
 - id: isolate_endpoint
   phase: contain
   atomic: isolate-endpoint
-  when: Source and destination hosts with confirmed malicious activity.
+  when: Isolation-capable source or destination hosts that have a malicious detection, hold a file enrich-hash
+    rates malicious, or are named in incident.context.source_hosts while the movement is confirmed malicious.
   requires_approval: true
+  on_error: escalate
 - id: revoke_session
   phase: contain
   atomic: revoke-session
-  when: Accounts used for the movement.
+  when: Accounts in the incident when the movement is confirmed malicious (any host with a malicious detection
+    or any malicious hash), or any account with a successful sign-in from a malicious IP.
   requires_approval: false
+  on_error: escalate
 - id: disable_user
   phase: contain
   atomic: disable-user
-  when: Accounts confirmed compromised and not protected.
+  when: Accounts confirmed compromised and not protected, meaning confirmed malicious movement plus high Entra
+    risk or sign-in anomalies, or a successful sign-in from a malicious IP.
   requires_approval: true
+  on_error: escalate
 - id: incident_note
   phase: record
   action: XDR - Incident - Add Note to Incident
-  note: Write enrichment summary, plan, approvals and per-action results.
+  note: Write enrichment summary, host graph, plan, approvals, per-action results and the rollback for every action.
+  on_error: continue
 - id: create_ticket
   phase: record
   atomic: create-ticket
+  on_error: continue
 - id: notify_soc
   phase: notify
   atomic: notify-soc
+  on_error: continue
+plan:
+- id: isolate_hosts_with_malicious_detections
+  description: Source or destination hosts with at least one malicious detection, where the connector policy
+    allows isolation.
+  atomic: isolate-endpoint
+  for_each: "results['investigate-host']"
+  when: "item.isolation_capable and any(d.disposition == 'malicious' for d in item.detections)"
+  target: item.connector_guid
+  args:
+    reason: "'Lateral movement: malicious activity on ' + item.host + ' (' + incident.title + ')'"
+- id: isolate_hosts_with_transferred_malicious_file
+  description: Hosts that hold a file enrich-hash rates malicious (lateral tool transfer, T1570), even before
+    the file raised a detection on that host.
+  atomic: isolate-endpoint
+  for_each: "results['investigate-host']"
+  when: "item.isolation_capable and any(f.disposition == 'malicious' and (item.connector_guid in f.hosts or item.host
+    in f.hosts) for f in results['enrich-hash'])"
+  target: item.connector_guid
+  args:
+    reason: "'Lateral movement: malicious transferred file on ' + item.host + ' (' + incident.title + ')'"
+- id: isolate_movement_source_hosts
+  description: Hosts the detection names as the origin of the remote logons (incident.context.source_hosts),
+    once the movement is confirmed malicious anywhere in the incident. Covers sources with no detection of
+    their own.
+  atomic: isolate-endpoint
+  for_each: "results['investigate-host']"
+  when: "item.isolation_capable and (lower(item.host) in [lower(s) for s in get(incident.context, 'source_hosts',
+    [])] or lower(item.connector_guid) in [lower(s) for s in get(incident.context, 'source_hosts', [])]) and (any(any(d.disposition
+    == 'malicious' for d in h.detections) for h in results['investigate-host']) or any(f.disposition == 'malicious'
+    for f in results['enrich-hash']))"
+  target: item.connector_guid
+  args:
+    reason: "'Lateral movement: source of confirmed malicious remote logons (' + incident.title + ')'"
+- id: revoke_sessions_of_movement_accounts
+  description: Accounts in the incident when the movement is confirmed malicious, or any account with a successful
+    sign-in from an IP that enrich-ip rates malicious.
+  atomic: revoke-session
+  for_each: "results['investigate-user']"
+  when: "any(any(d.disposition == 'malicious' for d in h.detections) for h in results['investigate-host']) or any(f.disposition
+    == 'malicious' for f in results['enrich-hash']) or any(get(s, 'result') == 'success' and get(s, 'ip') in [i.ip
+    for i in results['enrich-ip'] if i.verdict == 'malicious'] for s in item.signins)"
+  target: item.user
+- id: disable_compromised_accounts
+  description: Accounts confirmed compromised, meaning confirmed malicious movement plus high Entra risk or
+    sign-in anomalies, or a successful sign-in from a malicious IP.
+  atomic: disable-user
+  for_each: "results['investigate-user']"
+  when: "((any(any(d.disposition == 'malicious' for d in h.detections) for h in results['investigate-host']) or
+    any(f.disposition == 'malicious' for f in results['enrich-hash'])) and (lower(item.risk_level) == 'high' or
+    len(item.anomalies) > 0)) or any(get(s, 'result') == 'success' and get(s, 'ip') in [i.ip for i in results['enrich-ip']
+    if i.verdict == 'malicious'] for s in item.signins)"
+  target: item.user
+  args:
+    reason: "'Lateral movement: account confirmed compromised (' + incident.title + ')'"
+templates:
+  approval: |
+    {workflow.name}: containment approval for {incident.id} ({incident.severity})
+    Incident: {incident.title}
+    Source hosts: {plan.source_hosts}
+    Destination hosts: {plan.destination_hosts}
+    Planned actions (rule, atomic, target, approval needed):
+    {plan.actions}
+    Skipped by guardrails (protected or over limit): {plan.skipped}
+    Escalated (blast radius exceeded): {plan.escalate} {plan.reasons}
+    Dry run: {workflow.dry_run}
+    Before approving, check that both source and destination hosts are covered and that no sanctioned admin
+    jump host is being isolated. Session revocation cannot be undone; users must sign in again.
+  incident_note: |
+    ## {workflow.name} run for {incident.id}
+    Dry run: {workflow.dry_run}. Approver: {approver.name} at {approver.time}.
+
+    ### Enrichment and investigation
+    {plan.enrichment_summary}
+    Host graph (source -> destination, account, protocol): {plan.movement_graph}
+
+    ### Plan and results
+    {plan.results}
+    Skipped by guardrails: {plan.skipped}
+    Escalated: {plan.escalate} {plan.reasons}
+
+    ### Rollback
+    - isolate-endpoint: stop isolation for each isolated connector GUID in Secure Endpoint ({plan.isolated_hosts}). Unlock codes: {plan.unlock_codes}.
+    - revoke-session: not reversible; affected users sign in again ({plan.revoked_users}).
+    - disable-user: set accountEnabled back to true in Entra ID for each disabled account ({plan.disabled_users}) after its credentials are reset.
+
+    ### Follow-up for the analyst
+    - [ ] Reset passwords of every account used for the movement, including on-premises AD accounts.
+    - [ ] Remove remote services and scheduled tasks created on destination hosts (T1021.002, T1021.006).
+    - [ ] Remove transferred tools from every host in enrich-hash hosts (T1570): {plan.transferred_files}
+    - [ ] Review RDP, SMB and WinRM reachability between the affected segments.
+    - [ ] Handle skipped protected targets (domain controllers, Domain Admins, break-glass) manually.
+  ticket_title: "[{incident.severity}] Lateral movement: {incident.title} ({incident.id})"
+  ticket_body: |
+    Lateral movement response for XDR incident {incident.id}.
+    Severity: {incident.severity}. Source: {incident.source}. Dry run: {workflow.dry_run}.
+
+    Enrichment summary:
+    {plan.enrichment_summary}
+
+    Hosts and accounts involved:
+    {plan.movement_graph}
+
+    Containment plan and results:
+    {plan.results}
+
+    Skipped by guardrails: {plan.skipped}
+    Escalated to a human: {plan.escalate} {plan.reasons}
+    Approved by: {approver.name}
+  notification: "{workflow.name} | {incident.severity} | {incident.title} ({incident.id}) | planned: {plan.planned_count},
+    skipped: {plan.skipped_count}, escalate: {plan.escalate} | ticket {ticket.id} {ticket.url}"
 integrations:
 - cisco-xdr
 - umbrella

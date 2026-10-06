@@ -1,0 +1,52 @@
+name: New tunnel domain without reputation, next to a low-volume VPN check
+description: >-
+  Tunnel domains are often days old, so enrichment returns unknown. q7-sync.test has no verdict but sits in
+  the DNS Tunneling VPN category with high internal volume, so it is blocked and the host whose unknown
+  process queried it is isolated. remote-office-vpn.example is in the same category and also unknown, but
+  only 40 queries were seen, which fits a VPN client health check; it is not blocked and the host that only
+  queried it is not isolated.
+incident:
+  id: INC-TEST-DNS-0006
+  title: DNS tunneling category hits for two new domains
+  severity: high
+  source: Cisco Umbrella
+  observables:
+    - {type: domain, value: q7-sync.test}
+    - {type: domain, value: remote-office-vpn.example}
+  context: {}
+results:
+  enrich-domain:
+    - domain: q7-sync.test
+      verdict: unknown
+      categories: [DNS Tunneling VPN, Newly Seen Domains]
+      first_seen: "2026-10-05"
+      internal_queries: 9400
+      error: ""
+    - domain: remote-office-vpn.example
+      verdict: unknown
+      categories: [DNS Tunneling VPN]
+      first_seen: "2026-09-30"
+      internal_queries: 40
+      error: ""
+  investigate-host:
+    - host: ws-0388
+      connector_guid: 3f6c1a2e-0000-4000-8000-000000000388
+      detections: []
+      trajectory:
+        - {event: dns_query, process: rundll32.exe, domain: 3a7f.q7-sync.test, count: 9400}
+      isolation_capable: true
+      is_protected: false
+      error: ""
+    - host: ws-0390
+      connector_guid: 3f6c1a2e-0000-4000-8000-000000000390
+      detections: []
+      trajectory:
+        - {event: dns_query, process: officevpn.exe, domain: hc.remote-office-vpn.example, count: 40}
+      isolation_capable: true
+      is_protected: false
+      error: ""
+expect:
+  escalate: false
+  actions:
+    - {atomic: block-domain, target: q7-sync.test, status: planned, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 3f6c1a2e-0000-4000-8000-000000000388, status: planned, requires_approval: true}

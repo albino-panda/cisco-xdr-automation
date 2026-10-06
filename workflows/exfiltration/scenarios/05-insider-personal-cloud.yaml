@@ -1,0 +1,43 @@
+name: Insider upload to clean personal cloud storage
+description: >-
+  Insider case. The source flags insider risk for a departing employee who uploaded design files to a
+  clean, widely used personal cloud storage service. Clean shared destinations are not blocked and the
+  transfer has finished, so only the named actor is disabled. A second user in the incident (the file
+  owner) has no risk and is not named as an actor, which proves the insider decision does not spread.
+incident:
+  id: INC-TEST-EXF-0005
+  title: Departing employee uploaded design files to personal cloud storage
+  severity: high
+  source: Cisco XDR (DLP alert forwarded by Splunk)
+  observables:
+    - {type: domain, value: personal-drive.example}
+    - {type: ip, value: 203.0.113.80}
+    - {type: hostname, value: eng-lt-21}
+    - {type: email, value: a.khan@example.com}
+    - {type: email, value: b.ortiz@example.com}
+  context:
+    destination_domains: [personal-drive.example]
+    destination_ips: [203.0.113.80]
+    source_hosts: [eng-lt-21]
+    actor_users: [a.khan@example.com]
+    insider_risk: true
+    transfer_ongoing: false
+    transfer_started: "2026-10-05T17:30:00Z"
+    transfer_last_seen: "2026-10-05T18:10:00Z"
+    bytes_out: 2147483648
+    file_count: 640
+    data_types: [product design documents]
+results:
+  enrich-domain:
+    - {domain: personal-drive.example, verdict: clean, categories: [Online Storage and Backup], first_seen: "2012-06-01", internal_queries: 30, error: ""}
+  enrich-ip:
+    - {ip: 203.0.113.80, verdict: clean, sources: [], internal_sightings: 25, is_internal: false, error: ""}
+  investigate-host:
+    - {host: eng-lt-21, connector_guid: 00000000-0000-4000-8000-00000000e705, detections: [], trajectory: [], isolation_capable: true, is_protected: false, error: ""}
+  investigate-user:
+    - {user: a.khan@example.com, profile: {department: Engineering, groups: [Engineering]}, risk_level: none, signins: [], anomalies: [], is_protected: false, error: ""}
+    - {user: b.ortiz@example.com, profile: {department: Engineering, groups: [Engineering]}, risk_level: none, signins: [], anomalies: [], is_protected: false, error: ""}
+expect:
+  escalate: false
+  actions:
+    - {atomic: disable-user, target: a.khan@example.com, status: planned, requires_approval: true}

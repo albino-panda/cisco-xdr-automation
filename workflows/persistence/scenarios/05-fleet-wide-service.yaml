@@ -1,0 +1,43 @@
+name: Malicious service installed on many hosts at once
+description: >
+  Persistence edge case with a blast-radius guardrail. The same malicious service binary was installed
+  and is running on six workstations within minutes, which points at a compromised deployment channel.
+  Isolating six hosts exceeds max_hosts_isolated (5), so every isolation becomes skipped_limit and the
+  plan escalates to a human. The single hash block is still planned.
+incident:
+  id: INC-TEST-3005
+  title: Same new service installed on six workstations within ten minutes
+  severity: critical
+  source: Cisco XDR
+  observables:
+    - {type: sha256, value: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6}
+  targets:
+    - {type: endpoint, value: ws-ops-101}
+    - {type: endpoint, value: ws-ops-102}
+    - {type: endpoint, value: ws-ops-103}
+    - {type: endpoint, value: ws-ops-104}
+    - {type: endpoint, value: ws-ops-105}
+    - {type: endpoint, value: ws-ops-106}
+  context:
+    persistence_items:
+      - {type: service, host: ws-ops-101 to ws-ops-106, name: WinTelemetryHost, sha256: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6}
+results:
+  enrich-hash:
+    - {sha256: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6, disposition: malicious, prevalence: 6, hosts: [ws-ops-101, ws-ops-102, ws-ops-103, ws-ops-104, ws-ops-105, ws-ops-106], error: ""}
+  investigate-host:
+    - {host: ws-ops-101, connector_guid: 00000000-0000-4000-8000-000000000101, detections: [{name: Trojan.ServiceHost, disposition: malicious}], trajectory: [], isolation_capable: true, is_protected: false, error: ""}
+    - {host: ws-ops-102, connector_guid: 00000000-0000-4000-8000-000000000102, detections: [{name: Trojan.ServiceHost, disposition: malicious}], trajectory: [], isolation_capable: true, is_protected: false, error: ""}
+    - {host: ws-ops-103, connector_guid: 00000000-0000-4000-8000-000000000103, detections: [{name: Trojan.ServiceHost, disposition: malicious}], trajectory: [], isolation_capable: true, is_protected: false, error: ""}
+    - {host: ws-ops-104, connector_guid: 00000000-0000-4000-8000-000000000104, detections: [{name: Trojan.ServiceHost, disposition: malicious}], trajectory: [], isolation_capable: true, is_protected: false, error: ""}
+    - {host: ws-ops-105, connector_guid: 00000000-0000-4000-8000-000000000105, detections: [{name: Trojan.ServiceHost, disposition: malicious}], trajectory: [], isolation_capable: true, is_protected: false, error: ""}
+    - {host: ws-ops-106, connector_guid: 00000000-0000-4000-8000-000000000106, detections: [{name: Trojan.ServiceHost, disposition: malicious}], trajectory: [], isolation_capable: true, is_protected: false, error: ""}
+expect:
+  escalate: true
+  actions:
+    - {atomic: block-hash, target: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6, status: planned, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000101, status: skipped_limit}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000102, status: skipped_limit}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000103, status: skipped_limit}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000104, status: skipped_limit}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000105, status: skipped_limit}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000106, status: skipped_limit}
