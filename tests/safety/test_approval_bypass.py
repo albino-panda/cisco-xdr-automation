@@ -1586,3 +1586,78 @@ def test_r2_configure_rejects_truthy_strings():
     with pytest.raises(TypeError):
         guard.configure(dry_run="false")  # type: ignore[arg-type]
     assert guard.is_dry_run()
+
+
+# --------------------------------------------------------------------------------------------------
+# Independent review: undecorated simulated writes (found after round 2; fixed in simulated._apply)
+# --------------------------------------------------------------------------------------------------
+
+def _simulated_write_cases() -> list[tuple[str, str]]:
+    from xdr_response.integrations.simulated import SimulatedEnvironment, build_simulated_adapters
+    from xdr_response.models.catalog import is_state_changing
+
+    cases = []
+    for adapter in build_simulated_adapters(SimulatedEnvironment()):
+        for name in dir(type(adapter)):
+            member = getattr(type(adapter), name)
+            if guard.is_state_changing_method(member) and hasattr(member, "__wrapped__"):
+                try:
+                    if is_state_changing(ActionType(name)):
+                        cases.append((adapter.name, name))
+                except ValueError:
+                    continue
+    return cases
+
+
+@pytest.mark.parametrize(("integration", "method"), _simulated_write_cases())
+def test_simulated_undecorated_write_cannot_change_state(integration, method):
+    """Calling a simulated adapter's ``__wrapped__`` body outside any approval must not change state.
+
+    The simulated environment drives the simulator and the lifecycle tests, so it must hold the same
+    invariant as real adapters: no code path reaches a state change without a matching approval.
+    """
+    from tests.fixtures.guard_helpers import install_fake_verifier
+    from tests.unit.vendors._helpers import TARGETS
+    from xdr_response.integrations.simulated import SimulatedEnvironment, build_simulated_adapters
+    from xdr_response.models import ActionRequest, get_action_spec
+
+    guard.configure(dry_run=False)
+    install_fake_verifier()
+    env = SimulatedEnvironment()
+    adapter = next(a for a in build_simulated_adapters(env) if a.name == integration)
+    action_type = ActionType(method)
+    target = TARGETS[get_action_spec(action_type).target_kind]
+    request = ActionRequest.from_recommendation(make_recommendation(action_type, target, integration))
+    before = repr(env.state)
+    with pytest.raises(ApprovalRequiredError):
+        getattr(type(adapter), method).__wrapped__(adapter, request)
+    assert repr(env.state) == before
+
+
+def test_vendor_undecorated_writes_never_reach_the_network():
+    """Sweep: every real adapter's ``__wrapped__`` write body sends no non-GET request without approval."""
+    from tests.fixtures.guard_helpers import install_fake_verifier
+    from tests.unit.vendors._helpers import ALL_ADAPTERS, Router, action_request, json_response, make_adapter
+
+    guard.configure(dry_run=False)
+    install_fake_verifier()
+    leaked, attempts = [], 0
+    for name, cls in ALL_ADAPTERS.items():
+        for method in dir(cls):
+            member = getattr(cls, method)
+            if not (guard.is_state_changing_method(member) and hasattr(member, "__wrapped__")):
+                continue
+            try:
+                action_type = ActionType(method)
+            except ValueError:
+                continue
+            router = Router(fallback=json_response(200, {"value": [], "data": [], "id": "x"}))
+            adapter = make_adapter(name, router)
+            attempts += 1
+            try:
+                member.__wrapped__(adapter, action_request(action_type, name))
+            except Exception:  # noqa: BLE001 - any refusal is fine; only leaked writes matter
+                pass
+            leaked += [f"{name}.{method}: {r.method} {r.url.path}" for r in router.calls if r.method != "GET"]
+    assert attempts > 50
+    assert leaked == []

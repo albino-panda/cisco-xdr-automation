@@ -17,6 +17,8 @@ target in the desired state first (the action then reports ``ALREADY_CONTAINED``
 """
 from __future__ import annotations
 
+from xdr_response import guard as _guard
+
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -625,9 +627,15 @@ class SimulatedAdapter(IntegrationAdapter):
 
     # --------------------------------------------------------- private --
     def _apply(self, action_type: ActionType, request: ActionRequest) -> ActionOutcome:
-        """Body of every guarded write (the guard already authorized this exact request)."""
+        """Body of every guarded write.
+
+        Re-checks the guard itself (defence in depth, like the HTTP client's write path), so calling
+        the undecorated method (for example via ``__wrapped__``) can never change simulated state.
+        """
         if request.action_type is not action_type:
             raise ValueError(f"{action_type.value} called with a {request.action_type.value} request")
+        _guard.require_authorization(request, integration=self.name)
+        _guard.require_active_authorization(self.name)
         if not self.enabled:
             raise IntegrationUnavailableError(f"{self.name} is disabled", integration=self.name, retryable=False)
         if action_type not in self.manifest.supported_actions:
