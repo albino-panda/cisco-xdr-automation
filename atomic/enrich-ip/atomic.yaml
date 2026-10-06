@@ -1,0 +1,58 @@
+schema_version: 1
+id: enrich-ip
+name: Enrich IP
+category: enrichment
+description: Reputation, geolocation, ASN and internal sightings for an IP address.
+side_effects: false
+requires_approval: false
+reversible: true
+rollback: Not applicable (read-only).
+idempotent: true
+supports_dry_run: false
+integrations:
+- cisco-xdr
+- umbrella
+- splunk
+inputs:
+- name: ip
+  type: string
+  required: true
+  description: IPv4 or IPv6 address.
+- name: incident_id
+  type: string
+  required: false
+  description: Cisco XDR incident ID, used for notes and audit.
+- name: dry_run
+  type: boolean
+  required: false
+  description: When true, report the planned change without making it. Default true for containment.
+outputs:
+- name: verdict
+  type: string
+  description: malicious | suspicious | clean | unknown
+- name: sources
+  type: list
+  description: Per-source verdicts and links.
+- name: internal_sightings
+  type: integer
+  description: Number of internal hosts seen talking to the IP in the lookback window.
+- name: is_internal
+  type: boolean
+  description: True for RFC 1918 or configured internal ranges.
+- name: error
+  type: string
+  description: Empty on success.
+used_by:
+- ransomware
+- phishing
+- bec
+- account-takeover
+- malware
+- powershell
+- lateral-movement
+- c2
+- password-spray
+- exfiltration
+- vulnerability-exploitation
+- cloud-compromise
+- web-attacks

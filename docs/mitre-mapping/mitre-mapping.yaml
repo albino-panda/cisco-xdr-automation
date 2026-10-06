@@ -1,0 +1,197 @@
+schema_version: 1
+techniques:
+- id: T1003.001
+  name: 'OS Credential Dumping: LSASS Memory'
+  workflows:
+  - credential-dumping
+- id: T1003.002
+  name: Security Account Manager
+  workflows:
+  - credential-dumping
+- id: T1003.003
+  name: NTDS
+  workflows:
+  - credential-dumping
+- id: T1021.001
+  name: Remote Desktop Protocol
+  workflows:
+  - lateral-movement
+- id: T1021.002
+  name: SMB/Windows Admin Shares
+  workflows:
+  - lateral-movement
+- id: T1021.006
+  name: Windows Remote Management
+  workflows:
+  - lateral-movement
+- id: T1027
+  name: Obfuscated Files or Information
+  workflows:
+  - powershell
+- id: T1041
+  name: Exfiltration Over C2 Channel
+  workflows:
+  - exfiltration
+- id: T1048
+  name: Exfiltration Over Alternative Protocol
+  workflows:
+  - exfiltration
+- id: T1053.005
+  name: Scheduled Task
+  workflows:
+  - persistence
+- id: T1059.001
+  name: 'Command and Scripting Interpreter: PowerShell'
+  workflows:
+  - powershell
+- id: T1068
+  name: Exploitation for Privilege Escalation
+  workflows:
+  - privilege-escalation
+- id: T1071.001
+  name: 'Application Layer Protocol: Web Protocols'
+  workflows:
+  - c2
+- id: T1071.004
+  name: 'Application Layer Protocol: DNS'
+  workflows:
+  - dns-tunneling
+- id: T1078.004
+  name: 'Valid Accounts: Cloud Accounts'
+  workflows:
+  - account-takeover
+  - cloud-compromise
+- id: T1098
+  name: Account Manipulation
+  workflows:
+  - privilege-escalation
+- id: T1098.001
+  name: Additional Cloud Credentials
+  workflows:
+  - cloud-compromise
+- id: T1105
+  name: Ingress Tool Transfer
+  workflows:
+  - malware
+- id: T1110.003
+  name: 'Brute Force: Password Spraying'
+  workflows:
+  - password-spray
+- id: T1114.003
+  name: Email Forwarding Rule
+  workflows:
+  - bec
+- id: T1136
+  name: Create Account
+  workflows:
+  - persistence
+- id: T1190
+  name: Exploit Public-Facing Application
+  workflows:
+  - vulnerability-exploitation
+  - web-attacks
+- id: T1203
+  name: Exploitation for Client Execution
+  workflows:
+  - vulnerability-exploitation
+- id: T1204
+  name: User Execution
+  workflows:
+  - phishing
+- id: T1204.002
+  name: 'User Execution: Malicious File'
+  workflows:
+  - malware
+- id: T1219
+  name: Remote Access Tools
+  workflows:
+  - rmm
+- id: T1486
+  name: Data Encrypted for Impact
+  workflows:
+  - ransomware
+- id: T1489
+  name: Service Stop
+  workflows:
+  - ransomware
+- id: T1490
+  name: Inhibit System Recovery
+  workflows:
+  - ransomware
+- id: T1499
+  name: Endpoint Denial of Service
+  workflows:
+  - mail-bombing
+- id: T1505.003
+  name: Web Shell
+  workflows:
+  - web-attacks
+- id: T1528
+  name: Steal Application Access Token
+  workflows:
+  - cloud-compromise
+- id: T1530
+  name: Data from Cloud Storage
+  workflows:
+  - cloud-compromise
+- id: T1534
+  name: Internal Spearphishing
+  workflows:
+  - bec
+- id: T1539
+  name: Steal Web Session Cookie
+  workflows:
+  - account-takeover
+- id: T1543.003
+  name: Windows Service
+  workflows:
+  - persistence
+- id: T1547.001
+  name: Registry Run Keys / Startup Folder
+  workflows:
+  - persistence
+- id: T1548.002
+  name: Bypass User Account Control
+  workflows:
+  - privilege-escalation
+- id: T1566.001
+  name: Spearphishing Attachment
+  workflows:
+  - phishing
+- id: T1566.002
+  name: Spearphishing Link
+  workflows:
+  - phishing
+- id: T1567.002
+  name: Exfiltration to Cloud Storage
+  workflows:
+  - exfiltration
+- id: T1568.002
+  name: Domain Generation Algorithms
+  workflows:
+  - c2
+- id: T1570
+  name: Lateral Tool Transfer
+  workflows:
+  - lateral-movement
+- id: T1572
+  name: Protocol Tunneling
+  workflows:
+  - dns-tunneling
+- id: T1573
+  name: Encrypted Channel
+  workflows:
+  - c2
+- id: T1595.002
+  name: Vulnerability Scanning
+  workflows:
+  - web-attacks
+- id: T1621
+  name: Multi-Factor Authentication Request Generation
+  workflows:
+  - account-takeover
+- id: T1656
+  name: Impersonation
+  workflows:
+  - mail-bombing
+  - bec

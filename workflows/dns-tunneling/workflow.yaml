@@ -1,0 +1,98 @@
+schema_version: 1
+id: dns-tunneling
+name: DNS tunneling
+status: specification
+description: Respond to data or command traffic hidden in DNS queries.
+default_severity: high
+mitre_attack:
+- id: T1071.004
+  name: 'Application Layer Protocol: DNS'
+- id: T1572
+  name: Protocol Tunneling
+triggers:
+- type: incident_rule
+  description: XDR Automation incident rule matching the techniques or titles below.
+  match:
+    mitre_techniques:
+    - T1071.004
+    - T1572
+- type: pivot_menu
+  description: Manual run from an observable or incident.
+- type: playbook_task
+  description: Task in the matching XDR incident response playbook.
+detection_signals:
+- Umbrella DNS tunneling category hit
+- High-entropy or high-volume subdomain queries to one parent domain
+inputs:
+- name: incident_id
+  type: string
+  required: false
+  description: Cisco XDR incident ID, used for notes and audit.
+- name: dry_run
+  type: boolean
+  required: false
+  description: When true, report the planned change without making it. Default true for containment.
+- name: observables
+  type: list
+  required: false
+  description: Overrides the incident observables.
+defaults:
+  dry_run: true
+  lookback_hours: 24
+steps:
+- id: load_incident
+  phase: intake
+  action: XDR - Incident - Get Incident Summary
+  note: Collect observables, targets and existing notes from the triggering incident.
+- id: load_guardrails
+  phase: intake
+  action: Core - Read guardrails
+  note: Protected hosts/users, allow-lists and blast-radius limits (docs/deployment/guardrails.example.yaml).
+- id: enrich_domain
+  phase: enrich
+  atomic: enrich-domain
+  for_each: domain
+- id: investigate_host
+  phase: investigate
+  atomic: investigate-host
+  for_each: host
+- id: build_plan
+  phase: decide
+  note: Build the containment plan from enrichment verdicts, investigation results and guardrails. Drop
+    any target that is protected, allow-listed or over the blast-radius limit.
+- id: approval
+  phase: decide
+  action: Approval Task
+  note: Show the plan to an approver. Skipped when dry_run is true (plan is only recorded).
+  skip_if: dry_run == true
+- id: block_domain
+  phase: contain
+  atomic: block-domain
+  when: Tunneling parent domain.
+  requires_approval: true
+- id: isolate_endpoint
+  phase: contain
+  atomic: isolate-endpoint
+  when: Querying hosts when the process is not a known security or VPN tool.
+  requires_approval: true
+- id: incident_note
+  phase: record
+  action: XDR - Incident - Add Note to Incident
+  note: Write enrichment summary, plan, approvals and per-action results.
+- id: create_ticket
+  phase: record
+  atomic: create-ticket
+- id: notify_soc
+  phase: notify
+  atomic: notify-soc
+integrations:
+- cisco-xdr
+- umbrella
+- secure-endpoint
+- meraki
+- splunk
+- cloudflare
+- servicenow
+related_workflows:
+- c2
+- exfiltration

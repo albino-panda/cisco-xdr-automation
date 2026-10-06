@@ -1,0 +1,65 @@
+schema_version: 1
+id: create-ticket
+name: Create ticket
+category: ticketing
+description: Create or update a ServiceNow ticket linked to the XDR incident.
+side_effects: true
+requires_approval: false
+reversible: true
+rollback: Close the ticket.
+idempotent: true
+supports_dry_run: false
+integrations:
+- servicenow
+- cisco-xdr
+inputs:
+- name: title
+  type: string
+  required: true
+  description: Ticket short description.
+- name: severity
+  type: string
+  required: true
+  description: low | medium | high | critical
+- name: body
+  type: string
+  required: true
+  description: Markdown summary of enrichment, findings and actions.
+- name: incident_id
+  type: string
+  required: false
+  description: Cisco XDR incident ID, used for notes and audit.
+- name: dry_run
+  type: boolean
+  required: false
+  description: When true, report the planned change without making it. Default true for containment.
+outputs:
+- name: ticket_id
+  type: string
+  description: ServiceNow number.
+- name: ticket_url
+  type: string
+  description: Link written back to the XDR incident.
+- name: error
+  type: string
+  description: Empty on success.
+used_by:
+- ransomware
+- phishing
+- mail-bombing
+- bec
+- account-takeover
+- malware
+- powershell
+- lateral-movement
+- c2
+- dns-tunneling
+- password-spray
+- credential-dumping
+- privilege-escalation
+- persistence
+- rmm
+- exfiltration
+- vulnerability-exploitation
+- cloud-compromise
+- web-attacks

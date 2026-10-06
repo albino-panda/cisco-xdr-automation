@@ -1,0 +1,55 @@
+schema_version: 1
+id: isolate-endpoint
+name: Isolate endpoint
+category: containment
+description: Network-isolate a host with Secure Endpoint while keeping the management channel open.
+side_effects: true
+requires_approval: true
+reversible: true
+rollback: Stop isolation (DELETE /v1/computers/{guid}/isolation).
+idempotent: true
+supports_dry_run: true
+integrations:
+- secure-endpoint
+- cisco-xdr
+inputs:
+- name: connector_guid
+  type: string
+  required: true
+  description: Secure Endpoint connector GUID.
+- name: reason
+  type: string
+  required: true
+  description: Free text written to the isolation comment and the incident note.
+- name: incident_id
+  type: string
+  required: false
+  description: Cisco XDR incident ID, used for notes and audit.
+- name: dry_run
+  type: boolean
+  required: false
+  description: When true, report the planned change without making it. Default true for containment.
+outputs:
+- name: status
+  type: string
+  description: isolated | pending | already_isolated | skipped_protected | planned
+- name: unlock_code
+  type: string
+  description: Isolation unlock code, stored only in the incident note.
+- name: error
+  type: string
+  description: Empty on success.
+used_by:
+- ransomware
+- malware
+- powershell
+- lateral-movement
+- c2
+- dns-tunneling
+- credential-dumping
+- privilege-escalation
+- persistence
+- rmm
+- exfiltration
+- vulnerability-exploitation
+- web-attacks

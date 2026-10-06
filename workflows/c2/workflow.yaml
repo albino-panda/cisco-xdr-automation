@@ -1,0 +1,112 @@
+schema_version: 1
+id: c2
+name: Command and control
+status: specification
+description: Cut off a host beaconing to attacker infrastructure and find other hosts talking to it.
+default_severity: high
+mitre_attack:
+- id: T1071.001
+  name: 'Application Layer Protocol: Web Protocols'
+- id: T1573
+  name: Encrypted Channel
+- id: T1568.002
+  name: Domain Generation Algorithms
+triggers:
+- type: incident_rule
+  description: XDR Automation incident rule matching the techniques or titles below.
+  match:
+    mitre_techniques:
+    - T1071.001
+    - T1573
+    - T1568.002
+- type: pivot_menu
+  description: Manual run from an observable or incident.
+- type: playbook_task
+  description: Task in the matching XDR incident response playbook.
+detection_signals:
+- Umbrella security category hit (C2 / malware)
+- Periodic beaconing detection
+- XDR incident with C2 indicators
+inputs:
+- name: incident_id
+  type: string
+  required: false
+  description: Cisco XDR incident ID, used for notes and audit.
+- name: dry_run
+  type: boolean
+  required: false
+  description: When true, report the planned change without making it. Default true for containment.
+- name: observables
+  type: list
+  required: false
+  description: Overrides the incident observables.
+defaults:
+  dry_run: true
+  lookback_hours: 24
+steps:
+- id: load_incident
+  phase: intake
+  action: XDR - Incident - Get Incident Summary
+  note: Collect observables, targets and existing notes from the triggering incident.
+- id: load_guardrails
+  phase: intake
+  action: Core - Read guardrails
+  note: Protected hosts/users, allow-lists and blast-radius limits (docs/deployment/guardrails.example.yaml).
+- id: enrich_domain
+  phase: enrich
+  atomic: enrich-domain
+  for_each: domain
+- id: enrich_ip
+  phase: enrich
+  atomic: enrich-ip
+  for_each: ip
+- id: investigate_host
+  phase: investigate
+  atomic: investigate-host
+  for_each: host
+- id: build_plan
+  phase: decide
+  note: Build the containment plan from enrichment verdicts, investigation results and guardrails. Drop
+    any target that is protected, allow-listed or over the blast-radius limit.
+- id: approval
+  phase: decide
+  action: Approval Task
+  note: Show the plan to an approver. Skipped when dry_run is true (plan is only recorded).
+  skip_if: dry_run == true
+- id: block_domain
+  phase: contain
+  atomic: block-domain
+  when: C2 domains.
+  requires_approval: true
+- id: block_ip
+  phase: contain
+  atomic: block-ip
+  when: C2 IPs that are not shared hosting or CDN.
+  requires_approval: true
+- id: isolate_endpoint
+  phase: contain
+  atomic: isolate-endpoint
+  when: Hosts with confirmed beaconing.
+  requires_approval: true
+- id: incident_note
+  phase: record
+  action: XDR - Incident - Add Note to Incident
+  note: Write enrichment summary, plan, approvals and per-action results.
+- id: create_ticket
+  phase: record
+  atomic: create-ticket
+- id: notify_soc
+  phase: notify
+  atomic: notify-soc
+integrations:
+- cisco-xdr
+- umbrella
+- splunk
+- secure-endpoint
+- meraki
+- cloudflare
+- servicenow
+related_workflows:
+- dns-tunneling
+- malware
+- exfiltration
