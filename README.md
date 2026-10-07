@@ -178,7 +178,7 @@ How this feeds later phases:
 
 ## Related project
 
-[cisco-xdr-mailbomb-detector](<../Mail Bombing/cisco-xdr-mailbomb-detector/README.md>) raises the incidents handled by [`workflows/mail-bombing`](workflows/mail-bombing/README.md).
+The separate `cisco-xdr-mailbomb-detector` project (not part of this repository; locally it sits next to it under `Mail Bombing/`) raises the incidents handled by [`workflows/mail-bombing`](workflows/mail-bombing/README.md).
 
 ## Claude Code agents
 

@@ -102,7 +102,7 @@ Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them wit
 - Alert the user and help desk: mail bombing is often followed by fake IT-support calls or chats that push remote-access tools. The ticket body, incident note and SOC notification templates in [`workflow.yaml`](workflow.yaml) carry this warning.
 - Quarantine also hides the message the flood was meant to bury. The approval text asks the approver to confirm the hidden-message search is done first; quarantined messages stay recoverable.
 
-Detection is provided by the sibling project [cisco-xdr-mailbomb-detector](<../../../Mail Bombing/cisco-xdr-mailbomb-detector/README.md>). Its `xdr-response` workflow already covers ETD move/quarantine; this workflow adds identity checks, ticketing and the hand-off to the RMM and account-takeover workflows.
+Detection is provided by the sibling project `cisco-xdr-mailbomb-detector`, a separate repository that sits next to this one locally under `Mail Bombing/`. Its `xdr-response` workflow already covers ETD move/quarantine; this workflow adds identity checks, ticketing and the hand-off to the RMM and account-takeover workflows.
 
 ## Related workflows
 
