@@ -51,16 +51,6 @@ outputs:
   type: string
   description: Empty on success.
 used_by:
-- ransomware
-- phishing
-- mail-bombing
-- bec
-- account-takeover
-- malicious-powershell
-- lateral-movement
-- password-spray
-- credential-dumping
 - privilege-escalation
-- unauthorized-rmm
 - exfiltration
 - cloud-compromise

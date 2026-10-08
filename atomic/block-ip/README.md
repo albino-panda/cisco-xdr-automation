@@ -36,7 +36,7 @@ Block an external IP at the perimeter (Meraki MX) and/or edge (Cloudflare IP lis
 
 ## Used by
 
-[`account-takeover`](../../workflows/account-takeover/README.md), [`c2`](../../workflows/c2/README.md), [`password-spray`](../../workflows/password-spray/README.md), [`exfiltration`](../../workflows/exfiltration/README.md), [`vulnerability-exploitation`](../../workflows/vulnerability-exploitation/README.md), [`cloud-compromise`](../../workflows/cloud-compromise/README.md), [`web-attacks`](../../workflows/web-attacks/README.md)
+[`c2`](../../workflows/c2/README.md), [`exfiltration`](../../workflows/exfiltration/README.md), [`vulnerability-exploitation`](../../workflows/vulnerability-exploitation/README.md), [`cloud-compromise`](../../workflows/cloud-compromise/README.md), [`web-attacks`](../../workflows/web-attacks/README.md)
 
 ## Building it in XDR Automation
 

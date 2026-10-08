@@ -37,11 +37,6 @@ outputs:
   type: string
   description: Empty on success.
 used_by:
-- phishing
-- bec
-- malware
-- malicious-powershell
 - c2
 - dns-tunneling
-- unauthorized-rmm
 - exfiltration

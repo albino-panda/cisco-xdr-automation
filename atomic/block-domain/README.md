@@ -36,7 +36,7 @@ Add a domain to the automation block list in Umbrella and, optionally, Cloudflar
 
 ## Used by
 
-[`phishing`](../../workflows/phishing/README.md), [`bec`](../../workflows/bec/README.md), [`malware`](../../workflows/malware/README.md), [`malicious-powershell`](../../workflows/malicious-powershell/README.md), [`c2`](../../workflows/c2/README.md), [`dns-tunneling`](../../workflows/dns-tunneling/README.md), [`unauthorized-rmm`](../../workflows/unauthorized-rmm/README.md), [`exfiltration`](../../workflows/exfiltration/README.md)
+[`c2`](../../workflows/c2/README.md), [`dns-tunneling`](../../workflows/dns-tunneling/README.md), [`exfiltration`](../../workflows/exfiltration/README.md)
 
 ## Building it in XDR Automation
 

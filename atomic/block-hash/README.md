@@ -36,7 +36,7 @@ Add a SHA-256 to the Secure Endpoint simple custom detection list.
 
 ## Used by
 
-[`ransomware`](../../workflows/ransomware/README.md), [`phishing`](../../workflows/phishing/README.md), [`malware`](../../workflows/malware/README.md), [`persistence`](../../workflows/persistence/README.md), [`unauthorized-rmm`](../../workflows/unauthorized-rmm/README.md)
+No legacy spec. The migrated workflows use `xdr_response.atomics` instead; see [docs/workflows/README.md](../../docs/workflows/README.md).
 
 ## Building it in XDR Automation
 

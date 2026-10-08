@@ -41,7 +41,4 @@ outputs:
 - name: error
   type: string
   description: Empty on success.
-used_by:
-- phishing
-- mail-bombing
-- bec
+used_by: []  # no legacy spec uses it; migrated workflows use xdr_response.atomics

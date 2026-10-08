@@ -35,7 +35,7 @@ Disposition and prevalence of a SHA-256 across threat intel and the endpoint fle
 
 ## Used by
 
-[`ransomware`](../../workflows/ransomware/README.md), [`phishing`](../../workflows/phishing/README.md), [`malware`](../../workflows/malware/README.md), [`malicious-powershell`](../../workflows/malicious-powershell/README.md), [`lateral-movement`](../../workflows/lateral-movement/README.md), [`credential-dumping`](../../workflows/credential-dumping/README.md), [`privilege-escalation`](../../workflows/privilege-escalation/README.md), [`persistence`](../../workflows/persistence/README.md), [`unauthorized-rmm`](../../workflows/unauthorized-rmm/README.md)
+[`privilege-escalation`](../../workflows/privilege-escalation/README.md)
 
 ## Building it in XDR Automation
 

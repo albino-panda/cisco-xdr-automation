@@ -39,7 +39,7 @@ Find delivered messages matching sender, subject or URL and move them to quarant
 
 ## Used by
 
-[`phishing`](../../workflows/phishing/README.md), [`mail-bombing`](../../workflows/mail-bombing/README.md), [`bec`](../../workflows/bec/README.md)
+No legacy spec. The migrated workflows (Phase 2) use `xdr_response.atomics` instead; see [docs/workflows/README.md](../../docs/workflows/README.md).
 
 ## Building it in XDR Automation
 

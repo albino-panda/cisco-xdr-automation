@@ -33,6 +33,5 @@ outputs:
   type: string
   description: Empty on success.
 used_by:
-- phishing
 - vulnerability-exploitation
 - web-attacks

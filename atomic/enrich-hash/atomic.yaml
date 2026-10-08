@@ -39,12 +39,4 @@ outputs:
   type: string
   description: Empty on success.
 used_by:
-- ransomware
-- phishing
-- malware
-- malicious-powershell
-- lateral-movement
-- credential-dumping
 - privilege-escalation
-- persistence
-- unauthorized-rmm

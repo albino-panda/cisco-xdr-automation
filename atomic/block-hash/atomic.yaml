@@ -35,9 +35,4 @@ outputs:
 - name: error
   type: string
   description: Empty on success.
-used_by:
-- ransomware
-- phishing
-- malware
-- persistence
-- unauthorized-rmm
+used_by: []  # no legacy spec uses it; migrated workflows use xdr_response.atomics

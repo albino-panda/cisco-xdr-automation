@@ -35,7 +35,7 @@ Invalidate refresh tokens and browser sessions for a user.
 
 ## Used by
 
-[`ransomware`](../../workflows/ransomware/README.md), [`mail-bombing`](../../workflows/mail-bombing/README.md), [`bec`](../../workflows/bec/README.md), [`account-takeover`](../../workflows/account-takeover/README.md), [`lateral-movement`](../../workflows/lateral-movement/README.md), [`password-spray`](../../workflows/password-spray/README.md), [`credential-dumping`](../../workflows/credential-dumping/README.md), [`privilege-escalation`](../../workflows/privilege-escalation/README.md), [`cloud-compromise`](../../workflows/cloud-compromise/README.md)
+[`privilege-escalation`](../../workflows/privilege-escalation/README.md), [`cloud-compromise`](../../workflows/cloud-compromise/README.md)
 
 ## Building it in XDR Automation
 

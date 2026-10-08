@@ -32,12 +32,5 @@ outputs:
   type: string
   description: Empty on success.
 used_by:
-- ransomware
-- mail-bombing
-- bec
-- account-takeover
-- lateral-movement
-- password-spray
-- credential-dumping
 - privilege-escalation
 - cloud-compromise

@@ -40,6 +40,11 @@ def test_atomic_references(atomic_id):
     assert spec["id"] == atomic_id
     assert set(spec["integrations"]) <= INTEGRATIONS
     assert set(spec["used_by"]) <= set(repo.workflow_dirs())
+    # used_by names exactly the remaining legacy specs whose steps use the atomic: a migrated workflow
+    # (Phases 2 to 5) uses xdr_response.atomics and drops out (14.4.3).
+    users = {wid for wid in repo.workflow_ids()
+             if any(step.get("atomic") == atomic_id for step in repo.load_workflow(wid)["steps"])}
+    assert set(spec["used_by"]) == users
 
 
 def test_workflow_ids_are_workflow_dirs():

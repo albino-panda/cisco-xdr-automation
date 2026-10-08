@@ -35,7 +35,7 @@ Block a specific URL in Umbrella and/or Cloudflare without blocking the whole do
 
 ## Used by
 
-[`phishing`](../../workflows/phishing/README.md), [`vulnerability-exploitation`](../../workflows/vulnerability-exploitation/README.md), [`web-attacks`](../../workflows/web-attacks/README.md)
+[`vulnerability-exploitation`](../../workflows/vulnerability-exploitation/README.md), [`web-attacks`](../../workflows/web-attacks/README.md)
 
 ## Building it in XDR Automation
 

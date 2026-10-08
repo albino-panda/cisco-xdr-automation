@@ -36,7 +36,7 @@ Disable an Entra ID account so no new sign-ins succeed.
 
 ## Used by
 
-[`ransomware`](../../workflows/ransomware/README.md), [`bec`](../../workflows/bec/README.md), [`account-takeover`](../../workflows/account-takeover/README.md), [`lateral-movement`](../../workflows/lateral-movement/README.md), [`password-spray`](../../workflows/password-spray/README.md), [`credential-dumping`](../../workflows/credential-dumping/README.md), [`privilege-escalation`](../../workflows/privilege-escalation/README.md), [`exfiltration`](../../workflows/exfiltration/README.md), [`cloud-compromise`](../../workflows/cloud-compromise/README.md)
+[`privilege-escalation`](../../workflows/privilege-escalation/README.md), [`exfiltration`](../../workflows/exfiltration/README.md), [`cloud-compromise`](../../workflows/cloud-compromise/README.md)
 
 ## Building it in XDR Automation
 

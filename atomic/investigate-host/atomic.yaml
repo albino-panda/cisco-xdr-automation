@@ -52,16 +52,9 @@ outputs:
   type: string
   description: Empty on success.
 used_by:
-- ransomware
-- malware
-- malicious-powershell
-- lateral-movement
 - c2
 - dns-tunneling
-- credential-dumping
 - privilege-escalation
-- persistence
-- unauthorized-rmm
 - exfiltration
 - vulnerability-exploitation
 - web-attacks
