@@ -17,8 +17,8 @@ from xdr_response.workflows.discovery import discover_workflows
 
 REPO = Path(__file__).resolve().parents[3]
 CATALOG = discover_workflows()
-#: New workflows of 14.5.1 that do not have a directory yet (Phases 4 and 5).
-PLANNED_NEW = frozenset({"suspicious-authentication", "threat-intel-sweep"})
+#: New workflows of 14.5.1 that do not have a directory yet (Phase 5).
+PLANNED_NEW = frozenset({"threat-intel-sweep"})
 WORKFLOW_DIRS = frozenset(p.parent.name for p in (REPO / "workflows").glob("*/README.md"))
 _O = ObservableType
 USER = (_O.USER, "jsmith@example.com")
@@ -26,6 +26,7 @@ HOST = (_O.HOSTNAME, "TH-LT-1047")
 MAILBOX = (_O.EMAIL_ADDRESS, "jsmith@example.com")
 MESSAGE = (_O.EMAIL_MESSAGE_ID, "etd-test-0001")
 SOURCE_IP = (_O.IP, "203.0.113.200")
+DOMAIN = (_O.DOMAIN, "beacon-relay.example")
 
 
 def _incident(*observables: tuple[ObservableType, str], techniques: tuple[str, ...] = (), title: str = "Alert",
@@ -81,6 +82,44 @@ ROUTES = [
                  id="rmm-title-over-lateral-movement-title"),
     pytest.param(_incident(HOST, title="Remote desktop logon from an unusual workstation"), "lateral-movement",
                  id="lateral-movement-title"),
+    # Phase 4 (14.12.2).
+    pytest.param(_incident(HOST, DOMAIN, techniques=("T1071.001",)), "c2", id="T1071.001"),
+    pytest.param(_incident(HOST, DOMAIN, techniques=("T1573",)), "c2", id="T1573"),
+    pytest.param(_incident(HOST, DOMAIN, techniques=("T1071.001", "T1204.002")), "c2", id="c2-over-malware"),
+    pytest.param(_incident(HOST, DOMAIN, title="Encrypted beaconing from TH-LT-5520 to beacon-relay.example"), "c2",
+                 id="encrypted-beacon-title-is-c2-not-ransomware"),
+    pytest.param(_incident(HOST, title="Files encrypted on TH-LT-1047"), "ransomware", id="ransomware-encrypted-files"),
+    pytest.param(_incident(HOST, DOMAIN, techniques=("T1059.001", "T1071.001")), "malicious-powershell",
+                 id="malicious-powershell-over-c2"),
+    pytest.param(_incident(HOST, DOMAIN, techniques=("T1071.004",)), "dns-tunneling", id="T1071.004"),
+    pytest.param(_incident(HOST, DOMAIN, techniques=("T1071.004", "T1071.001")), "dns-tunneling",
+                 id="dns-tunneling-over-c2"),
+    pytest.param(_incident(HOST, DOMAIN, techniques=("T1572", "T1048")), "dns-tunneling",
+                 id="dns-tunneling-over-exfiltration"),
+    pytest.param(_incident(HOST, DOMAIN, techniques=("T1567.002",)), "exfiltration", id="T1567.002"),
+    pytest.param(_incident(HOST, DOMAIN, techniques=("T1041", "T1071.001")), "exfiltration",
+                 id="exfiltration-over-c2"),
+    pytest.param(_incident(HOST, USER, techniques=("T1048", "T1078.004")), "exfiltration",
+                 id="exfiltration-over-account-takeover"),
+    pytest.param(_incident(HOST, techniques=("T1486", "T1567.002")), "ransomware", id="ransomware-double-extortion"),
+    pytest.param(_incident(USER, techniques=("T1098.001",)), "cloud-compromise", id="T1098.001"),
+    pytest.param(_incident(USER, techniques=("T1528", "T1078.004")), "cloud-compromise",
+                 id="cloud-compromise-over-account-takeover"),
+    pytest.param(_incident(USER, techniques=("T1078",)), "suspicious-authentication", id="T1078"),
+    pytest.param(_incident(USER, title="Suspicious sign-in from an anonymous IP"), "suspicious-authentication",
+                 id="suspicious-authentication-title"),
+    pytest.param(_incident(USER, techniques=("T1078", "T1078.004")), "account-takeover",
+                 id="account-takeover-cloud-account-over-valid-accounts"),
+    pytest.param(_incident(USER, title="Risky sign-in for jsmith@example.com"), "account-takeover",
+                 id="account-takeover-risky-sign-in-title"),
+    pytest.param(_incident(USER, SOURCE_IP, techniques=("T1110.003", "T1078")), "password-spray",
+                 id="password-spray-over-suspicious-authentication"),
+    pytest.param(_incident(USER, techniques=("T1621", "T1078")), "mfa-fatigue",
+                 id="mfa-fatigue-over-suspicious-authentication"),
+    pytest.param(_incident(USER, title="Suspicious sign-in followed by an OAuth consent grant"), "cloud-compromise",
+                 id="cloud-compromise-title-tie-by-id"),
+    pytest.param(_incident(USER, SOURCE_IP, title="Password spray followed by a suspicious login"), "password-spray",
+                 id="password-spray-title-tie-by-id"),
 ]
 
 
@@ -110,6 +149,14 @@ def test_endpoint_workflows_that_find_compromised_accounts_hand_them_to_account_
     """Phase 3: credential exposure, movement accounts and RMM-host users go to account-takeover (14.11.2)."""
     for workflow_id in ("credential-dumping", "lateral-movement", "unauthorized-rmm"):
         assert "account-takeover" in CATALOG.get(workflow_id).definition.handoff_to, workflow_id
+
+
+def test_phase4_workflows_that_find_compromised_accounts_hand_them_to_account_takeover():
+    """Phase 4: transfer accounts, likely-compromised sign-ins and cloud accounts go to account-takeover (14.12.2)."""
+    for workflow_id in ("exfiltration", "suspicious-authentication", "cloud-compromise"):
+        assert "account-takeover" in CATALOG.get(workflow_id).definition.handoff_to, workflow_id
+    assert CATALOG.get("c2").definition.handoff_to == ("malware",)
+    assert CATALOG.get("dns-tunneling").definition.handoff_to == ()
 
 
 def _top_priority(workflow_id: str) -> int:
