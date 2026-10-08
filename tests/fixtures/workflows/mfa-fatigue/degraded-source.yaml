@@ -1,0 +1,57 @@
+# mfa-fatigue workflow scenario; fake lab data only (architecture 14.5.2).
+schema: 1
+name: degraded-source
+workflow: mfa-fatigue
+description: >-
+  Secure Endpoint is unavailable during the endpoint investigation, so the laptop's state is
+  unknown and no isolation can be recommended. The run notes the degraded source, and the identity
+  evidence still backs revoking the sessions and blocking the prompt source IP.
+tags: [degraded_source, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], secure_endpoint: [endpoint], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-MFA-0005
+  title: MFA fatigue pattern followed by successful sign-in
+  severity: HIGH
+  workflow_id: mfa-fatigue
+  observables:
+    - {type: user, value: jsmith@example.com}
+    - {type: hostname, value: TH-LT-1047}
+  users: [jsmith@example.com]
+  trigger: {source: entra, mitre_techniques: [T1621]}
+environment:
+  records:
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:30:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:32:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:34:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:36:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:42:00Z", method: push,
+                result: approved, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: sign_in, sign_in_id: si-0005-1, user: jsmith@example.com, timestamp: "2026-01-15T10:42:30Z",
+                ip: 203.0.113.80, country: NL, app: Office 365 Exchange Online, result: success,
+                mfa_result: satisfied}}
+    - {integration: secure_endpoint, atomic: investigate_endpoint, subject: TH-LT-1047,
+       record: {kind: detection, detection_id: det-0005-1, name: Sample.InfoStealer.Generic, verdict: MALICIOUS,
+                severity: HIGH, endpoint: TH-LT-1047, user: jsmith@example.com}}
+  faults:
+    - {kind: UNAVAILABLE, integration: secure_endpoint, operation: investigate, times: 5}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  handoffs: ["account-takeover:jsmith@example.com"]
+  package: true
+  actions:
+    - revoke_sessions:jsmith@example.com
+    - block_ip:203.0.113.80
+  degraded_sources: [secure_endpoint]
+  containment: CONTAINED
+  controls: 1

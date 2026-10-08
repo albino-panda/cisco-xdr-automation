@@ -1,0 +1,54 @@
+# mfa-fatigue workflow scenario; fake lab data only (architecture 14.5.2).
+schema: 1
+name: release-restoration
+workflow: mfa-fatigue
+description: >-
+  Approve and contain (revoke, disable, block), then, after the help desk has reset the password
+  and re-registered MFA, a separate human release decision re-enables the account and removes the
+  IP block. The session revocation is not reversible and is not part of the release.
+tags: [release, true_positive, approve_all]
+mode: live
+suite: {entra: [identity], secure_endpoint: [endpoint], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-MFA-0009
+  title: MFA fatigue pattern followed by successful sign-in
+  severity: HIGH
+  workflow_id: mfa-fatigue
+  observables:
+    - {type: user, value: jsmith@example.com}
+  users: [jsmith@example.com]
+  trigger: {source: entra, mitre_techniques: [T1621]}
+environment:
+  records:
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:30:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:32:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:34:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:42:00Z", method: push,
+                result: approved, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: sign_in, sign_in_id: si-0009-1, user: jsmith@example.com, timestamp: "2026-01-15T10:42:30Z",
+                ip: 203.0.113.80, country: NL, app: Office 365 Exchange Online, result: success,
+                mfa_result: satisfied}}
+    - {integration: entra, atomic: search_user_activity, subject: jsmith@example.com,
+       record: {kind: mailbox_rule, mailbox: jsmith@example.com, rule_id: rule-0009, name: Cleanup,
+                enabled: true, delete: true, conditions: ["subject contains security"],
+                created_at: "2026-01-15T10:51:00Z"}}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+release: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  handoffs: ["account-takeover:jsmith@example.com"]
+  actions:
+    - revoke_sessions:jsmith@example.com
+    - disable_user:jsmith@example.com
+    - block_ip:203.0.113.80
+  containment: CONTAINED
+  controls: 2
+  restoration: RESTORED
+  final_state: RESTORED

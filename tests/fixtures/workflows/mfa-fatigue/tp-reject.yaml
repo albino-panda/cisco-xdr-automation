@@ -1,0 +1,47 @@
+# mfa-fatigue workflow scenario; fake lab data only (architecture 14.5.2).
+schema: 1
+name: tp-reject
+workflow: mfa-fatigue
+description: >-
+  The pattern is present and the package is recommended, but the analyst has confirmed with the
+  user out of band that the approved sign-in was their own and rejects the package. Nothing
+  executes and the incident is closed.
+tags: [true_positive, reject]
+mode: both
+suite: {entra: [identity], secure_endpoint: [endpoint], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-MFA-0003
+  title: MFA fatigue pattern followed by successful sign-in
+  severity: HIGH
+  workflow_id: mfa-fatigue
+  observables:
+    - {type: user, value: lgarcia@example.com}
+  users: [lgarcia@example.com]
+  trigger: {source: entra, mitre_techniques: [T1621]}
+environment:
+  records:
+    - {integration: entra, atomic: investigate_authentication, subject: lgarcia@example.com,
+       record: {kind: mfa_event, user: lgarcia@example.com, timestamp: "2026-01-15T09:10:00Z", method: push,
+                result: timeout, ip: 198.51.100.140, country: BR}}
+    - {integration: entra, atomic: investigate_authentication, subject: lgarcia@example.com,
+       record: {kind: mfa_event, user: lgarcia@example.com, timestamp: "2026-01-15T09:12:00Z", method: push,
+                result: timeout, ip: 198.51.100.140, country: BR}}
+    - {integration: entra, atomic: investigate_authentication, subject: lgarcia@example.com,
+       record: {kind: mfa_event, user: lgarcia@example.com, timestamp: "2026-01-15T09:14:00Z", method: push,
+                result: denied, ip: 198.51.100.140, country: BR}}
+    - {integration: entra, atomic: investigate_authentication, subject: lgarcia@example.com,
+       record: {kind: mfa_event, user: lgarcia@example.com, timestamp: "2026-01-15T09:16:00Z", method: push,
+                result: approved, ip: 198.51.100.140, country: BR}}
+    - {integration: entra, atomic: investigate_authentication, subject: lgarcia@example.com,
+       record: {kind: sign_in, sign_in_id: si-0003-1, user: lgarcia@example.com, timestamp: "2026-01-15T09:16:20Z",
+                ip: 198.51.100.140, country: BR, app: Office 365 Exchange Online, result: success,
+                mfa_result: satisfied}}
+analyst: {decision: REJECT, approvers: [analyst], comment: "User confirmed the sign-in by phone."}
+expect:
+  handoffs: ["account-takeover:lgarcia@example.com"]
+  package: true
+  actions:
+    - revoke_sessions:lgarcia@example.com
+    - block_ip:198.51.100.140
+  decision_state: CLOSED
+  controls: 0

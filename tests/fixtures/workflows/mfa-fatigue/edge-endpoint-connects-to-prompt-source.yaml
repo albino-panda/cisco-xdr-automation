@@ -1,0 +1,62 @@
+# mfa-fatigue workflow scenario; fake lab data only (architecture 14.5.2).
+schema: 1
+name: edge-endpoint-connects-to-prompt-source
+workflow: mfa-fatigue
+description: >-
+  The incident names no endpoint. Investigating the prompt source IP in the SIEM finds a laptop of the user
+  connecting to it after the approval; the endpoint investigation of that laptop (found through the
+  IP investigation, not the incident) shows a suspicious process. Isolating the laptop is
+  recommended alongside revoking the sessions and blocking the IP.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], secure_endpoint: [endpoint], meraki: [network], splunk: [network],
+        virustotal: [intel]}
+incident:
+  incident_id: XDR-MFA-0015
+  title: MFA fatigue pattern followed by successful sign-in
+  severity: HIGH
+  workflow_id: mfa-fatigue
+  observables:
+    - {type: user, value: jsmith@example.com}
+  users: [jsmith@example.com]
+  trigger: {source: entra, mitre_techniques: [T1621]}
+environment:
+  records:
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:30:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:32:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:34:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:42:00Z", method: push,
+                result: approved, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: sign_in, sign_in_id: si-0015-1, user: jsmith@example.com, timestamp: "2026-01-15T10:42:30Z",
+                ip: 203.0.113.80, country: NL, app: Office 365 Exchange Online, result: success,
+                mfa_result: satisfied}}
+    - {integration: splunk, atomic: investigate_ip, subject: 203.0.113.80,
+       record: {kind: network_connection, endpoint: TH-LT-2210, user: jsmith@example.com, local_ip: 192.0.2.140,
+                remote_ip: 203.0.113.80, remote_port: 443, protocol: tcp, direction: outbound, action: allowed,
+                first_seen: "2026-01-15T10:58:00Z", last_seen: "2026-01-15T11:20:00Z", count: 12}}
+    - {integration: secure_endpoint, atomic: investigate_endpoint, subject: TH-LT-2210,
+       record: {kind: endpoint, hostname: TH-LT-2210, connector_guid: 00000000-0000-4000-8000-000000002210,
+                os: Windows 11, users: [jsmith@example.com], groups: [Workstations], isolation_capable: true,
+                isolation_state: not_isolated}}
+    - {integration: secure_endpoint, atomic: investigate_endpoint, subject: TH-LT-2210,
+       record: {kind: process_event, event_id: ev-0015-1, endpoint: TH-LT-2210, timestamp: "2026-01-15T10:57:00Z",
+                event_type: process_start, process_name: sample-sync.exe, pid: 4412, user: jsmith@example.com,
+                verdict: SUSPICIOUS}}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  handoffs: ["account-takeover:jsmith@example.com"]
+  actions:
+    - revoke_sessions:jsmith@example.com
+    - isolate_endpoint:TH-LT-2210
+    - block_ip:203.0.113.80
+  elevated: []
+  containment: CONTAINED
+  controls: 2

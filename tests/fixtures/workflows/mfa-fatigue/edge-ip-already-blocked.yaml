@@ -1,0 +1,50 @@
+# mfa-fatigue workflow scenario; fake lab data only (architecture 14.5.2).
+schema: 1
+name: edge-ip-already-blocked
+workflow: mfa-fatigue
+description: >-
+  The prompt source IP was already blocked at the MX by an earlier change. The block is still
+  recommended and approved; execution reports ALREADY_CONTAINED and creates no temporary control,
+  so a later release can never remove a block this incident did not create.
+tags: [edge_case, true_positive, approve_all]
+mode: live
+suite: {entra: [identity], secure_endpoint: [endpoint], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-MFA-0011
+  title: MFA fatigue pattern followed by successful sign-in
+  severity: HIGH
+  workflow_id: mfa-fatigue
+  observables:
+    - {type: user, value: lgarcia@example.com}
+    - {type: ip, value: 198.51.100.77}
+  users: [lgarcia@example.com]
+  trigger: {source: entra, mitre_techniques: [T1621]}
+environment:
+  records:
+    - {integration: entra, atomic: investigate_authentication, subject: lgarcia@example.com,
+       record: {kind: mfa_event, user: lgarcia@example.com, timestamp: "2026-01-15T09:10:00Z", method: push,
+                result: denied, ip: 198.51.100.77, country: BR}}
+    - {integration: entra, atomic: investigate_authentication, subject: lgarcia@example.com,
+       record: {kind: mfa_event, user: lgarcia@example.com, timestamp: "2026-01-15T09:12:00Z", method: push,
+                result: denied, ip: 198.51.100.77, country: BR}}
+    - {integration: entra, atomic: investigate_authentication, subject: lgarcia@example.com,
+       record: {kind: mfa_event, user: lgarcia@example.com, timestamp: "2026-01-15T09:14:00Z", method: push,
+                result: denied, ip: 198.51.100.77, country: BR}}
+    - {integration: entra, atomic: investigate_authentication, subject: lgarcia@example.com,
+       record: {kind: mfa_event, user: lgarcia@example.com, timestamp: "2026-01-15T09:16:00Z", method: push,
+                result: approved, ip: 198.51.100.77, country: BR}}
+    - {integration: entra, atomic: investigate_authentication, subject: lgarcia@example.com,
+       record: {kind: sign_in, sign_in_id: si-0011-1, user: lgarcia@example.com, timestamp: "2026-01-15T09:16:20Z",
+                ip: 198.51.100.77, country: BR, app: Office 365 Exchange Online, result: success,
+                mfa_result: satisfied}}
+  preexisting:
+    - {action_type: block_ip, target: 198.51.100.77}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  handoffs: ["account-takeover:lgarcia@example.com"]
+  actions:
+    - revoke_sessions:lgarcia@example.com
+    - block_ip:198.51.100.77
+  already_contained: ["block_ip:198.51.100.77"]
+  containment: CONTAINED
+  controls: 0

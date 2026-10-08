@@ -1,0 +1,41 @@
+# mfa-fatigue workflow scenario; fake lab data only (architecture 14.5.2).
+schema: 1
+name: benign-no-action
+workflow: mfa-fatigue
+description: >-
+  Two prompts timed out while the user was away from the phone, then the user approved the third
+  from the usual office IP and signed in. Two unsuccessful prompts are below the fatigue threshold,
+  so nothing is recommended (no rule fires, nothing is below threshold).
+tags: [benign]
+mode: both
+suite: {entra: [identity], secure_endpoint: [endpoint], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-MFA-0004
+  title: Several MFA prompts for one user
+  severity: LOW
+  workflow_id: mfa-fatigue
+  observables:
+    - {type: user, value: tnguyen@example.com}
+  users: [tnguyen@example.com]
+  trigger: {source: entra, mitre_techniques: [T1621]}
+environment:
+  records:
+    - {integration: entra, atomic: investigate_authentication, subject: tnguyen@example.com,
+       record: {kind: mfa_event, user: tnguyen@example.com, timestamp: "2026-01-15T08:00:00Z", method: push,
+                result: timeout, ip: 198.51.100.20, country: US}}
+    - {integration: entra, atomic: investigate_authentication, subject: tnguyen@example.com,
+       record: {kind: mfa_event, user: tnguyen@example.com, timestamp: "2026-01-15T08:03:00Z", method: push,
+                result: timeout, ip: 198.51.100.20, country: US}}
+    - {integration: entra, atomic: investigate_authentication, subject: tnguyen@example.com,
+       record: {kind: mfa_event, user: tnguyen@example.com, timestamp: "2026-01-15T08:06:00Z", method: push,
+                result: approved, ip: 198.51.100.20, country: US}}
+    - {integration: entra, atomic: investigate_authentication, subject: tnguyen@example.com,
+       record: {kind: sign_in, sign_in_id: si-0004-1, user: tnguyen@example.com, timestamp: "2026-01-15T08:06:10Z",
+                ip: 198.51.100.20, country: US, app: Microsoft Teams, result: success, mfa_result: satisfied}}
+    - {integration: entra, atomic: investigate_user, subject: tnguyen@example.com,
+       record: {kind: user_profile, user: tnguyen@example.com, department: Engineering, groups: [Engineering],
+                account_enabled: true, risk_level: none, risk_state: none}}
+expect:
+  package: false
+  below_threshold: []
+  unrouted: []

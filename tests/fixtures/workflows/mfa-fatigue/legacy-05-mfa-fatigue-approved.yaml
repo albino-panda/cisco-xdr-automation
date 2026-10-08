@@ -1,0 +1,82 @@
+# mfa-fatigue workflow scenario; fake lab data only (architecture 14.5.2).
+# Migrated from the legacy account-takeover scenario 05 (the seed of this workflow, 14.5.1): the
+# legacy sign-ins with result "mfa_denied" become typed MFA events, the legacy anomaly list becomes
+# Entra anomaly records, and the legacy enrich-ip answers (verdict unknown) are simply absent.
+# Expectations are aligned with C1 to C5: every action requires human approval.
+schema: 1
+name: legacy-05-mfa-fatigue-approved
+workflow: mfa-fatigue
+description: >-
+  The attacker holds the password and sends repeated MFA pushes from one IP until the user approves
+  one. The source IP is new and has no reputation and Entra only rates the user risk medium, so
+  plain risk and verdict tests would miss it; the fatigue pattern catches it. Sessions are revoked
+  and the source of the denied prompts is blocked, each with human approval. A second, unrelated IP
+  with unknown reputation that sent no prompts is not blocked.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/account-takeover/scenarios/05-mfa-fatigue-approved.yaml
+mode: both
+suite: {entra: [identity], secure_endpoint: [endpoint], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-ATO-0005
+  title: MFA fatigue pattern followed by successful sign-in
+  severity: HIGH
+  source: splunk
+  workflow_id: mfa-fatigue
+  observables:
+    - {type: user, value: sales-rep-02@example.com}
+    - {type: ip, value: 203.0.113.80}
+    - {type: ip, value: 192.0.2.61}
+  users: [sales-rep-02@example.com]
+  trigger: {source: splunk, detection: mfaFatigue, denied_prompts: 6}
+environment:
+  records:
+    - {integration: entra, atomic: investigate_authentication, subject: sales-rep-02@example.com,
+       record: {kind: mfa_event, user: sales-rep-02@example.com, timestamp: "2026-01-15T11:00:00Z", method: push,
+                result: denied, ip: 203.0.113.80, app: Office 365 Exchange Online}}
+    - {integration: entra, atomic: investigate_authentication, subject: sales-rep-02@example.com,
+       record: {kind: mfa_event, user: sales-rep-02@example.com, timestamp: "2026-01-15T11:01:00Z", method: push,
+                result: denied, ip: 203.0.113.80, app: Office 365 Exchange Online}}
+    - {integration: entra, atomic: investigate_authentication, subject: sales-rep-02@example.com,
+       record: {kind: mfa_event, user: sales-rep-02@example.com, timestamp: "2026-01-15T11:02:00Z", method: push,
+                result: denied, ip: 203.0.113.80, app: Office 365 Exchange Online}}
+    - {integration: entra, atomic: investigate_authentication, subject: sales-rep-02@example.com,
+       record: {kind: mfa_event, user: sales-rep-02@example.com, timestamp: "2026-01-15T11:03:00Z", method: push,
+                result: denied, ip: 203.0.113.80, app: Office 365 Exchange Online}}
+    - {integration: entra, atomic: investigate_authentication, subject: sales-rep-02@example.com,
+       record: {kind: mfa_event, user: sales-rep-02@example.com, timestamp: "2026-01-15T11:04:00Z", method: push,
+                result: denied, ip: 203.0.113.80, app: Office 365 Exchange Online}}
+    - {integration: entra, atomic: investigate_authentication, subject: sales-rep-02@example.com,
+       record: {kind: mfa_event, user: sales-rep-02@example.com, timestamp: "2026-01-15T11:05:00Z", method: push,
+                result: denied, ip: 203.0.113.80, app: Office 365 Exchange Online}}
+    - {integration: entra, atomic: investigate_authentication, subject: sales-rep-02@example.com,
+       record: {kind: mfa_event, user: sales-rep-02@example.com, timestamp: "2026-01-15T11:06:00Z", method: push,
+                result: approved, ip: 203.0.113.80, app: Office 365 Exchange Online}}
+    - {integration: entra, atomic: investigate_authentication, subject: sales-rep-02@example.com,
+       record: {kind: sign_in, sign_in_id: si-legacy-05-7, user: sales-rep-02@example.com,
+                timestamp: "2026-01-15T11:06:20Z", ip: 203.0.113.80, city: Unfamiliar city,
+                app: Office 365 Exchange Online, result: success, mfa_result: satisfied}}
+    - {integration: entra, atomic: investigate_authentication, subject: sales-rep-02@example.com,
+       record: {kind: sign_in, sign_in_id: si-legacy-05-8, user: sales-rep-02@example.com,
+                timestamp: "2026-01-15T09:30:00Z", ip: 192.0.2.61, city: Home ISP, app: Microsoft Teams,
+                result: failure}}
+    - {integration: entra, atomic: investigate_user, subject: sales-rep-02@example.com,
+       record: {kind: user_profile, user: sales-rep-02@example.com, department: Sales,
+                manager: sales-lead@example.com, groups: [Sales Users], roles: [], risk_level: medium}}
+    - {integration: entra, atomic: investigate_user, subject: sales-rep-02@example.com,
+       record: {kind: anomaly, anomaly_id: risk-legacy-05-1, anomaly_type: mfa_fatigue, severity: MEDIUM,
+                user: sales-rep-02@example.com, ip: 203.0.113.80, detail: Repeated MFA push prompts}}
+    - {integration: entra, atomic: investigate_user, subject: sales-rep-02@example.com,
+       record: {kind: anomaly, anomaly_id: risk-legacy-05-2, anomaly_type: unfamiliar_location, severity: MEDIUM,
+                user: sales-rep-02@example.com, ip: 203.0.113.80, detail: Sign-in from an unfamiliar location}}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  handoffs: ["account-takeover:sales-rep-02@example.com"]
+  package: true
+  actions:
+    - revoke_sessions:sales-rep-02@example.com
+    - block_ip:203.0.113.80
+  elevated: []
+  excluded: []
+  below_threshold: []
+  containment: CONTAINED
+  controls: 1

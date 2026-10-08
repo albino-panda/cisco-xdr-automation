@@ -1,0 +1,91 @@
+# mfa-fatigue workflow scenario; fake lab data only (architecture 14.5.2).
+schema: 1
+name: tp-approve-all
+workflow: mfa-fatigue
+description: >-
+  Six rejected push prompts from one public IP, then an approved prompt and a successful sign-in
+  from the same IP. After the approval the session creates an external forwarding rule and the
+  user's laptop raises a malicious detection. The full package is recommended (revoke sessions,
+  disable the account, isolate the laptop, block the prompt source IP); the analyst approves
+  everything, the actions execute and verify.
+tags: [true_positive, approve_all]
+mode: both
+suite: {entra: [identity], secure_endpoint: [endpoint], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-MFA-0001
+  title: MFA fatigue pattern followed by successful sign-in
+  severity: HIGH
+  workflow_id: mfa-fatigue
+  observables:
+    - {type: user, value: jsmith@example.com}
+    - {type: ip, value: 203.0.113.80}
+    - {type: hostname, value: TH-LT-1047}
+  users: [jsmith@example.com]
+  trigger: {source: entra, mitre_techniques: [T1621]}
+environment:
+  records:
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:30:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL, app: Office 365 Exchange Online}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:32:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL, app: Office 365 Exchange Online}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:34:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL, app: Office 365 Exchange Online}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:36:00Z", method: push,
+                result: timeout, ip: 203.0.113.80, country: NL, app: Office 365 Exchange Online}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:38:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL, app: Office 365 Exchange Online}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:40:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL, app: Office 365 Exchange Online}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:42:00Z", method: push,
+                result: approved, ip: 203.0.113.80, country: NL, app: Office 365 Exchange Online}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: sign_in, sign_in_id: si-0001-1, user: jsmith@example.com, timestamp: "2026-01-15T10:42:30Z",
+                ip: 203.0.113.80, country: NL, city: Unfamiliar city, app: Office 365 Exchange Online,
+                result: success, mfa_required: true, mfa_result: satisfied, risk_level: medium}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: sign_in, sign_in_id: si-0001-0, user: jsmith@example.com, timestamp: "2026-01-15T08:15:00Z",
+                ip: 198.51.100.20, country: US, city: Home city, app: Microsoft Teams, result: success,
+                mfa_result: satisfied, risk_level: none}}
+    - {integration: entra, atomic: investigate_user, subject: jsmith@example.com,
+       record: {kind: user_profile, user: jsmith@example.com, display_name: J Smith, department: Finance,
+                groups: [Finance Users], roles: [], account_enabled: true, risk_level: medium,
+                risk_state: at_risk, mfa_registered: true}}
+    - {integration: entra, atomic: search_user_activity, subject: jsmith@example.com,
+       record: {kind: mailbox_rule, mailbox: jsmith@example.com, rule_id: rule-0001, name: Archive copy,
+                enabled: true, forward_to: [drop@mail.example.net], created_at: "2026-01-15T10:47:00Z"}}
+    - {integration: secure_endpoint, atomic: investigate_endpoint, subject: TH-LT-1047,
+       record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+                os: Windows 11, users: [jsmith@example.com], groups: [Workstations], isolation_capable: true,
+                isolation_state: not_isolated}}
+    - {integration: secure_endpoint, atomic: investigate_endpoint, subject: TH-LT-1047,
+       record: {kind: detection, detection_id: det-0001-1, name: Sample.InfoStealer.Generic, verdict: MALICIOUS,
+                severity: HIGH, endpoint: TH-LT-1047, user: jsmith@example.com,
+                sha256: 4b1e2d3c4b1e2d3c4b1e2d3c4b1e2d3c4b1e2d3c4b1e2d3c4b1e2d3c4b1e2d3c,
+                first_seen: "2026-01-15T10:55:00Z"}}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  handoffs: ["account-takeover:jsmith@example.com"]
+  package: true
+  actions:
+    - revoke_sessions:jsmith@example.com
+    - disable_user:jsmith@example.com
+    - isolate_endpoint:TH-LT-1047
+    - block_ip:203.0.113.80
+  elevated: []
+  excluded: []
+  unrouted: []
+  below_threshold: []
+  risk: {min: 70, max: 100}
+  confidence: {min: 50, max: 100}
+  degraded_sources: []
+  evidence_min: 1
+  containment: CONTAINED
+  controls: 3
+  notifications: [incident_note, soc_notification, analyst_summary]

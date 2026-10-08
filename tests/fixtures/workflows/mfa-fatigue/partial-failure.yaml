@@ -1,0 +1,56 @@
+# mfa-fatigue workflow scenario; fake lab data only (architecture 14.5.2).
+schema: 1
+name: partial-failure
+workflow: mfa-fatigue
+description: >-
+  Revoke, disable (an external forwarding rule appeared after the approval) and the IP block are
+  approved; the MX rule update fails at the vendor. Containment is partial, the failed block is
+  reported and never retried silently; the identity actions succeed.
+tags: [partial_failure, true_positive, approve_all]
+mode: live
+suite: {entra: [identity], secure_endpoint: [endpoint], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-MFA-0007
+  title: MFA fatigue pattern followed by successful sign-in
+  severity: HIGH
+  workflow_id: mfa-fatigue
+  observables:
+    - {type: user, value: jsmith@example.com}
+  users: [jsmith@example.com]
+  trigger: {source: entra, mitre_techniques: [T1621]}
+environment:
+  records:
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:30:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:32:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:34:00Z", method: push,
+                result: denied, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T10:42:00Z", method: push,
+                result: approved, ip: 203.0.113.80, country: NL}}
+    - {integration: entra, atomic: investigate_authentication, subject: jsmith@example.com,
+       record: {kind: sign_in, sign_in_id: si-0007-1, user: jsmith@example.com, timestamp: "2026-01-15T10:42:30Z",
+                ip: 203.0.113.80, country: NL, app: Office 365 Exchange Online, result: success,
+                mfa_result: satisfied}}
+    - {integration: entra, atomic: search_user_activity, subject: jsmith@example.com,
+       record: {kind: mailbox_rule, mailbox: jsmith@example.com, rule_id: rule-0007, name: Sync,
+                enabled: true, redirect_to: [collect@mail.example.net], created_at: "2026-01-15T10:50:00Z"}}
+  faults:
+    - {kind: FAIL, integration: meraki, operation: block_ip, times: 10}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  handoffs: ["account-takeover:jsmith@example.com"]
+  actions:
+    - revoke_sessions:jsmith@example.com
+    - disable_user:jsmith@example.com
+    - block_ip:203.0.113.80
+  containment: PARTIALLY_CONTAINED
+  results:
+    revoke_sessions:jsmith@example.com: SUCCESS
+    disable_user:jsmith@example.com: SUCCESS
+    block_ip:203.0.113.80: FAILED
+  controls: 1

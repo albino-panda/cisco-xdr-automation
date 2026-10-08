@@ -1,0 +1,53 @@
+# mfa-fatigue workflow scenario; fake lab data only (architecture 14.5.2).
+schema: 1
+name: edge-corporate-egress-allowlisted
+workflow: mfa-fatigue
+description: >-
+  The prompts came through the corporate VPN egress IP (the attacker connected through a
+  compromised remote-access session). The session revocation is recommended as usual; the IP block
+  is recommended too, but the egress IP is on the never_block allow-list, so the package builder
+  moves it to the excluded targets: shown on the decision card with the reason, never executed and
+  never silently dropped.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], secure_endpoint: [endpoint], meraki: [network], virustotal: [intel]}
+config:
+  allowlists:
+    never_block:
+      ips: [192.0.2.53, 198.51.100.10]
+incident:
+  incident_id: XDR-MFA-0012
+  title: MFA fatigue pattern followed by successful sign-in
+  severity: HIGH
+  workflow_id: mfa-fatigue
+  observables:
+    - {type: user, value: rpatel@example.com}
+  users: [rpatel@example.com]
+  trigger: {source: entra, mitre_techniques: [T1621]}
+environment:
+  records:
+    - {integration: entra, atomic: investigate_authentication, subject: rpatel@example.com,
+       record: {kind: mfa_event, user: rpatel@example.com, timestamp: "2026-01-15T11:10:00Z", method: push,
+                result: timeout, ip: 198.51.100.10, country: US}}
+    - {integration: entra, atomic: investigate_authentication, subject: rpatel@example.com,
+       record: {kind: mfa_event, user: rpatel@example.com, timestamp: "2026-01-15T11:11:00Z", method: push,
+                result: denied, ip: 198.51.100.10, country: US}}
+    - {integration: entra, atomic: investigate_authentication, subject: rpatel@example.com,
+       record: {kind: mfa_event, user: rpatel@example.com, timestamp: "2026-01-15T11:12:00Z", method: push,
+                result: denied, ip: 198.51.100.10, country: US}}
+    - {integration: entra, atomic: investigate_authentication, subject: rpatel@example.com,
+       record: {kind: mfa_event, user: rpatel@example.com, timestamp: "2026-01-15T11:13:00Z", method: push,
+                result: approved, ip: 198.51.100.10, country: US}}
+    - {integration: entra, atomic: investigate_authentication, subject: rpatel@example.com,
+       record: {kind: sign_in, sign_in_id: si-0012-1, user: rpatel@example.com, timestamp: "2026-01-15T11:13:20Z",
+                ip: 198.51.100.10, country: US, app: Office 365 Exchange Online, result: success,
+                mfa_result: satisfied}}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  handoffs: ["account-takeover:rpatel@example.com"]
+  actions:
+    - revoke_sessions:rpatel@example.com
+  excluded: ["block_ip:198.51.100.10"]
+  elevated: []
+  containment: CONTAINED
+  controls: 0

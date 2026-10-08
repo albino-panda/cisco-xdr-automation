@@ -1,0 +1,54 @@
+# mfa-fatigue workflow scenario; fake lab data only (architecture 14.5.2).
+schema: 1
+name: critical-asset-elevated
+workflow: mfa-fatigue
+description: >-
+  The fatigued user holds the Global Administrator directory role. Revoking the sessions and
+  disabling the account are still recommended (the privileged role is itself a reason to disable),
+  never skipped: both need ELEVATED approval with a visible privileged-account warning. An analyst
+  alone cannot approve; the lead approves.
+tags: [critical_asset, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], secure_endpoint: [endpoint], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-MFA-0006
+  title: MFA fatigue pattern followed by successful sign-in
+  severity: HIGH
+  workflow_id: mfa-fatigue
+  observables:
+    - {type: user, value: kbrown@example.com}
+  users: [kbrown@example.com]
+  trigger: {source: entra, mitre_techniques: [T1621]}
+environment:
+  records:
+    - {integration: entra, atomic: investigate_authentication, subject: kbrown@example.com,
+       record: {kind: mfa_event, user: kbrown@example.com, timestamp: "2026-01-15T11:00:00Z", method: push,
+                result: denied, ip: 203.0.113.95, country: SG}}
+    - {integration: entra, atomic: investigate_authentication, subject: kbrown@example.com,
+       record: {kind: mfa_event, user: kbrown@example.com, timestamp: "2026-01-15T11:01:00Z", method: push,
+                result: denied, ip: 203.0.113.95, country: SG}}
+    - {integration: entra, atomic: investigate_authentication, subject: kbrown@example.com,
+       record: {kind: mfa_event, user: kbrown@example.com, timestamp: "2026-01-15T11:02:00Z", method: push,
+                result: denied, ip: 203.0.113.95, country: SG}}
+    - {integration: entra, atomic: investigate_authentication, subject: kbrown@example.com,
+       record: {kind: mfa_event, user: kbrown@example.com, timestamp: "2026-01-15T11:04:00Z", method: push,
+                result: approved, ip: 203.0.113.95, country: SG}}
+    - {integration: entra, atomic: investigate_authentication, subject: kbrown@example.com,
+       record: {kind: sign_in, sign_in_id: si-0006-1, user: kbrown@example.com, timestamp: "2026-01-15T11:04:15Z",
+                ip: 203.0.113.95, country: SG, app: Azure Portal, result: success, mfa_result: satisfied}}
+    - {integration: entra, atomic: investigate_user, subject: kbrown@example.com,
+       record: {kind: user_profile, user: kbrown@example.com, department: IT, groups: [IT Operations],
+                roles: [Global Administrator], account_enabled: true, risk_level: medium}}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  handoffs: ["account-takeover:kbrown@example.com"]
+  actions:
+    - revoke_sessions:kbrown@example.com
+    - disable_user:kbrown@example.com
+    - block_ip:203.0.113.95
+  elevated:
+    - revoke_sessions:kbrown@example.com
+    - disable_user:kbrown@example.com
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  containment: CONTAINED
+  controls: 2

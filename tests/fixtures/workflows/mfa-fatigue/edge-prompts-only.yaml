@@ -1,0 +1,48 @@
+# mfa-fatigue workflow scenario; fake lab data only (architecture 14.5.2).
+schema: 1
+name: edge-prompts-only
+workflow: mfa-fatigue
+description: >-
+  Denials only: five prompts from one public IP, every one rejected, no approval and no successful
+  sign-in. The user is not compromised, so no session or account action is considered. Blocking the
+  prompt source is considered but its risk stays below the rule threshold, so it is reported as
+  BELOW_THRESHOLD (visible in the notes, never silent) and nothing is proposed. The password is
+  known to the attacker: a manual password reset is the analyst's follow-up.
+tags: [edge_case, benign]
+mode: both
+suite: {entra: [identity], secure_endpoint: [endpoint], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-MFA-0010
+  title: Repeated MFA push prompts rejected by the user
+  severity: MEDIUM
+  workflow_id: mfa-fatigue
+  observables:
+    - {type: user, value: pchen@example.com}
+  users: [pchen@example.com]
+  trigger: {source: entra, mitre_techniques: [T1621]}
+environment:
+  records:
+    - {integration: entra, atomic: investigate_authentication, subject: pchen@example.com,
+       record: {kind: mfa_event, user: pchen@example.com, timestamp: "2026-01-15T07:00:00Z", method: push,
+                result: denied, ip: 203.0.113.81, country: RO}}
+    - {integration: entra, atomic: investigate_authentication, subject: pchen@example.com,
+       record: {kind: mfa_event, user: pchen@example.com, timestamp: "2026-01-15T07:02:00Z", method: push,
+                result: denied, ip: 203.0.113.81, country: RO}}
+    - {integration: entra, atomic: investigate_authentication, subject: pchen@example.com,
+       record: {kind: mfa_event, user: pchen@example.com, timestamp: "2026-01-15T07:04:00Z", method: push,
+                result: denied, ip: 203.0.113.81, country: RO}}
+    - {integration: entra, atomic: investigate_authentication, subject: pchen@example.com,
+       record: {kind: mfa_event, user: pchen@example.com, timestamp: "2026-01-15T07:06:00Z", method: push,
+                result: denied, ip: 203.0.113.81, country: RO}}
+    - {integration: entra, atomic: investigate_authentication, subject: pchen@example.com,
+       record: {kind: mfa_event, user: pchen@example.com, timestamp: "2026-01-15T07:08:00Z", method: push,
+                result: fraud_reported, ip: 203.0.113.81, country: RO}}
+    - {integration: entra, atomic: investigate_authentication, subject: pchen@example.com,
+       record: {kind: sign_in, sign_in_id: si-0010-1, user: pchen@example.com, timestamp: "2026-01-15T07:08:10Z",
+                ip: 203.0.113.81, country: RO, app: Office 365 Exchange Online, result: failure,
+                failure_reason: Strong authentication request was denied, mfa_result: denied}}
+expect:
+  handoffs: []
+  package: false
+  below_threshold: ["block_ip:203.0.113.81"]
+  unrouted: []

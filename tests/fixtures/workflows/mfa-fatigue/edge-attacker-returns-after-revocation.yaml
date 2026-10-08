@@ -1,0 +1,56 @@
+# mfa-fatigue workflow scenario; fake lab data only (architecture 14.5.2).
+schema: 1
+name: edge-attacker-returns-after-revocation
+workflow: mfa-fatigue
+description: >-
+  The sessions were already revoked after the approved prompt (the profile shows sessions valid
+  from 11:00), yet the prompt source IP signs in successfully again at 11:15: the attacker still
+  holds working credentials. Disabling the account is recommended in addition to revoking the
+  sessions again and blocking the IP.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], secure_endpoint: [endpoint], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-MFA-0016
+  title: MFA fatigue pattern followed by successful sign-in
+  severity: HIGH
+  workflow_id: mfa-fatigue
+  observables:
+    - {type: user, value: lgarcia@example.com}
+  users: [lgarcia@example.com]
+  trigger: {source: entra, mitre_techniques: [T1621]}
+environment:
+  records:
+    - {integration: entra, atomic: investigate_authentication, subject: lgarcia@example.com,
+       record: {kind: mfa_event, user: lgarcia@example.com, timestamp: "2026-01-15T10:20:00Z", method: push,
+                result: denied, ip: 203.0.113.120, country: VN}}
+    - {integration: entra, atomic: investigate_authentication, subject: lgarcia@example.com,
+       record: {kind: mfa_event, user: lgarcia@example.com, timestamp: "2026-01-15T10:22:00Z", method: push,
+                result: denied, ip: 203.0.113.120, country: VN}}
+    - {integration: entra, atomic: investigate_authentication, subject: lgarcia@example.com,
+       record: {kind: mfa_event, user: lgarcia@example.com, timestamp: "2026-01-15T10:24:00Z", method: push,
+                result: denied, ip: 203.0.113.120, country: VN}}
+    - {integration: entra, atomic: investigate_authentication, subject: lgarcia@example.com,
+       record: {kind: mfa_event, user: lgarcia@example.com, timestamp: "2026-01-15T10:26:00Z", method: push,
+                result: approved, ip: 203.0.113.120, country: VN}}
+    - {integration: entra, atomic: investigate_authentication, subject: lgarcia@example.com,
+       record: {kind: sign_in, sign_in_id: si-0016-1, user: lgarcia@example.com, timestamp: "2026-01-15T10:26:20Z",
+                ip: 203.0.113.120, country: VN, app: Office 365 Exchange Online, result: success,
+                mfa_result: satisfied}}
+    - {integration: entra, atomic: investigate_authentication, subject: lgarcia@example.com,
+       record: {kind: sign_in, sign_in_id: si-0016-2, user: lgarcia@example.com, timestamp: "2026-01-15T11:15:00Z",
+                ip: 203.0.113.120, country: VN, app: Office 365 Exchange Online, result: success,
+                mfa_result: satisfied}}
+    - {integration: entra, atomic: investigate_user, subject: lgarcia@example.com,
+       record: {kind: user_profile, user: lgarcia@example.com, department: Sales, groups: [Sales Users],
+                account_enabled: true, risk_level: medium, sessions_valid_from: "2026-01-15T11:00:00Z"}}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  handoffs: ["account-takeover:lgarcia@example.com"]
+  actions:
+    - revoke_sessions:lgarcia@example.com
+    - disable_user:lgarcia@example.com
+    - block_ip:203.0.113.120
+  elevated: []
+  containment: CONTAINED
+  controls: 2
