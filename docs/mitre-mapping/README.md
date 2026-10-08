@@ -5,57 +5,72 @@ Which workflow handles each technique. Generated from the `mitre` field of every
 
 | Technique | Name | Tactics | Workflows |
 |---|---|---|---|
-| [T1003.001](https://attack.mitre.org/techniques/T1003/001/) | OS Credential Dumping: LSASS Memory | - | [`credential-dumping`](../../workflows/credential-dumping/README.md) |
-| [T1003.002](https://attack.mitre.org/techniques/T1003/002/) | Security Account Manager | - | [`credential-dumping`](../../workflows/credential-dumping/README.md) |
-| [T1003.003](https://attack.mitre.org/techniques/T1003/003/) | NTDS | - | [`credential-dumping`](../../workflows/credential-dumping/README.md) |
-| [T1021.001](https://attack.mitre.org/techniques/T1021/001/) | Remote Desktop Protocol | - | [`lateral-movement`](../../workflows/lateral-movement/README.md) |
-| [T1021.002](https://attack.mitre.org/techniques/T1021/002/) | SMB/Windows Admin Shares | - | [`lateral-movement`](../../workflows/lateral-movement/README.md) |
-| [T1021.006](https://attack.mitre.org/techniques/T1021/006/) | Windows Remote Management | - | [`lateral-movement`](../../workflows/lateral-movement/README.md) |
-| [T1027](https://attack.mitre.org/techniques/T1027/) | Obfuscated Files or Information | - | [`malicious-powershell`](../../workflows/malicious-powershell/README.md) |
+| [T1003](https://attack.mitre.org/techniques/T1003/) | OS Credential Dumping | TA0006 Credential Access | [`credential-dumping`](../../workflows/credential-dumping/README.md) |
+| [T1003.001](https://attack.mitre.org/techniques/T1003/001/) | LSASS Memory | TA0006 Credential Access | [`credential-dumping`](../../workflows/credential-dumping/README.md) |
+| [T1003.002](https://attack.mitre.org/techniques/T1003/002/) | Security Account Manager | TA0006 Credential Access | [`credential-dumping`](../../workflows/credential-dumping/README.md) |
+| [T1003.003](https://attack.mitre.org/techniques/T1003/003/) | NTDS | TA0006 Credential Access | [`credential-dumping`](../../workflows/credential-dumping/README.md) |
+| [T1021.001](https://attack.mitre.org/techniques/T1021/001/) | Remote Desktop Protocol | TA0008 Lateral Movement | [`lateral-movement`](../../workflows/lateral-movement/README.md) |
+| [T1021.002](https://attack.mitre.org/techniques/T1021/002/) | SMB/Windows Admin Shares | TA0008 Lateral Movement | [`lateral-movement`](../../workflows/lateral-movement/README.md) |
+| [T1021.006](https://attack.mitre.org/techniques/T1021/006/) | Windows Remote Management | TA0008 Lateral Movement | [`lateral-movement`](../../workflows/lateral-movement/README.md) |
+| [T1027](https://attack.mitre.org/techniques/T1027/) | Obfuscated Files or Information | TA0005 Defense Evasion | [`malicious-powershell`](../../workflows/malicious-powershell/README.md) |
 | [T1041](https://attack.mitre.org/techniques/T1041/) | Exfiltration Over C2 Channel | - | [`exfiltration`](../../workflows/exfiltration/README.md) |
+| [T1047](https://attack.mitre.org/techniques/T1047/) | Windows Management Instrumentation | TA0002 Execution | [`lateral-movement`](../../workflows/lateral-movement/README.md), [`malicious-powershell`](../../workflows/malicious-powershell/README.md) |
 | [T1048](https://attack.mitre.org/techniques/T1048/) | Exfiltration Over Alternative Protocol | - | [`exfiltration`](../../workflows/exfiltration/README.md) |
-| [T1053.005](https://attack.mitre.org/techniques/T1053/005/) | Scheduled Task | - | [`persistence`](../../workflows/persistence/README.md) |
-| [T1059.001](https://attack.mitre.org/techniques/T1059/001/) | Command and Scripting Interpreter: PowerShell | - | [`malicious-powershell`](../../workflows/malicious-powershell/README.md) |
+| [T1053.005](https://attack.mitre.org/techniques/T1053/005/) | Scheduled Task | TA0003 Persistence | [`persistence`](../../workflows/persistence/README.md) |
+| [T1059](https://attack.mitre.org/techniques/T1059/) | Command and Scripting Interpreter | TA0002 Execution | [`malicious-powershell`](../../workflows/malicious-powershell/README.md) |
+| [T1059.001](https://attack.mitre.org/techniques/T1059/001/) | PowerShell | TA0002 Execution | [`malicious-powershell`](../../workflows/malicious-powershell/README.md) |
 | [T1068](https://attack.mitre.org/techniques/T1068/) | Exploitation for Privilege Escalation | - | [`privilege-escalation`](../../workflows/privilege-escalation/README.md) |
+| [T1071](https://attack.mitre.org/techniques/T1071/) | Application Layer Protocol | TA0011 Command and Control | [`ransomware`](../../workflows/ransomware/README.md) |
 | [T1071.001](https://attack.mitre.org/techniques/T1071/001/) | Application Layer Protocol: Web Protocols | - | [`c2`](../../workflows/c2/README.md) |
 | [T1071.004](https://attack.mitre.org/techniques/T1071/004/) | Application Layer Protocol: DNS | - | [`dns-tunneling`](../../workflows/dns-tunneling/README.md) |
-| [T1078.004](https://attack.mitre.org/techniques/T1078/004/) | Valid Accounts: Cloud Accounts | - | [`account-takeover`](../../workflows/account-takeover/README.md), [`cloud-compromise`](../../workflows/cloud-compromise/README.md) |
+| [T1078](https://attack.mitre.org/techniques/T1078/) | Valid Accounts | TA0001 Initial Access | [`lateral-movement`](../../workflows/lateral-movement/README.md), [`ransomware`](../../workflows/ransomware/README.md) |
+| [T1078.004](https://attack.mitre.org/techniques/T1078/004/) | Cloud Accounts | TA0001 Initial Access | [`account-takeover`](../../workflows/account-takeover/README.md), [`bec`](../../workflows/bec/README.md), [`cloud-compromise`](../../workflows/cloud-compromise/README.md), [`mail-bombing`](../../workflows/mail-bombing/README.md), [`mfa-fatigue`](../../workflows/mfa-fatigue/README.md), [`password-spray`](../../workflows/password-spray/README.md), [`phishing`](../../workflows/phishing/README.md) |
 | [T1098](https://attack.mitre.org/techniques/T1098/) | Account Manipulation | - | [`privilege-escalation`](../../workflows/privilege-escalation/README.md) |
 | [T1098.001](https://attack.mitre.org/techniques/T1098/001/) | Additional Cloud Credentials | - | [`cloud-compromise`](../../workflows/cloud-compromise/README.md) |
-| [T1105](https://attack.mitre.org/techniques/T1105/) | Ingress Tool Transfer | - | [`malware`](../../workflows/malware/README.md) |
-| [T1110.003](https://attack.mitre.org/techniques/T1110/003/) | Brute Force: Password Spraying | - | [`password-spray`](../../workflows/password-spray/README.md) |
-| [T1114.003](https://attack.mitre.org/techniques/T1114/003/) | Email Forwarding Rule | - | [`bec`](../../workflows/bec/README.md) |
-| [T1136](https://attack.mitre.org/techniques/T1136/) | Create Account | - | [`persistence`](../../workflows/persistence/README.md) |
+| [T1098.003](https://attack.mitre.org/techniques/T1098/003/) | Additional Cloud Roles | TA0003 Persistence | [`mfa-fatigue`](../../workflows/mfa-fatigue/README.md) |
+| [T1105](https://attack.mitre.org/techniques/T1105/) | Ingress Tool Transfer | TA0011 Command and Control | [`malicious-powershell`](../../workflows/malicious-powershell/README.md), [`malware`](../../workflows/malware/README.md) |
+| [T1110.003](https://attack.mitre.org/techniques/T1110/003/) | Password Spraying | TA0006 Credential Access | [`password-spray`](../../workflows/password-spray/README.md) |
+| [T1114.003](https://attack.mitre.org/techniques/T1114/003/) | Email Forwarding Rule | TA0009 Collection | [`bec`](../../workflows/bec/README.md), [`mfa-fatigue`](../../workflows/mfa-fatigue/README.md) |
+| [T1176.001](https://attack.mitre.org/techniques/T1176/001/) | Browser Extensions | TA0003 Persistence | [`persistence`](../../workflows/persistence/README.md) |
 | [T1190](https://attack.mitre.org/techniques/T1190/) | Exploit Public-Facing Application | - | [`vulnerability-exploitation`](../../workflows/vulnerability-exploitation/README.md), [`web-attacks`](../../workflows/web-attacks/README.md) |
 | [T1203](https://attack.mitre.org/techniques/T1203/) | Exploitation for Client Execution | - | [`vulnerability-exploitation`](../../workflows/vulnerability-exploitation/README.md) |
-| [T1204](https://attack.mitre.org/techniques/T1204/) | User Execution | - | [`phishing`](../../workflows/phishing/README.md) |
-| [T1204.002](https://attack.mitre.org/techniques/T1204/002/) | User Execution: Malicious File | - | [`malware`](../../workflows/malware/README.md) |
-| [T1219](https://attack.mitre.org/techniques/T1219/) | Remote Access Tools | - | [`unauthorized-rmm`](../../workflows/unauthorized-rmm/README.md) |
-| [T1486](https://attack.mitre.org/techniques/T1486/) | Data Encrypted for Impact | - | [`ransomware`](../../workflows/ransomware/README.md) |
-| [T1489](https://attack.mitre.org/techniques/T1489/) | Service Stop | - | [`ransomware`](../../workflows/ransomware/README.md) |
-| [T1490](https://attack.mitre.org/techniques/T1490/) | Inhibit System Recovery | - | [`ransomware`](../../workflows/ransomware/README.md) |
-| [T1499](https://attack.mitre.org/techniques/T1499/) | Endpoint Denial of Service | - | [`mail-bombing`](../../workflows/mail-bombing/README.md) |
+| [T1204.001](https://attack.mitre.org/techniques/T1204/001/) | Malicious Link | TA0002 Execution | [`phishing`](../../workflows/phishing/README.md) |
+| [T1204.002](https://attack.mitre.org/techniques/T1204/002/) | Malicious File | TA0002 Execution | [`malware`](../../workflows/malware/README.md), [`phishing`](../../workflows/phishing/README.md) |
+| [T1218](https://attack.mitre.org/techniques/T1218/) | System Binary Proxy Execution | TA0005 Defense Evasion | [`malicious-powershell`](../../workflows/malicious-powershell/README.md) |
+| [T1218.004](https://attack.mitre.org/techniques/T1218/004/) | InstallUtil | TA0005 Defense Evasion | [`malicious-powershell`](../../workflows/malicious-powershell/README.md) |
+| [T1218.005](https://attack.mitre.org/techniques/T1218/005/) | Mshta | TA0005 Defense Evasion | [`malicious-powershell`](../../workflows/malicious-powershell/README.md) |
+| [T1218.010](https://attack.mitre.org/techniques/T1218/010/) | Regsvr32 | TA0005 Defense Evasion | [`malicious-powershell`](../../workflows/malicious-powershell/README.md) |
+| [T1218.011](https://attack.mitre.org/techniques/T1218/011/) | Rundll32 | TA0005 Defense Evasion | [`malicious-powershell`](../../workflows/malicious-powershell/README.md) |
+| [T1219](https://attack.mitre.org/techniques/T1219/) | Remote Access Tools | TA0011 Command and Control | [`mail-bombing`](../../workflows/mail-bombing/README.md) |
+| [T1219.002](https://attack.mitre.org/techniques/T1219/002/) | Remote Desktop Software | TA0011 Command and Control | [`unauthorized-rmm`](../../workflows/unauthorized-rmm/README.md) |
+| [T1486](https://attack.mitre.org/techniques/T1486/) | Data Encrypted for Impact | TA0040 Impact | [`ransomware`](../../workflows/ransomware/README.md) |
+| [T1490](https://attack.mitre.org/techniques/T1490/) | Inhibit System Recovery | TA0040 Impact | [`ransomware`](../../workflows/ransomware/README.md) |
 | [T1505.003](https://attack.mitre.org/techniques/T1505/003/) | Web Shell | - | [`web-attacks`](../../workflows/web-attacks/README.md) |
 | [T1528](https://attack.mitre.org/techniques/T1528/) | Steal Application Access Token | - | [`cloud-compromise`](../../workflows/cloud-compromise/README.md) |
 | [T1530](https://attack.mitre.org/techniques/T1530/) | Data from Cloud Storage | - | [`cloud-compromise`](../../workflows/cloud-compromise/README.md) |
-| [T1534](https://attack.mitre.org/techniques/T1534/) | Internal Spearphishing | - | [`bec`](../../workflows/bec/README.md) |
-| [T1539](https://attack.mitre.org/techniques/T1539/) | Steal Web Session Cookie | - | [`account-takeover`](../../workflows/account-takeover/README.md) |
-| [T1543.003](https://attack.mitre.org/techniques/T1543/003/) | Windows Service | - | [`persistence`](../../workflows/persistence/README.md) |
-| [T1547.001](https://attack.mitre.org/techniques/T1547/001/) | Registry Run Keys / Startup Folder | - | [`persistence`](../../workflows/persistence/README.md) |
+| [T1534](https://attack.mitre.org/techniques/T1534/) | Internal Spearphishing | TA0008 Lateral Movement | [`bec`](../../workflows/bec/README.md) |
+| [T1539](https://attack.mitre.org/techniques/T1539/) | Steal Web Session Cookie | TA0006 Credential Access | [`account-takeover`](../../workflows/account-takeover/README.md) |
+| [T1543.003](https://attack.mitre.org/techniques/T1543/003/) | Windows Service | TA0003 Persistence | [`persistence`](../../workflows/persistence/README.md) |
+| [T1546.003](https://attack.mitre.org/techniques/T1546/003/) | Windows Management Instrumentation Event Subscription | TA0003 Persistence | [`persistence`](../../workflows/persistence/README.md) |
+| [T1547.001](https://attack.mitre.org/techniques/T1547/001/) | Registry Run Keys / Startup Folder | TA0003 Persistence | [`persistence`](../../workflows/persistence/README.md) |
 | [T1548.002](https://attack.mitre.org/techniques/T1548/002/) | Bypass User Account Control | - | [`privilege-escalation`](../../workflows/privilege-escalation/README.md) |
-| [T1566.001](https://attack.mitre.org/techniques/T1566/001/) | Spearphishing Attachment | - | [`phishing`](../../workflows/phishing/README.md) |
-| [T1566.002](https://attack.mitre.org/techniques/T1566/002/) | Spearphishing Link | - | [`phishing`](../../workflows/phishing/README.md) |
+| [T1564.008](https://attack.mitre.org/techniques/T1564/008/) | Email Hiding Rules | TA0005 Defense Evasion | [`bec`](../../workflows/bec/README.md), [`mail-bombing`](../../workflows/mail-bombing/README.md) |
+| [T1566](https://attack.mitre.org/techniques/T1566/) | Phishing | TA0001 Initial Access | [`mail-bombing`](../../workflows/mail-bombing/README.md), [`ransomware`](../../workflows/ransomware/README.md) |
+| [T1566.001](https://attack.mitre.org/techniques/T1566/001/) | Spearphishing Attachment | TA0001 Initial Access | [`phishing`](../../workflows/phishing/README.md) |
+| [T1566.002](https://attack.mitre.org/techniques/T1566/002/) | Spearphishing Link | TA0001 Initial Access | [`phishing`](../../workflows/phishing/README.md) |
 | [T1567.002](https://attack.mitre.org/techniques/T1567/002/) | Exfiltration to Cloud Storage | - | [`exfiltration`](../../workflows/exfiltration/README.md) |
 | [T1568.002](https://attack.mitre.org/techniques/T1568/002/) | Domain Generation Algorithms | - | [`c2`](../../workflows/c2/README.md) |
-| [T1570](https://attack.mitre.org/techniques/T1570/) | Lateral Tool Transfer | - | [`lateral-movement`](../../workflows/lateral-movement/README.md) |
+| [T1569.002](https://attack.mitre.org/techniques/T1569/002/) | Service Execution | TA0002 Execution | [`lateral-movement`](../../workflows/lateral-movement/README.md) |
+| [T1570](https://attack.mitre.org/techniques/T1570/) | Lateral Tool Transfer | TA0008 Lateral Movement | [`lateral-movement`](../../workflows/lateral-movement/README.md), [`ransomware`](../../workflows/ransomware/README.md) |
 | [T1572](https://attack.mitre.org/techniques/T1572/) | Protocol Tunneling | - | [`dns-tunneling`](../../workflows/dns-tunneling/README.md) |
 | [T1573](https://attack.mitre.org/techniques/T1573/) | Encrypted Channel | - | [`c2`](../../workflows/c2/README.md) |
 | [T1595.002](https://attack.mitre.org/techniques/T1595/002/) | Vulnerability Scanning | - | [`web-attacks`](../../workflows/web-attacks/README.md) |
-| [T1621](https://attack.mitre.org/techniques/T1621/) | Multi-Factor Authentication Request Generation | - | [`account-takeover`](../../workflows/account-takeover/README.md) |
-| [T1656](https://attack.mitre.org/techniques/T1656/) | Impersonation | - | [`bec`](../../workflows/bec/README.md), [`mail-bombing`](../../workflows/mail-bombing/README.md) |
+| [T1621](https://attack.mitre.org/techniques/T1621/) | Multi-Factor Authentication Request Generation | TA0006 Credential Access | [`account-takeover`](../../workflows/account-takeover/README.md), [`mail-bombing`](../../workflows/mail-bombing/README.md), [`mfa-fatigue`](../../workflows/mfa-fatigue/README.md) |
+| [T1656](https://attack.mitre.org/techniques/T1656/) | Impersonation | TA0005 Defense Evasion | [`bec`](../../workflows/bec/README.md), [`mail-bombing`](../../workflows/mail-bombing/README.md) |
+| [T1667](https://attack.mitre.org/techniques/T1667/) | Email Bombing | TA0040 Impact | [`mail-bombing`](../../workflows/mail-bombing/README.md) |
 
 ## Notes
 
-- Mail bombing has no dedicated ATT&CK technique. It is mapped by effect (T1499) and by the impersonation that usually follows (T1656).
+- Mail bombing maps to T1667 *Email Bombing* (added in ATT&CK v17). The legacy spec mapped it by effect to T1499 *Endpoint Denial of Service*; that forced mapping was dropped when the workflow migrated.
 - T1219 was renamed *Remote Access Tools* in ATT&CK v17; the ID is unchanged.
 - Legacy specs carry no tactic; tactics appear when a workflow migrates to a `WorkflowDefinition` (every mapping there names its tactic and a rationale, so no mapping is forced).

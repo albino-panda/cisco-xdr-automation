@@ -1,24 +1,36 @@
 # Workflows
 
-One directory per incident type. Each holds a `README.md` for analysts and a `workflow.yaml` specification to build from. Exported XDR workflow JSON goes next to them as `workflow.export.json`.
+One directory per incident type. Each holds a `README.md` for analysts. A workflow not yet migrated also holds its legacy `workflow.yaml` specification and `scenarios/`. Exported XDR workflow JSON goes next to them as `workflow.export.json`.
+
+## Migrated workflows (Phases 2 and 3)
+
+These run on the workflow framework (`src/xdr_response/workflows/<x_snake>/`); their scenarios are in `tests/fixtures/workflows/<id>/`. ATT&CK ids, recommended actions, integrations and scenario counts are in the generated index [`docs/workflows/README.md`](../docs/workflows/README.md).
+
+A hand-off is a suggestion in the run notes, the workflow summary and the analyst notification: "run account-takeover for jsmith@example.com", with the record ids that justify it. It never starts the other workflow and never changes the package. When triggers overlap, the entry-vector workflow (phishing, password-spray, mfa-fatigue, mail-bombing, bec) handles the incident and hands the account off to account-takeover (architecture 14.10.2). The subjects of a hand-off are the entity the target workflow starts from: an account for `account-takeover`, an endpoint hostname for `persistence`, `unauthorized-rmm` and `credential-dumping`, a file hash for `malware`, a mailbox for `phishing` (14.11.2).
+
+| Workflow | Phase | Hands off to (`handoff_to`; when its evidence points there) |
+|---|---|---|
+| [`ransomware`](./ransomware/README.md) | 2 | - |
+| [`phishing`](./phishing/README.md) | 2 | `account-takeover` (a recipient signed in or was flagged after clicking) |
+| [`account-takeover`](./account-takeover/README.md) | 2 | - |
+| [`mail-bombing`](./mail-bombing/README.md) | 2 | `account-takeover` (takeover indications after the flood), `unauthorized-rmm` (malicious activity on the recipient's endpoint after the flood), `phishing` (a storm of malicious mail that is not a subscription bomb) |
+| [`malware`](./malware/README.md) | 2 | - |
+| [`mfa-fatigue`](./mfa-fatigue/README.md) | 2 | `account-takeover` (a fatigue prompt was approved) |
+| [`password-spray`](./password-spray/README.md) | 2 | `account-takeover` (a sprayed account signed in successfully) |
+| [`bec`](./bec/README.md) | 2 | `account-takeover` (identity compromise behind the mailbox abuse) |
+| [`malicious-powershell`](./malicious-powershell/README.md) | 3 | `malware` (a malicious payload the run wrote or started: scope and quarantine the file), `persistence` (a malicious or suspicious persistence item on an endpoint of a malicious run) |
+| [`credential-dumping`](./credential-dumping/README.md) | 3 | `account-takeover` (accounts exposed on a host with confirmed credential access: review sign-ins and cloud activity for use of the stolen credentials) |
+| [`lateral-movement`](./lateral-movement/README.md) | 3 | `account-takeover` (an account used for or tied to the movement is compromised), `credential-dumping` (credential access reported on a host of the movement) |
+| [`persistence`](./persistence/README.md) | 3 | - |
+| [`unauthorized-rmm`](./unauthorized-rmm/README.md) | 3 | `persistence` (the tool persists as a service, task or run key), `account-takeover` (a user of an affected endpoint shows high or confirmed identity risk, or a high-severity anomaly) |
+
+## Legacy specs (Phases 4 and 5)
 
 | Workflow | Severity | ATT&CK | Containment |
 |---|---|---|---|
-| [`ransomware`](./ransomware/README.md) | critical | T1486, T1490, T1489 | `isolate-endpoint`, `block-hash`, `revoke-session`, `disable-user` |
-| [`phishing`](./phishing/README.md) | medium | T1566.001, T1566.002, T1204 | `quarantine-email`, `block-url`, `block-domain`, `block-hash` |
-| [`mail-bombing`](./mail-bombing/README.md) | high | T1499, T1656 | `quarantine-email`, `revoke-session` |
-| [`bec`](./bec/README.md) | high | T1534, T1114.003, T1656 | `revoke-session`, `disable-user`, `quarantine-email`, `block-domain` |
-| [`account-takeover`](./account-takeover/README.md) | high | T1078.004, T1621, T1539 | `revoke-session`, `disable-user`, `block-ip` |
-| [`malware`](./malware/README.md) | medium | T1204.002, T1105 | `block-hash`, `isolate-endpoint`, `block-domain` |
-| [`malicious-powershell`](./malicious-powershell/README.md) | medium | T1059.001, T1027 | `block-domain`, `isolate-endpoint` |
-| [`lateral-movement`](./lateral-movement/README.md) | high | T1021.001, T1021.002, T1021.006, T1570 | `isolate-endpoint`, `revoke-session`, `disable-user` |
 | [`c2`](./c2/README.md) | high | T1071.001, T1573, T1568.002 | `block-domain`, `block-ip`, `isolate-endpoint` |
 | [`dns-tunneling`](./dns-tunneling/README.md) | high | T1071.004, T1572 | `block-domain`, `isolate-endpoint` |
-| [`password-spray`](./password-spray/README.md) | medium | T1110.003 | `block-ip`, `revoke-session`, `disable-user` |
-| [`credential-dumping`](./credential-dumping/README.md) | critical | T1003.001, T1003.002, T1003.003 | `isolate-endpoint`, `revoke-session`, `disable-user` |
 | [`privilege-escalation`](./privilege-escalation/README.md) | high | T1068, T1548.002, T1098 | `isolate-endpoint`, `revoke-session`, `disable-user` |
-| [`persistence`](./persistence/README.md) | medium | T1547.001, T1053.005, T1543.003, T1136 | `block-hash`, `isolate-endpoint` |
-| [`unauthorized-rmm`](./unauthorized-rmm/README.md) | high | T1219 | `block-domain`, `block-hash`, `isolate-endpoint` |
 | [`exfiltration`](./exfiltration/README.md) | critical | T1041, T1567.002, T1048 | `block-domain`, `block-ip`, `isolate-endpoint`, `disable-user` |
 | [`vulnerability-exploitation`](./vulnerability-exploitation/README.md) | high | T1190, T1203 | `block-ip`, `block-url`, `isolate-endpoint` |
 | [`cloud-compromise`](./cloud-compromise/README.md) | high | T1078.004, T1098.001, T1528, T1530 | `revoke-session`, `disable-user`, `block-ip` |
