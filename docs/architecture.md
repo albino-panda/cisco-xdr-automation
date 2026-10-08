@@ -2,7 +2,7 @@
 
 Status: owner deliverable 1 (brief section 49). This is the specification that the Phase 0 components are coded against. Date: 2026-10-06.
 
-Sections 1 to 12 answer the twelve questions in the brief. Section 13, **Phase 0 contract**, is binding for implementers: module paths, class names, enum values and signatures there must be used exactly as written. Where this document and an implementation disagree, the implementation is wrong until this document is changed in the same commit.
+Sections 1 to 12 answer the twelve questions in the brief. Section 13, **Phase 0 contract**, and section 14, **Phase 1-5 contract**, are binding for implementers: module paths, class names, enum values and signatures there must be used exactly as written. Where this document and an implementation disagree, the implementation is wrong until this document is changed in the same commit.
 
 **The non-negotiable lifecycle.** Every component in this document serves it.
 
@@ -58,7 +58,7 @@ Sections 1 to 12 answer the twelve questions in the brief. Section 13, **Phase 0
 - **Integrations missing from `integrations/`:** Defender for Endpoint, Defender for O365, Intune, Microsoft Cloud, VirusTotal, AlienVault OTX, HIBP, Secure Malware Analytics, Secure Cloud Analytics. (`docs/integrations.md` already covers all 16.)
 - **Extra integrations, not in the brief:** cloudflare, servicenow. Kept as optional add-ons; no adapter in Phase 0.
 - **Workflows missing:** mfa-fatigue (today only scenario `account-takeover/05-mfa-fatigue-approved`), suspicious-authentication, threat-intel-sweep.
-- **Workflows named differently:** `powershell` (brief: `malicious-powershell`), `rmm` (brief: `unauthorized-rmm`). Mapped by a name table, not renamed (renaming breaks the 69 tests).
+- **Workflows named differently:** `powershell` (brief: `malicious-powershell`), `rmm` (brief: `unauthorized-rmm`). Phase 1 renames both directories (`workflows/malicious-powershell`, `workflows/unauthorized-rmm`) together with the legacy tests, agents and MITRE docs (section 14.5; this supersedes the earlier "name table, no rename" decision).
 - **Extra workflows:** `vulnerability-exploitation`, `web-attacks`. Kept as add-ons.
 - **Atomics missing:** enrich_url/email_address/user/endpoint; most investigate_* and search_*_enterprise; isolate_defender_endpoint, delete_malicious_email, intune_device_action, terminate_process, quarantine_file, remove_persistence, remove_privileged_role; all verification, restoration and approval atomics. In the runtime they are action types in the catalog (section 13.6).
 - **Tests missing:** safety tests (`test_isolation_without_approval_fails` and the others in section 10), mocked-API integration tests, lifecycle tests.
@@ -223,7 +223,7 @@ flowchart LR
 | 4 Engines | `approval`, `execution`, `verification`, `restoration`, `dryrun`, `reporting`, `scoring` | layers 0 to 3 |
 | 5 Composition | `lifecycle` (state machine, orchestrator, runtime builder) | everything |
 
-Inside the package, imports are absolute (`from xdr_response.models import RecommendedAction`). No module is named `logging` or `secrets` at top level; the subpackages `xdr_response.logs` and `xdr_response.secrets` are safe because every import is absolute. `guard.py` never imports `approval`: the verifier is injected with `guard.register_verifier(...)` by `lifecycle.runtime.build_runtime`.
+Inside the package, imports are absolute (`from xdr_response.models import RecommendedAction`). No module is named `logging` or `secrets` at top level; the subpackages `xdr_response.logs` and `xdr_response.secrets` are safe because every import is absolute. `guard.py` never imports `approval`: the verifier is injected with `guard.register_verifier(...)` by `lifecycle.runtime.build_runtime`. Phase 1 adds the atomics (4a) and workflows (4b) layers and the read-zone import rules of section 14.0.
 
 ---
 
@@ -290,7 +290,7 @@ var/                                             (git-ignored runtime data: audi
 
 `src/xdr_response/lifecycle/plan_bridge.py` (xdr_plan `Plan` to `ProposedAction`), `src/xdr_response/scoring/engine.py`, investigation models for the nested fields in 1.6, XDR workflow JSON exports under `workflows/<name>/xdr/`, `docs/workflows/`, spec alignment for conflicts C1 to C5 (atomic YAML, scenarios, planner) with the matching test updates.
 
-### 3.3 Spec names to runtime names (no directory renames)
+### 3.3 Spec names to runtime names (integration and atomic dirs are not renamed; two workflow dirs are renamed in Phase 1, 14.5)
 
 | Spec dir (`integrations/`) | Adapter (`src/xdr_response/integrations/`) |
 |---|---|
@@ -317,8 +317,8 @@ var/                                             (git-ignored runtime data: audi
 
 | Spec workflow (`workflows/`) | Brief name |
 |---|---|
-| powershell | malicious-powershell |
-| rmm | unauthorized-rmm |
+| powershell | malicious-powershell (directory renamed in Phase 1, 14.5) |
+| rmm | unauthorized-rmm (directory renamed in Phase 1, 14.5) |
 | password-spray | password spraying |
 | vulnerability-exploitation, web-attacks | add-ons, not in the brief |
 
@@ -646,7 +646,7 @@ All models are pydantic 2 (`ConfigDict(frozen=True, extra="forbid")` unless stat
 
 **Risk and confidence** are separate integers 0 to 100: `risk_score` is impact (what happens if this is real), `confidence_score` is evidence strength (how sure we are). Bands: 0-29 `LOW`, 30-59 `MEDIUM`, 60-79 `HIGH`, 80-100 `CRITICAL` (`risk_band(score)`); confidence is shown as a percentage.
 
-**Scoring (design-only in Phase 0).** Phase 1 adds `xdr_response.scoring.engine.ScoringEngine.score(signals: Sequence[ScoringSignal]) -> ScoreBreakdown`, with configurable weights in `thresholds.yaml` (`scoring.weights`). Inputs: Secure Endpoint and Defender detections, VirusTotal, OTX, Umbrella, Secure Malware Analytics, Secure Cloud Analytics behaviour, authentication anomaly, network behaviour, email verdict, persistence, lateral movement, campaign association, critical asset involvement. Vendor reputation is one signal with a capped weight, never absolute truth. A failed source lowers confidence and is listed in the breakdown; it never blocks a recommendation backed by other evidence. Every contribution names its evidence numbers, so the decision card can explain the score.
+**Scoring (design-only in Phase 0).** Phase 1 adds `xdr_response.scoring.engine.ScoringEngine.score(signals: Sequence[ScoringSignal], *, context: ScoringContext) -> ScoreBreakdown` (binding definition: 14.2), with configurable weights in `thresholds.yaml` (`scoring.weights`). Inputs: Secure Endpoint and Defender detections, VirusTotal, OTX, Umbrella, Secure Malware Analytics, Secure Cloud Analytics behaviour, authentication anomaly, network behaviour, email verdict, persistence, lateral movement, campaign association, critical asset involvement. Vendor reputation is one signal with a capped weight, never absolute truth. A failed source lowers confidence and is listed in the breakdown; it never blocks a recommendation backed by other evidence. Every contribution names the record ids of its evidence (14.1.2); the decision card maps them to evidence numbers, so it can explain the score.
 
 **Decision card** (`reporting.render_decision_card(package)`):
 
@@ -760,8 +760,8 @@ Assets: the authority to change state in 16 security products; the audit trail; 
 |---|---|---|
 | **0 Foundation** | Models, configuration, secrets interface, logging and redaction, audit trail, 16 integration adapters (VERIFIED endpoints only) with health checks, approval engine and tokens, guard, containment execution engine, verification engine, restoration engine and registry, dry-run system, reporting (decision card, result table, release checklist), lifecycle state machine and orchestrator, simulator CLI, validation tools, docs (architecture, approval-model, containment-model, rollback, threat-scoring), LICENSE/CHANGELOG/CONTRIBUTING/SECURITY | All Phase 0 unit, integration, safety and simulation tests pass with the 69 existing tests; `tools/validation/check_endpoints.py` passes; the four required safety tests pass |
 | **1 Shared atomic workflows** | `plan_bridge` from `xdr_plan` to packages; scoring engine; normalized investigation models (nested fields of 1.6); the brief's enrichment and investigation atomics as orchestrated operations; spec alignment C1 to C5 (revoke-session requires approval, `auto_approve` removed, protected becomes ELEVATED, unlock codes removed, over-limit becomes ELEVATED) with scenario updates; per-action allow-lists; XDR trigger workflow export | All 105 scenarios replay through the new runtime in dry run; no scenario asserts `requires_approval: false` |
-| **2** | ransomware, phishing, account-takeover, mail-bombing, malware, **mfa-fatigue** (new; seeded from `account-takeover/05-mfa-fatigue-approved`), password-spray; **bec** also lands here (not named in the brief's phases; it shares the email atomics with phishing) | Each workflow README has the 16 sections of brief 46; scenarios pass in dry run and through the lifecycle with mocked adapters |
-| **3** | malicious-powershell (spec dir `powershell`), credential-dumping, lateral-movement, persistence, unauthorized-rmm (spec dir `rmm`, `approved_rmm` allow-list) | as above |
+| **2** | ransomware, phishing, account-takeover, mail-bombing, malware, **mfa-fatigue** (new; seeded from `account-takeover/05-mfa-fatigue-approved`), password-spray; **bec** also lands here (not named in the brief's phases; it shares the email atomics with phishing) | Each workflow README has the 17 headings of 14.5 (brief 46's 16 items, with required and optional integrations as separate sections); scenarios pass in dry run and through the lifecycle with mocked adapters |
+| **3** | malicious-powershell (spec dir renamed from `powershell` in Phase 1), credential-dumping, lateral-movement, persistence, unauthorized-rmm (spec dir renamed from `rmm` in Phase 1, `approved_rmm` allow-list) | as above |
 | **4** | c2, dns-tunneling, exfiltration, **suspicious-authentication** (new), cloud-compromise | as above |
 | **5** | privilege-escalation, **threat-intel-sweep** (new), cross-source correlation; add-ons vulnerability-exploitation and web-attacks are aligned last | as above, plus cross-workflow correlation tests |
 
@@ -1515,7 +1515,7 @@ class IntegrationHealth(BaseModel):
     detail: str = ""
     latency_ms: int | None = None
 
-# models/investigation.py   (Phase 0 minimal; Phase 1 adds typed result models)
+# models/investigation.py   (Phase 0 minimal; the Phase 1 typed records live in xdr_response.atomics.records, 14.1.2)
 class InvestigationQuery(BaseModel):
     action_type: "ActionType"                 # an INVESTIGATION-category action type
     subject: Observable
@@ -1591,7 +1591,7 @@ Catalog invariants (unit-tested): `state_changing` is true exactly for CONTAINME
 | `revoke_app_credentials` | REMEDIATION | no | none | CREDENTIAL | no | entra | Would revoke credentials | none |
 | `remove_application` | REMEDIATION | no | none | APPLICATION | no | intune, defender_endpoint | Would remove application | none |
 
-Brief mapping: isolate_secure_endpoint and isolate_defender_endpoint are `isolate_endpoint` with `params["integration"]` `secure_endpoint` / `defender_endpoint`; block_domain_umbrella is `block_domain` with `umbrella`; revoke_entra_sessions is `revoke_sessions`; disable_entra_user is `disable_user`; delete_malicious_email is `delete_email`; intune_device_action is `lock_device` (other Intune actions are UNVERIFIED and out of scope).
+Brief mapping: isolate_secure_endpoint and isolate_defender_endpoint are `isolate_endpoint` landing on the product `secure_endpoint` / `defender_endpoint` (executed natively through `cisco_xdr` when a native action is configured for that product, else `params["integration"]` is the product adapter; section 4.2 and 14.1.7); block_domain_umbrella is `block_domain` with `umbrella`; revoke_entra_sessions is `revoke_sessions`; disable_entra_user is `disable_user`; delete_malicious_email is `delete_email`; intune_device_action is `lock_device` (other Intune actions are UNVERIFIED and out of scope).
 
 **State-changing: restoration** (`purpose=release`, `reversible=False`, `creates_control=False`)
 
@@ -1885,6 +1885,7 @@ class AssetMatch(BaseModel):
     user_patterns: list[str] = []
     groups: list[str] = []
     tags: list[str] = []
+    roles: list[str] = []                     # directory roles (Asset.roles), case-insensitive (14.9.7)
     ip_cidrs: list[str] = []
 
 class CriticalAssetClassConfig(BaseModel):
@@ -2787,3 +2788,1848 @@ Round 2 of the adversarial suite (`tests/safety/`, tests named `test_r2_*` plus 
 - The audit head anchor is authenticated with HMAC-SHA256 under the audit chain key (`xdr_response.audit.keys`; `bootstrap` passes the `AUDIT_CHAIN_KEY` secret; fallback env `AUDIT_CHAIN_KEY`, then a per-user key file outside the audit directory, `XDR_RESPONSE_AUDIT_KEY_FILE` or `~/.xdr_response/audit-chain.key`). Rewriting history and re-anchoring with the public hashing helpers is detected (on open and by `verify()`). Anchors written before this change carry no MAC and are refused: verify the file with `tools/validation/verify_audit_chain.py` and re-anchor it with the key. A rollback of file and anchor to an older genuine state is still only detected with externally exported anchors (`AuditTrail.anchor()`), which production should write to write-once storage.
 
 **Test infrastructure changes that follow from the contract** (no safety test was weakened): `tests/conftest.py` uses the private harness reset; `install_fake_verifier` re-uses the sealed FakeVerifier; the execution harness and restoration fixtures use live settings (`runtime.dry_run=false`); unit tests that sent raw writes inside an authorization now carry the approved target; manifests in test adapters document their paths; the vendor unit tests mock the identity lookups.
+
+---
+
+## 14. Phase 1-5 contract
+
+Status: binding for Phases 1 to 5. Written by the Phase 1 design agent on 2026-10-08 from sections 1 to 13, `docs/integrations.md`, `docs/threat-scoring.md`, `src/xdr_response/lifecycle/*.py`, the legacy `workflows/*/workflow.yaml` specs and `engine/xdr_plan`.
+
+The rules of section 13 apply unchanged: names, fields, signatures and file paths below are exact; bodies shown as `...` are for the owning key; anything not listed is private (`_` prefix) and may not be imported by another key; code runs on Python 3.12 and 3.13; models derive from `xdr_response.models._base.FrozenModel` (`frozen=True, extra="forbid"`), scores use `Score` (int 0-100), datetimes are `AwareDatetime`. Phase 1 model modules are **not** re-exported from `xdr_response.models` (that package stays core-owned and unchanged); import them from the module named here.
+
+Ownership (14.6): every new or changed file of Phase 1 belongs to exactly one of the keys `scoring`, `enrichment`, `investigation`, `correlation-evidence`, `containment-atomics`, `notifications`, `workflow-framework`, `legacy-alignment`. A key only edits files it owns. A key that needs a contract change reports it; `workflow-framework` (the Phase 1 integrator) applies it to this section in the same commit as the code.
+
+Contradictions with sections 1 to 13 fixed while writing this section (one-line edits there): workflow directory renames (1.4, 3.3, 12); the scoring signature and evidence references (9); the README heading count (12); the location of typed investigation records (13.5); native-first routing of the brief's `isolate_*_endpoint` names (13.6); layering pointer (2.4).
+
+Phase 0 gap found while writing: `tools/validation/validate_config.py`, `tools/validation/check_endpoints.py` and `tools/validation/README.md` (3.1, 13.2) do not exist; the manifest-to-document cross-check runs as `tests/unit/vendors/test_vendor_contracts.py`. Phase 1 adds the two thin CLIs and the README (owner `workflow-framework`, 14.6).
+
+### 14.0 Read zone, layering and build order
+
+#### 14.0.1 The read zone
+
+The owner rule becomes a code boundary. Investigation and recommendation are automatic and happen in the **read zone**; every state change happens in the Phase 0 **write zone**, reached only through `ResponseOrchestrator.submit_decision` / `submit_release_decision` with a token issued to authenticated humans.
+
+| | Read zone | Write zone (Phase 0, unchanged) |
+|---|---|---|
+| Code | `xdr_response.scoring`, `xdr_response.atomics`, `xdr_response.workflows`, `xdr_response.lifecycle.plan_bridge`, `xdr_response.lifecycle.workflow_adapter` | `approval`, `execution`, `verification`, `restoration`, `dryrun`, driven by the orchestrator |
+| Adapter access | only through `ReadOnlyAdapters` (14.1.1): `enrich`, `investigate`, health, manifests, adapter names, the Cisco XDR `respond/observables` listing (READ) | `ActionRunner` inside `guard.authorized(...)` |
+| Output | records, enrichment reports, correlation, scores, `ProposedAction`s, notification drafts | executions, verifications, registry entries, tokens |
+
+Code in the read zone never:
+
+- holds an `IntegrationAdapter`, `AdapterRegistry` or `GuardedHttpClient` object (only `atomics/context.py` touches the registry, inside `ReadOnlyAdapters`);
+- calls `execute`, or a method named after a state-changing `ActionType`, on any object other than the containment builder module of 14.1.7;
+- imports `xdr_response.guard`, `xdr_response.approval.{tokens,engine,authenticator,ledger,package,_quorum}`, `xdr_response.execution`, `xdr_response.restoration`, `xdr_response.dryrun`, `xdr_response.verification`, `xdr_response.integrations.<vendor>` modules, `xdr_response.integrations.{http,auth}` or `httpx`;
+- constructs `ApprovalToken`, `ApprovalTokenClaims`, `TokenActionGrant`, `ApproverClaim`, `AnalystDecision`, `DecisionRequest`, `ApproverCredential`, `AuthenticatedPrincipal`, `RecommendedAction`, `ActionPackage` or its subclasses, `ActionRequest` or `ActionBinding` (its output type is `ProposedAction`; numbering, approval levels, idempotency keys and packages stay with `PackageBuilder`);
+- chooses or changes an approval level in either direction (ELEVATED comes only from the three Phase 0 rules: critical-asset policy, `always_elevated`, blast-radius caps; a workflow influences the first only by passing investigated asset context, which `PackageBuilder` merges and can never shrink, 13.25);
+- writes audit records, except `ENRICHMENT_RESULT` and `INVESTIGATION_COMPLETED`, which `WorkflowInvestigator` (14.3.6) writes through `AuditRecorder`;
+- uses `getattr`, `setattr`, `delattr`, `vars`, `globals`, `__import__`, `importlib`, `eval`, `exec`, `compile`, `open`, `subprocess`, `socket`, `os.system`, or reads a private attribute of another object (`x._y` where `x` is not `self` or `cls`).
+
+Allowed exceptions: `atomics/context.py` imports `xdr_response.integrations.registry` and `xdr_response.integrations.simulated`; `atomics/notifications/sinks.py` opens its own JSONL outbox file; `lifecycle/workflow_adapter.py` imports `xdr_response.audit.events`; `approval.critical_assets` and `config.policy` are pure and may be imported anywhere in the read zone.
+
+Enforcement (owner `workflow-framework`, `tests/safety/test_read_zone.py`): an AST lint over every read-zone file for the rules above; a runtime test that runs every workflow scenario and every legacy replay and asserts zero `STATE_CHANGING` operations recorded by `SimulatedEnvironment` and zero guard denials before the analyst decision; and the Phase 0 guard itself (a state-changing call outside an authorized context still fails closed).
+
+#### 14.0.2 Layering (extends 2.4)
+
+| Layer | Packages | May import |
+|---|---|---|
+| 0 Foundation | Phase 0 plus `models.scoring` and the **model modules** `atomics.records`, `atomics.enrichment.models`, `atomics.correlation.models`, `atomics.containment.models`, `atomics.notifications.models`, `workflows.definition` | layer 0 only (model modules import each other along the arrows below) |
+| 4 Engines | Phase 0 plus `scoring` (engine) | layers 0 to 3 |
+| 4a Atomics | `xdr_response.atomics` | layers 0 to 3, `scoring`, `approval.critical_assets`, `config.policy` |
+| 4b Workflows | `xdr_response.workflows` | layers 0 to 4a |
+| 5 Composition | `lifecycle` (adds `plan_bridge`, `workflow_adapter`, `observers`) | everything; `plan_bridge` alone may import `engine/xdr_plan` (until the end of Phase 5) |
+
+Inside `atomics` (no cycles): `records` <- `context` <- {`enrichment`, `investigation`, `containment`}; `records` <- `evidence` <- `correlation`; `notifications` imports only the model modules and Phase 0 models; the model module `workflows.definition` imports `models.scoring` and `atomics.correlation.models`. `atomics/__init__.py` composes the atomic name table lazily (14.1.9).
+
+#### 14.0.3 Build order (contract first, then parallel)
+
+1. **Step 0 (one small commit per key):** each key lands its model module with exactly the names, fields, types and defaults of this section: `atomics/records.py` (investigation), `models/scoring.py` (scoring), `atomics/context.py` and `atomics/__init__.py` (workflow-framework), `atomics/enrichment/models.py` (enrichment), `atomics/correlation/models.py` (correlation-evidence), `atomics/containment/models.py` (containment-atomics), `atomics/notifications/models.py` (notifications), `workflows/definition.py` (workflow-framework).
+2. **Step 1 (parallel):** all eight keys build their behaviour. A key may import other keys' step 0 modules; for another key's behaviour it tests against local fakes in its own test directory.
+3. **Step 2 (integration, workflow-framework):** lifecycle wiring, legacy replay, scenario runner, CI, the Phase 1 exit criteria (14.7) and the "as built" notes appended to this section.
+
+### 14.1 Atomic library
+
+All atomics are plain functions taking an `AtomicContext` first. Read atomics (enrichment, investigation, search) never raise because of a source: a failing source becomes a `SourceStatus` with outcome `FAILED`, and the other sources still answer. They raise only for invalid caller input (`ValueError` for an unparseable subject).
+
+#### 14.1.1 Context and the read-only adapter facade (owner: workflow-framework)
+
+```python
+# xdr_response/atomics/context.py
+class ReadOnlyAdapters:
+    """The only door from the read zone to the adapters. Never returns an adapter object."""
+    __slots__ = ("__registry",)
+    def __init__(self, registry: AdapterRegistry) -> None: ...
+    def enabled(self) -> tuple[str, ...]: ...                          # registry.enabled(), INTEGRATION_NAMES order
+    def is_simulated(self, integration: str) -> bool: ...              # isinstance(adapter, SimulatedAdapter)
+    def manifest(self, integration: str) -> CapabilityManifest: ...    # KeyError for unknown names
+    def health(self, integration: str) -> IntegrationHealth: ...       # adapter.health_check(); never raises
+    def enrichers(self, observable_type: ObservableType) -> tuple[str, ...]: ...   # names, registry.for_observable order
+    def enrich(self, integration: str, observable: Observable) -> EnrichmentResult: ...
+        # integration must be in enrichers(observable.type), else CapabilityNotSupportedError; adapter errors propagate
+    def investigators(self, action_type: ActionType) -> tuple[str, ...]: ...
+        # INVESTIGATION types only (ValueError otherwise); names, registry.for_action order
+    def investigate(self, integration: str, query: InvestigationQuery) -> InvestigationResult: ...
+        # integration must be in investigators(query.action_type); adapter errors propagate
+    def executors(self, action_type: ActionType) -> tuple[str, ...]: ...
+        # CONTAINMENT / REMEDIATION types only (ValueError otherwise): names of enabled adapters whose manifest
+        # supports the action, catalog preference order (native first). Names only: for routing, never for calling.
+    def native_response_actions(self, observable: Observable, *, module: str | None = None
+                                ) -> tuple[NativeResponseAction, ...]: ...
+        # CiscoXdrAdapter.list_response_actions (READ, respond/observables); () when cisco_xdr is not enabled;
+        # adapter errors propagate (the router records them and falls back)
+
+@dataclass(frozen=True)
+class AtomicContext:
+    incident: Incident
+    adapters: ReadOnlyAdapters
+    settings: Settings
+    clock: Clock
+    disclosure: DisclosurePolicy
+    critical_assets: CriticalAssetPolicy
+    allowlists: AllowlistPolicy
+    lookback: timedelta = timedelta(hours=24)
+    dry_run: bool = True                         # informational for renderers; reads behave the same in dry run
+    def now(self) -> datetime: ...               # clock.now()
+    def window(self) -> tuple[datetime, datetime]: ...   # (min(incident.created_at, now) - lookback, now)
+
+def build_context(incident: Incident, registry: AdapterRegistry, settings: Settings, *, clock: Clock,
+                  dry_run: bool, lookback: timedelta | None = None) -> AtomicContext: ...
+    # DisclosurePolicy(settings.exclusions), CriticalAssetPolicy(settings.critical_assets),
+    # AllowlistPolicy(settings.allowlists), ReadOnlyAdapters(registry)
+```
+
+#### 14.1.2 Normalized records (owner: investigation)
+
+Every fact an atomic learns is a typed **record** with a deterministic `record_id`. Evidence (14.1.6), scoring signals (14.2) and correlation links (14.1.5) refer to records by id only. Records are created only by the normalizers (14.1.4), the enrichment atomics (14.1.3) and, for legacy replay, `plan_bridge` (14.3.8). The framework never synthesizes a record from a computation: a computed pattern (for example "14 push prompts in 5 minutes") is a `ScoringSignal` or a `CorrelationLink` that cites the records it was computed from.
+
+```python
+# xdr_response/atomics/records.py
+Level = Literal["none", "low", "medium", "high", "unknown"]
+
+class RecordKind(StrEnum):
+    ENRICHMENT = "enrichment"; ENDPOINT = "endpoint"; DETECTION = "detection"; PROCESS_EVENT = "process_event"
+    NETWORK_CONNECTION = "network_connection"; DNS_QUERY = "dns_query"; HASH_PREVALENCE = "hash_prevalence"
+    PERSISTENCE_ITEM = "persistence_item"; USER_PROFILE = "user_profile"; SIGN_IN = "sign_in"; ANOMALY = "anomaly"
+    MFA_EVENT = "mfa_event"; MAILBOX_RULE = "mailbox_rule"; ROLE_CHANGE = "role_change"
+    EMAIL_MESSAGE = "email_message"; CLOUD_APP = "cloud_app"; GENERIC = "generic"
+
+def make_record_id(integration: str, kind: RecordKind, subject: Observable,
+                   natural_key: Mapping[str, object]) -> str: ...
+    # "rec_" + sha256_hex(canonical_json({"i": integration, "k": kind.value, "t": subject.type.value,
+    #   "v": subject.value.strip().lower(), "n": natural_key}, allow_floats=True))[:32]
+
+class RecordBase(FrozenModel):
+    kind: RecordKind
+    record_id: str                       # validator: == make_record_id(integration, kind, subject, natural_key())
+    integration: str                     # validator: member of INTEGRATION_NAMES (never "ai" or "analyst")
+    atomic: str                          # producing atomic, e.g. "investigate_endpoint" ("legacy:<atomic-id>" in replay)
+    subject: Observable                  # what the atomic was asked about (normalized value)
+    observed_at: AwareDatetime | None = None
+    reference: str | None = None         # vendor object id or console link; validator: redact_text(reference) == reference
+    def natural_key(self) -> dict[str, object]: ...   # per kind, table below
+    def rule_item(self) -> dict[str, Any]: ...        # model_dump(mode="json"); every field present (None when unknown)
+    def evidence_fields(self) -> dict[str, Any]: ...  # fields copied into EvidenceDraft.data["fields"] (table below)
+```
+
+Validators pass free-text fields (`command_line`, `subject_line`, `detail`, `conditions`, `failure_reason`, `GenericRecord.attributes`) through `get_redactor()` and cap them (command line 1024 characters, subject line 200, others 500, attributes 4 KiB). Entity values are normalized with `normalize_target` for their kind (hostnames upper case, users and email addresses lower case, domains lower case without trailing dot, IPs compressed, hashes lower case). Records use the Phase 0 `Verdict` and `Severity` enums (upper-case values in rule items).
+
+```python
+class EnrichmentRecord(RecordBase):              # one source's answer about one observable (from an EnrichmentResult)
+    kind: Literal[RecordKind.ENRICHMENT] = RecordKind.ENRICHMENT
+    verdict: Verdict
+    risk_score: Score
+    confidence: Score
+    categories: tuple[str, ...] = ()             # vendor categories, e.g. "Malware", "Phishing"
+    first_seen: AwareDatetime | None = None
+    detail: str = ""                             # the source's own summary (first EvidenceDraft.summary of the result)
+
+class EndpointRecord(RecordBase):
+    kind: Literal[RecordKind.ENDPOINT] = RecordKind.ENDPOINT
+    hostname: str                                # ENDPOINT target value
+    connector_guid: str | None = None            # Secure Endpoint
+    mde_machine_id: str | None = None            # Defender for Endpoint
+    intune_device_id: str | None = None
+    os: str | None = None
+    ip_addresses: tuple[str, ...] = ()
+    mac_addresses: tuple[str, ...] = ()
+    users: tuple[str, ...] = ()                  # logged-on or recent users
+    groups: tuple[str, ...] = ()                 # vendor groups or OU names (fed to critical-asset matching)
+    tags: tuple[str, ...] = ()
+    isolation_capable: bool | None = None        # None = unknown (legacy item.isolation_capable)
+    isolation_state: Literal["isolated", "not_isolated", "pending", "unknown"] = "unknown"
+    health_state: str | None = None
+    risk_level: Level = "unknown"
+    last_seen: AwareDatetime | None = None
+
+class DetectionRecord(RecordBase):
+    kind: Literal[RecordKind.DETECTION] = RecordKind.DETECTION
+    detection_id: str | None = None
+    name: str                                    # e.g. "Ransomware.Generic"
+    verdict: Verdict                             # vendor disposition (legacy item.detections[].disposition)
+    severity: Severity
+    category: str | None = None                  # vendor category, e.g. "Ransomware", "CredentialAccess"
+    endpoint: str | None = None
+    user: str | None = None
+    sha256: str | None = None
+    file_path: str | None = None
+    process_name: str | None = None
+    mitre_techniques: tuple[str, ...] = ()       # as reported by the vendor, never inferred
+    status: Literal["active", "resolved", "unknown"] = "unknown"
+    first_seen: AwareDatetime | None = None
+    last_seen: AwareDatetime | None = None
+
+class ProcessEventRecord(RecordBase):            # trajectory / device timeline entry (legacy item.trajectory[])
+    kind: Literal[RecordKind.PROCESS_EVENT] = RecordKind.PROCESS_EVENT
+    event_id: str | None = None
+    endpoint: str
+    timestamp: AwareDatetime
+    event_type: Literal["process_start", "process_end", "file_create", "file_modify", "file_execute",
+                        "file_delete", "file_rename", "network", "registry", "module_load", "service",
+                        "scheduled_task", "other"]
+    process_name: str | None = None
+    pid: int | None = None
+    sha256: str | None = None
+    parent_process_name: str | None = None
+    parent_pid: int | None = None
+    parent_sha256: str | None = None
+    file_path: str | None = None
+    command_line: str | None = None              # redacted and capped; data only, never executed
+    user: str | None = None
+    verdict: Verdict = Verdict.UNKNOWN
+    remote_ip: str | None = None
+    remote_port: int | None = None
+    domain: str | None = None
+    count: int = 1                               # identical events aggregated by the source (e.g. 1204 renames)
+
+class NetworkConnectionRecord(RecordBase):
+    kind: Literal[RecordKind.NETWORK_CONNECTION] = RecordKind.NETWORK_CONNECTION
+    endpoint: str | None = None
+    user: str | None = None
+    local_ip: str | None = None
+    remote_ip: str | None = None
+    remote_port: int | None = None
+    protocol: Literal["tcp", "udp", "icmp", "other", "unknown"] = "unknown"
+    direction: Literal["outbound", "inbound", "internal", "unknown"] = "unknown"
+    domain: str | None = None
+    url: str | None = None
+    process_name: str | None = None
+    sha256: str | None = None
+    bytes_out: int | None = None
+    bytes_in: int | None = None
+    count: int = 1
+    action: Literal["allowed", "blocked", "unknown"] = "unknown"
+    verdict: Verdict = Verdict.UNKNOWN
+    first_seen: AwareDatetime | None = None
+    last_seen: AwareDatetime | None = None
+
+class DnsQueryRecord(RecordBase):
+    kind: Literal[RecordKind.DNS_QUERY] = RecordKind.DNS_QUERY
+    endpoint: str | None = None
+    client_ip: str | None = None
+    domain: str
+    query_type: str | None = None                # "A", "AAAA", "TXT", ...
+    response_ips: tuple[str, ...] = ()
+    count: int = 1
+    unique_subdomains: int | None = None         # distinct child labels seen, when the source reports it
+    max_label_length: int | None = None
+    categories: tuple[str, ...] = ()
+    action: Literal["allowed", "blocked", "unknown"] = "unknown"
+    verdict: Verdict = Verdict.UNKNOWN
+    first_seen: AwareDatetime | None = None
+    last_seen: AwareDatetime | None = None
+
+class HashPrevalenceRecord(RecordBase):          # legacy enrich-hash prevalence / hosts
+    kind: Literal[RecordKind.HASH_PREVALENCE] = RecordKind.HASH_PREVALENCE
+    sha256: str
+    file_name: str | None = None
+    verdict: Verdict = Verdict.UNKNOWN
+    prevalence: int                              # >= 0, endpoints that saw the file
+    endpoints: tuple[str, ...] = ()              # hostnames (may be truncated by the source)
+    truncated: bool = False
+    signer: str | None = None
+    first_seen: AwareDatetime | None = None
+    last_seen: AwareDatetime | None = None
+
+class PersistenceItemRecord(RecordBase):
+    kind: Literal[RecordKind.PERSISTENCE_ITEM] = RecordKind.PERSISTENCE_ITEM
+    endpoint: str
+    item_id: str
+    mechanism: Literal["run_key", "scheduled_task", "service", "wmi_subscription", "startup_folder",
+                       "launch_agent", "cron", "other"]
+    name: str
+    path: str | None = None
+    sha256: str | None = None
+    command_line: str | None = None
+    user: str | None = None
+    created_at: AwareDatetime | None = None
+    verdict: Verdict = Verdict.UNKNOWN
+    @property
+    def target(self) -> str: ...                 # f"{endpoint}/{item_id}" (PERSISTENCE_ITEM target, 13.3)
+
+class UserProfileRecord(RecordBase):             # legacy item.profile
+    kind: Literal[RecordKind.USER_PROFILE] = RecordKind.USER_PROFILE
+    user: str                                    # UPN
+    object_id: str | None = None
+    display_name: str | None = None
+    department: str | None = None
+    job_title: str | None = None
+    manager: str | None = None
+    groups: tuple[str, ...] = ()                 # legacy item.profile.groups
+    roles: tuple[str, ...] = ()                  # directory role display names
+    privileged: bool = False                     # the source says so, or a role is in PRIVILEGED_ROLE_NAMES
+    account_enabled: bool | None = None
+    risk_level: Level = "unknown"                # legacy item.risk_level
+    risk_state: Literal["at_risk", "confirmed_compromised", "remediated", "dismissed", "none", "unknown"] = "unknown"
+    mfa_registered: bool | None = None
+    last_sign_in: AwareDatetime | None = None
+    sessions_valid_from: AwareDatetime | None = None
+
+class SignInRecord(RecordBase):                  # legacy item.signins[] (ip, location, app, result)
+    kind: Literal[RecordKind.SIGN_IN] = RecordKind.SIGN_IN
+    sign_in_id: str | None = None
+    user: str
+    timestamp: AwareDatetime
+    ip: str | None = None
+    country: str | None = None
+    city: str | None = None
+    app: str | None = None
+    client_app: str | None = None
+    device_id: str | None = None
+    device_compliant: bool | None = None
+    result: Literal["success", "failure", "interrupted", "unknown"]
+    failure_reason: str | None = None
+    mfa_required: bool | None = None
+    mfa_result: Literal["satisfied", "denied", "timeout", "not_required", "unknown"] = "unknown"
+    conditional_access: Literal["success", "failure", "not_applied", "unknown"] = "unknown"
+    risk_level: Level = "unknown"
+    authentication_method: str | None = None
+
+class AnomalyRecord(RecordBase):                 # vendor risk detections only (legacy item.anomalies[])
+    kind: Literal[RecordKind.ANOMALY] = RecordKind.ANOMALY
+    anomaly_id: str | None = None
+    anomaly_type: Literal["impossible_travel", "unfamiliar_location", "new_device", "anonymous_ip",
+                          "malicious_ip", "mfa_fatigue", "password_spray", "brute_force", "token_replay",
+                          "atypical_volume", "leaked_credentials", "other"]
+    severity: Severity
+    user: str | None = None
+    endpoint: str | None = None
+    ip: str | None = None
+    detail: str = ""
+    first_seen: AwareDatetime | None = None
+    last_seen: AwareDatetime | None = None
+    related_record_ids: tuple[str, ...] = ()     # must exist in the same run (RecordIndex rejects unknown ids)
+
+class MfaEventRecord(RecordBase):
+    kind: Literal[RecordKind.MFA_EVENT] = RecordKind.MFA_EVENT
+    user: str
+    timestamp: AwareDatetime
+    method: Literal["push", "sms", "voice", "totp", "fido2", "windows_hello", "other", "unknown"] = "unknown"
+    result: Literal["approved", "denied", "timeout", "fraud_reported", "unknown"]
+    ip: str | None = None
+    country: str | None = None
+    app: str | None = None
+    device: str | None = None
+
+class MailboxRuleRecord(RecordBase):
+    kind: Literal[RecordKind.MAILBOX_RULE] = RecordKind.MAILBOX_RULE
+    mailbox: str
+    rule_id: str
+    name: str
+    enabled: bool | None = None
+    forward_to: tuple[str, ...] = ()
+    redirect_to: tuple[str, ...] = ()
+    forward_as_attachment_to: tuple[str, ...] = ()
+    move_to_folder: str | None = None
+    delete: bool = False
+    mark_as_read: bool = False
+    external_forwarding: bool = False            # set by the normalizer: a forward/redirect address outside
+                                                 # settings.exclusions.internal_domains
+    conditions: tuple[str, ...] = ()             # normalized condition summaries
+    created_at: AwareDatetime | None = None
+    modified_at: AwareDatetime | None = None
+    created_by: str | None = None
+
+class RoleChangeRecord(RecordBase):
+    kind: Literal[RecordKind.ROLE_CHANGE] = RecordKind.ROLE_CHANGE
+    user: str                                    # principal that received or lost the role
+    role_name: str
+    role_definition_id: str | None = None
+    directory_scope_id: str | None = None
+    change: Literal["assigned", "removed", "eligible_assigned", "activated", "unknown"]
+    privileged: bool = False
+    actor: str | None = None
+    timestamp: AwareDatetime | None = None
+    @property
+    def target(self) -> str | None: ...          # f"{user}/{role_definition_id}" (ROLE_ASSIGNMENT target) or None
+
+class EmailMessageRecord(RecordBase):
+    kind: Literal[RecordKind.EMAIL_MESSAGE] = RecordKind.EMAIL_MESSAGE
+    message_id: str                              # EMAIL_MESSAGE target value used by the executing adapter
+    internet_message_id: str | None = None
+    network_message_id: str | None = None        # Defender for Office 365
+    sender: str | None = None
+    sender_domain: str | None = None
+    recipients: tuple[str, ...] = ()             # capped at 100; recipient_count is the true count
+    recipient_count: int = 0
+    subject_line: str | None = None              # redacted, capped at 200
+    received_at: AwareDatetime | None = None
+    direction: Literal["inbound", "outbound", "internal", "unknown"] = "unknown"
+    verdict: Verdict = Verdict.UNKNOWN
+    threat_types: tuple[str, ...] = ()           # "phish", "malware", "spam", "bec", ...
+    urls: tuple[str, ...] = ()
+    domains: tuple[str, ...] = ()
+    attachment_hashes: tuple[str, ...] = ()
+    attachment_names: tuple[str, ...] = ()
+    delivery_location: Literal["inbox", "junk", "quarantine", "deleted", "failed", "unknown"] = "unknown"
+    campaign_id: str | None = None
+    spf: Literal["pass", "fail", "none", "unknown"] = "unknown"
+    dkim: Literal["pass", "fail", "none", "unknown"] = "unknown"
+    dmarc: Literal["pass", "fail", "none", "unknown"] = "unknown"
+
+class CloudAppRecord(RecordBase):                # OAuth application / service principal facts
+    kind: Literal[RecordKind.CLOUD_APP] = RecordKind.CLOUD_APP
+    app_id: str
+    display_name: str | None = None
+    publisher_verified: bool | None = None
+    permissions: tuple[str, ...] = ()
+    consent_type: Literal["admin", "user", "unknown"] = "unknown"
+    consented_by: str | None = None
+    credential_added_at: AwareDatetime | None = None
+    created_at: AwareDatetime | None = None
+    verdict: Verdict = Verdict.UNKNOWN
+
+class GenericRecord(RecordBase):                 # a finding no normalizer understands, and legacy replay data
+    kind: Literal[RecordKind.GENERIC] = RecordKind.GENERIC
+    name: str                                    # e.g. "microsoft_cloud:investigate_user", "legacy:investigate-host"
+    attributes: JsonDict = {}                    # the finding as returned (redacted, capped at 4 KiB)
+
+AnyRecord = Annotated[Union[EnrichmentRecord, EndpointRecord, DetectionRecord, ProcessEventRecord,
+                            NetworkConnectionRecord, DnsQueryRecord, HashPrevalenceRecord, PersistenceItemRecord,
+                            UserProfileRecord, SignInRecord, AnomalyRecord, MfaEventRecord, MailboxRuleRecord,
+                            RoleChangeRecord, EmailMessageRecord, CloudAppRecord, GenericRecord],
+                      Field(discriminator="kind")]
+RECORD_TYPES: Mapping[RecordKind, type[RecordBase]]
+PRIVILEGED_ROLE_NAMES: frozenset[str]            # lower-case Entra role names treated as privileged, at least
+                                                 # "global administrator", "privileged role administrator",
+                                                 # "security administrator", "exchange administrator"
+
+class SourceOutcome(StrEnum):
+    ANSWERED = "answered"; EMPTY = "empty"; FAILED = "failed"; NOT_QUERIED = "not_queried"; NOT_SUPPORTED = "not_supported"
+
+class SourceStatus(FrozenModel):
+    integration: str
+    outcome: SourceOutcome
+    health: HealthStatus
+    reason: str = ""                             # disclosure-policy reason, error code, "not enabled", ...
+    error: ErrorInfo | None = None               # redacted (IntegrationError.to_error_info)
+    records: int = 0
+
+class AtomicResult(FrozenModel):                 # base of every read-atomic result
+    atomic: str
+    action_type: ActionType                      # ENRICHMENT or INVESTIGATION catalog type
+    subject: Observable                          # normalized value
+    records: tuple[AnyRecord, ...] = ()          # validator: unique record ids, record.atomic == atomic
+    sources: tuple[SourceStatus, ...] = ()       # one per integration considered, INTEGRATION_NAMES order
+    raw: tuple[EnrichmentResult | InvestigationResult, ...] = Field(default=(), repr=False)   # for audit only
+    started_at: AwareDatetime
+    finished_at: AwareDatetime
+    @property
+    def degraded(self) -> bool: ...              # any FAILED source
+    @property
+    def answered(self) -> tuple[str, ...]: ...
+    @property
+    def failed(self) -> tuple[str, ...]: ...
+    def of(self, kind: RecordKind) -> tuple[AnyRecord, ...]: ...
+    def record_ids(self) -> tuple[str, ...]: ...
+    def rule_item(self) -> dict[str, Any]: ...   # common keys plus the atomic's keys (14.1.4); overridden by subclasses
+
+class InvestigationBundle(AtomicResult):         # result of every investigate_* and search_* atomic
+    critical_asset_classes: tuple[CriticalAssetClass, ...] = ()   # ctx.critical_assets.classify(...) at run time;
+                                                 # rule_item() has no ctx. Informs rules and the card, never skips
+    def rule_item(self) -> dict[str, Any]: ...   # 14.1.4 table
+```
+
+Natural keys and evidence fields:
+
+| Kind | `natural_key()` | `evidence_fields()` |
+|---|---|---|
+| enrichment | `{}` (one per integration and subject) | verdict, risk_score, confidence, categories |
+| endpoint | `{"hostname", "id"}` (connector GUID, MDE id or Intune id, first present) | hostname, os, isolation_state, groups, tags |
+| detection | `{"id": detection_id}` or `{"name", "endpoint", "sha256", "first_seen"}` | name, verdict, severity, category, endpoint, user, sha256, mitre_techniques |
+| process_event | `{"id": event_id}` or `{"endpoint", "timestamp", "event_type", "pid", "sha256"}` | endpoint, timestamp, event_type, process_name, parent_process_name, sha256, command_line, verdict, count |
+| network_connection | `{"endpoint", "remote_ip", "remote_port", "domain", "first_seen"}` | endpoint, user, remote_ip, remote_port, domain, url, direction, action, verdict, bytes_out, count |
+| dns_query | `{"endpoint", "client_ip", "domain", "query_type", "first_seen"}` | endpoint, domain, query_type, count, unique_subdomains, action, verdict |
+| hash_prevalence | `{"sha256"}` | sha256, file_name, verdict, prevalence, endpoints |
+| persistence_item | `{"endpoint", "item_id"}` | endpoint, mechanism, name, path, sha256, command_line, verdict |
+| user_profile | `{"user"}` | user, risk_level, risk_state, account_enabled, privileged, roles |
+| sign_in | `{"id": sign_in_id}` or `{"user", "timestamp", "ip"}` | user, timestamp, ip, country, app, result, mfa_result, risk_level |
+| anomaly | `{"id": anomaly_id}` or `{"anomaly_type", "user", "endpoint", "first_seen"}` | anomaly_type, severity, user, endpoint, ip, detail |
+| mfa_event | `{"user", "timestamp", "method"}` | user, timestamp, method, result, ip, country |
+| mailbox_rule | `{"mailbox", "rule_id"}` | mailbox, name, enabled, forward_to, redirect_to, external_forwarding, delete |
+| role_change | `{"user", "role_name", "change", "timestamp"}` | user, role_name, change, privileged, actor, timestamp |
+| email_message | `{"message_id"}` | message_id, sender, recipient_count, verdict, threat_types, delivery_location, campaign_id |
+| cloud_app | `{"app_id"}` | app_id, display_name, consent_type, permissions, publisher_verified |
+| generic | `{"name", "attributes"}` | name, attributes |
+
+#### 14.1.3 Enrichment atomics (owner: enrichment)
+
+```python
+# xdr_response/atomics/enrichment/models.py
+class ObservableReport(AtomicResult):            # the brief's normalized observable, with per-source detail
+    type: ObservableType
+    value: str                                   # normalized (== subject.value)
+    risk_score: Score
+    confidence: Score
+    verdict: Verdict                             # scoring.verdict.aggregate_verdict (never one vendor's word)
+    breakdown: ScoreBreakdown                    # models.scoring (14.2)
+    def normalized(self) -> dict[str, Any]: ...
+        # exactly {"type", "value", "risk_score", "confidence", "sources": list(answered), "verdict"}
+    def rule_item(self) -> dict[str, Any]: ...
+        # normalized() + {"record_ids", "failed_sources", "not_queried", "degraded", "categories" (union),
+        #   "source_verdicts": {integration: verdict}}
+
+# xdr_response/atomics/enrichment/atomics.py
+def enrich_ip(ctx: AtomicContext, value: str | Observable) -> ObservableReport: ...            # ip or ipv6
+def enrich_domain(ctx: AtomicContext, value: str | Observable) -> ObservableReport: ...
+def enrich_url(ctx: AtomicContext, value: str | Observable) -> ObservableReport: ...
+def enrich_hash(ctx: AtomicContext, value: str | Observable) -> ObservableReport: ...          # sha256 / sha1 / md5 by length
+def enrich_email_address(ctx: AtomicContext, value: str | Observable) -> ObservableReport: ...
+def enrich_user(ctx: AtomicContext, value: str | Observable) -> ObservableReport: ...
+def enrich_endpoint(ctx: AtomicContext, value: str | Observable) -> ObservableReport: ...      # hostname or endpoint_id
+def enrich(ctx: AtomicContext, observable: Observable) -> ObservableReport: ...                # dispatch by type
+
+ENRICHMENT_ATOMICS: Mapping[str, Callable[[AtomicContext, Observable], ObservableReport]]   # the seven names above
+ENRICHMENT_SUBJECT_TYPES: Mapping[str, frozenset[ObservableType]]
+```
+
+Behaviour (deterministic, in this order):
+
+1. Build the `Observable` (a `str` gets the atomic's type; `enrich_hash` picks sha256 / sha1 / md5 by length, `enrich_endpoint` uses `hostname`) and normalize its value; an invalid value raises `ValueError`.
+2. For every name in `ctx.adapters.enrichers(type)`: a third-party source (`virustotal`, `alienvault_otx`, `hibp`) that `ctx.disclosure.may_disclose(observable, name)` refuses becomes `NOT_QUERIED` with reason `"disclosure policy"` (no confidence penalty, 14.2). Otherwise `ctx.adapters.enrich(...)`: an exception becomes `FAILED` (health from `classify_exception`, `ErrorInfo` from `to_error_info()` or an `INTERNAL` redacted message); a result with `errors` and verdict `UNKNOWN` becomes `FAILED` with the result's health; verdict `UNKNOWN` without evidence becomes `EMPTY`; anything else becomes `ANSWERED` plus one `EnrichmentRecord`.
+3. `breakdown = ScoringEngine(ctx.settings.thresholds.scoring).score(signals_from_enrichment(records), context=...)` with the critical-asset classes of the observable (`ctx.critical_assets.classify` for its target kind), expected sources = every enricher, failed and not-queried sources from step 2.
+4. `risk_score`, `confidence` from the breakdown; `verdict = aggregate_verdict(signals, breakdown)`.
+
+No source ever blocks the report; a report with every source failed has risk 0, confidence 0, verdict `UNKNOWN` and lists the failures.
+
+#### 14.1.4 Investigation and enterprise search atomics (owner: investigation)
+
+```python
+# xdr_response/atomics/investigation/atomics.py
+InvestigationAtomic = Callable[..., InvestigationBundle]
+# every function: (ctx: AtomicContext, subject: str | Observable, *, options: Mapping[str, Any] | None = None,
+#                  integrations: Sequence[str] = (), limit: int = 100) -> InvestigationBundle
+def investigate_user(...): ...                   # subject types: user, email_address
+def investigate_endpoint(...): ...               # hostname, endpoint_id
+def investigate_ip(...): ...                     # ip, ipv6
+def investigate_domain(...): ...                 # domain
+def investigate_hash(...): ...                   # sha256, sha1, md5
+def investigate_email(...): ...                  # email_message_id
+def investigate_authentication(...): ...         # user
+def investigate_process(...): ...                # process ("<ENDPOINT>/<sha256 or pid>")
+def investigate_network_connection(...): ...     # ip, ipv6
+def search_hash_enterprise(...): ...             # sha256, sha1, md5
+def search_domain_enterprise(...): ...           # domain
+def search_ip_enterprise(...): ...               # ip, ipv6
+def search_user_activity(...): ...               # user
+def search_email_campaign(...): ...              # email_message_id
+def search_related_endpoints(...): ...           # hostname, endpoint_id
+def search_related_users(...): ...               # user
+
+INVESTIGATION_ATOMICS: Mapping[str, InvestigationAtomic]           # the 16 names; name == ActionType value
+INVESTIGATION_SUBJECT_TYPES: Mapping[str, frozenset[ObservableType]]
+
+# xdr_response/atomics/investigation/normalize/__init__.py
+Normalizer = Callable[[InvestigationResult, "NormalizeContext"], list[AnyRecord]]
+@dataclass(frozen=True)
+class NormalizeContext:
+    atomic: str
+    subject: Observable
+    internal_domains: tuple[str, ...]            # settings.exclusions.internal_domains (mailbox external forwarding)
+    typed_allowed: bool                          # ctx.adapters.is_simulated(integration)
+NORMALIZERS: Mapping[str, Normalizer]            # cisco_xdr, secure_endpoint, defender_endpoint, entra,
+                                                 # microsoft_cloud, secure_email, intune, splunk
+def normalize(integration: str, result: InvestigationResult, nctx: NormalizeContext) -> list[AnyRecord]: ...
+TYPED_RECORD_KEY = "xdr_record"
+```
+
+Behaviour: for every name in `ctx.adapters.investigators(action_type)` (restricted to `integrations` when given): build `InvestigationQuery(action_type, subject, time_from, time_to = ctx.window(), limit, options)`, call `ctx.adapters.investigate`, normalize, de-duplicate by `record_id` (first wins). Exceptions and results with `errors` become `FAILED`; no findings become `EMPTY`. Normalizer rules:
+
+- A finding containing `TYPED_RECORD_KEY` is a typed record (`{"kind": ..., <fields>}` without `record_id`, `integration`, `atomic`, `subject`, which the normalizer fills). It is accepted only when `typed_allowed` (simulated adapters); from a real adapter the key is ignored and the finding becomes a `GenericRecord`. An optional `"xdr_integration"` key restricts the finding to that simulated adapter.
+- Vendor normalizers map only fields documented by the vendor page cited in `docs/integrations.md` for that operation; anything else stays `None`. A finding they do not understand becomes one `GenericRecord(name=f"{integration}:{atomic}")`, so raw findings remain citable but produce no scoring signal.
+- Normalizers never call adapters and never read secrets.
+
+Rule items (`InvestigationBundle.rule_item()`), the shape workflow rules see. Every key is always present (`None`, `[]` or `0` when unknown); nested lists hold `record.rule_item()` dicts. Common keys of every read-atomic item: `atomic`, `subject_type`, `subject`, `record_ids`, `sources` (answered), `failed_sources`, `degraded`.
+
+| Atomic | Additional keys |
+|---|---|
+| investigate_endpoint, search_related_endpoints | `hostname`, `endpoint` (first endpoint record or `None`), `endpoints` (all endpoint records), `connector_guid`, `mde_machine_id`, `intune_device_id`, `ip_addresses`, `users`, `groups`, `tags`, `isolation_capable`, `isolation_state`, `detections`, `trajectory` (process events), `network_connections`, `dns_queries`, `persistence`, `is_critical_asset`, `critical_asset_classes` |
+| investigate_user, search_related_users, search_user_activity | `user`, `profile` (first user_profile or `None`), `users` (all profiles), `risk_level`, `risk_state`, `is_privileged`, `account_enabled`, `signins`, `anomalies`, `mfa_events`, `mailbox_rules`, `role_changes`, `cloud_apps`, `is_critical_asset`, `critical_asset_classes` |
+| investigate_authentication | `user`, `signins`, `mfa_events`, `anomalies`, `success_count`, `failure_count`, `mfa_denied_count`, `mfa_approved_count`, `distinct_ips`, `distinct_countries` |
+| investigate_ip, investigate_network_connection, search_ip_enterprise | `ip`, `network_connections`, `dns_queries`, `signins`, `endpoints` (distinct hostnames), `users` (distinct) |
+| investigate_domain, search_domain_enterprise | `domain`, `dns_queries`, `network_connections`, `endpoints`, `users`, `query_count`, `first_seen` |
+| investigate_hash, search_hash_enterprise | `sha256`, `prevalence` (highest hash_prevalence value or `None`), `endpoints` (union), `verdict` (worst reported), `detections`, `process_events`, `file_names` |
+| investigate_email, search_email_campaign | `message_id`, `messages`, `recipients`, `senders`, `urls`, `domains`, `attachment_hashes`, `campaign_ids`, `delivered_count` (delivery_location inbox or junk) |
+| investigate_process | `process`, `endpoint`, `events`, `network_connections`, `children` (events whose parent pid or hash is the subject) |
+
+`is_critical_asset` / `critical_asset_classes` come from `ctx.critical_assets.classify(...)` with an `Asset` built from the bundle's own records (groups, tags, roles, first IP). They replace the legacy `is_protected`, and they never cause a skip: they only inform rules and the decision card (ELEVATED stays `PackageBuilder`'s decision).
+
+#### 14.1.5 Correlation and blast radius (owner: correlation-evidence)
+
+Pure functions over atomic results: no adapter calls, deterministic output order.
+
+```python
+# xdr_response/atomics/correlation/models.py
+class EntityRef(FrozenModel):
+    kind: TargetKind
+    value: str                                   # validator: == normalize_target(kind, value)
+
+class LinkKind(StrEnum):
+    SAME_HASH = "same_hash"; SAME_DOMAIN = "same_domain"; SAME_IP = "same_ip"; SAME_URL = "same_url"
+    SAME_USER = "same_user"; SAME_ENDPOINT = "same_endpoint"; PROCESS_LINEAGE = "process_lineage"
+    SIGN_IN_TO_ACTIVITY = "sign_in_to_activity"; EMAIL_TO_CLICK = "email_to_click"; CAMPAIGN = "campaign"
+    WORKFLOW = "workflow"                        # links contributed by a workflow hook (14.3.3)
+
+class CorrelationLink(FrozenModel):
+    link_id: str                                 # "lnk_" + sha256_hex(canonical_json([kind, entities, record_ids]))[:24]
+    kind: LinkKind
+    entities: tuple[EntityRef, ...]              # >= 2, unique, sorted by (kind, value)
+    record_ids: tuple[str, ...]                  # >= 1, sorted; every id must be in the run's RecordIndex
+    first_seen: AwareDatetime | None = None
+    last_seen: AwareDatetime | None = None
+    note: str                                    # deterministic template, no AI text
+    origin: str = "framework"                    # or "workflow:<workflow id>"
+
+class TimelineEntry(FrozenModel):
+    at: AwareDatetime
+    record_id: str
+    kind: RecordKind
+    integration: str
+    summary: str                                 # evidence_summary(record)
+
+class CorrelationResult(FrozenModel):
+    incident_id: str
+    entities: tuple[EntityRef, ...]              # every entity mentioned by any record, sorted
+    links: tuple[CorrelationLink, ...]           # sorted by link_id
+    clusters: tuple[tuple[EntityRef, ...], ...]  # connected components of the link graph, sorted
+    timeline: tuple[TimelineEntry, ...]          # records with a time, sorted by (at, record_id)
+    def related(self, entity: EntityRef) -> tuple[EntityRef, ...]: ...       # same cluster, entity excluded
+    def links_for(self, entity: EntityRef) -> tuple[CorrelationLink, ...]: ...
+    def rule_item(self) -> dict[str, Any]: ...
+        # {"entities": [{"kind", "value"}], "links": [link dicts], "clusters": [[...]],
+        #  "related": {"<KIND>:<value>": [entity dicts]}}
+
+class CriticalAssetHit(FrozenModel):
+    entity: EntityRef
+    classes: tuple[CriticalAssetClass, ...]      # >= 1
+    record_ids: tuple[str, ...]
+
+class BlastRadiusReport(FrozenModel):
+    endpoints: tuple[str, ...]
+    users: tuple[str, ...]
+    indicators: tuple[str, ...]                  # domains, URLs, IPs, hashes
+    messages: int
+    critical_assets: tuple[CriticalAssetHit, ...]
+    caps: Mapping[str, int]                      # thresholds.blast_radius as {"endpoints", "users", "indicators", "messages"}
+    exceeds: tuple[str, ...]                     # cap names exceeded (informational; PackageBuilder decides ELEVATED)
+    record_ids: tuple[str, ...]
+    def to_blast_radius(self) -> BlastRadius: ...   # Phase 0 model
+    def rule_item(self) -> dict[str, Any]: ...
+
+# xdr_response/atomics/correlation/correlate.py
+def correlate(ctx: AtomicContext, results: Sequence[AtomicResult], *,
+              extra_links: Sequence[CorrelationLink] = (), window: timedelta = DEFAULT_WINDOW,   # 60 minutes
+              link_kinds: Collection[LinkKind] = FRAMEWORK_LINK_KINDS) -> CorrelationResult: ...
+    # the runner passes window=timedelta(minutes=spec.window_minutes), link_kinds=spec.link_kinds; extra_links
+    # (hook links) are never filtered by link_kinds and must cite records of results (EvidenceError otherwise)
+def build_timeline(results: Sequence[AtomicResult]) -> tuple[TimelineEntry, ...]: ...
+# xdr_response/atomics/correlation/blast_radius.py
+def blast_radius(ctx: AtomicContext, correlation: CorrelationResult, results: Sequence[AtomicResult], *,
+                 scope: Sequence[EntityRef] | None = None) -> BlastRadiusReport: ...
+    # scope default: the clusters that contain an incident observable, asset or user
+```
+
+Framework link rules (window `CorrelationSpec.window_minutes`, default 60):
+
+| Link kind | Rule |
+|---|---|
+| `same_hash`, `same_domain`, `same_ip`, `same_url` | an indicator mentioned by records that also mention two or more distinct endpoints or users: one link with the indicator and those assets, citing those records |
+| `same_user`, `same_endpoint` | a user (endpoint) mentioned together with two or more distinct endpoints (users) |
+| `process_lineage` | process events on one endpoint whose parent pid or parent hash matches another event's pid or hash |
+| `sign_in_to_activity` | a successful sign-in for a user followed within the window by a mailbox rule, role change or cloud app consent for the same user |
+| `email_to_click` | an email message carrying URL or domain D, and a network connection or DNS query to D from a recipient's endpoint or user after `received_at` within the window |
+| `campaign` | two or more email messages sharing a `campaign_id`, or the same sender domain and the same URL or attachment hash |
+
+#### 14.1.6 Evidence builder (owner: correlation-evidence)
+
+The evidence builder is the only way the read zone produces `EvidenceDraft`s. It cites records it was given, by id, and nothing else.
+
+```python
+# xdr_response/atomics/evidence.py
+class EvidenceError(ValueError): ...
+
+class RecordIndex:
+    def __init__(self, results: Iterable[AtomicResult] = (), *, records: Iterable[AnyRecord] = ()) -> None: ...
+        # the same record_id with different content -> EvidenceError; AnomalyRecord.related_record_ids and every
+        # cited id must resolve inside the index
+    def get(self, record_id: str) -> AnyRecord: ...                  # KeyError
+    def require(self, record_ids: Iterable[str]) -> tuple[AnyRecord, ...]: ...   # EvidenceError naming unknown ids
+    def ids(self) -> tuple[str, ...]: ...
+    def __contains__(self, record_id: object) -> bool: ...
+    def __len__(self) -> int: ...
+
+def evidence_summary(record: AnyRecord) -> str: ...   # deterministic template per kind, <= 300 chars, redacted
+def evidence_draft(record: AnyRecord) -> EvidenceDraft: ...
+    # source=record.integration, summary=evidence_summary(record), observed_at=record.observed_at,
+    # reference=record.reference,
+    # data={"record_id": ..., "kind": ..., "atomic": ..., "fields": record.evidence_fields()}
+
+class EvidenceBuilder:
+    def __init__(self, index: RecordIndex) -> None: ...
+    def cite(self, record_ids: Iterable[str]) -> tuple[EvidenceDraft, ...]: ...
+        # >= 1 id (EvidenceError otherwise), every id known (EvidenceError), duplicates removed,
+        # order (observed_at or min, record_id)
+    def verify(self, drafts: Iterable[EvidenceDraft]) -> None: ...
+        # every draft must equal evidence_draft(index.get(draft.data["record_id"])) exactly, else EvidenceError
+    @staticmethod
+    def record_ids(drafts: Iterable[EvidenceDraft]) -> tuple[str, ...]: ...
+```
+
+Summary templates (`unknown` for `None` values; hashes shortened to 12 characters plus `...`): enrichment `"{integration} rates {value} {verdict} (risk {risk_score}, confidence {confidence})"`; endpoint `"{integration}: endpoint {hostname} ({os}), isolation {isolation_state}"`; detection `"{integration}: {severity} detection '{name}' ({verdict}) on {endpoint}"`; process_event `"{integration}: {event_type} {process_name} on {endpoint} at {timestamp} (x{count})"`; network_connection `"{integration}: {endpoint or user} {direction} to {domain or remote_ip}:{remote_port} ({action})"`; dns_query `"{integration}: {endpoint or client_ip} queried {domain} x{count} ({action})"`; hash_prevalence `"{integration}: {sha256} seen on {prevalence} endpoint(s), {verdict}"`; persistence_item `"{integration}: {mechanism} '{name}' on {endpoint}"`; user_profile `"{integration}: user {user}, risk {risk_level}, enabled {account_enabled}, privileged {privileged}"`; sign_in `"{integration}: sign-in {result} for {user} from {ip} ({country}) to {app} at {timestamp}, MFA {mfa_result}"`; anomaly `"{integration}: {anomaly_type} ({severity}) for {user or endpoint}"`; mfa_event `"{integration}: MFA {method} {result} for {user} at {timestamp}"`; mailbox_rule `"{integration}: mailbox rule '{name}' on {mailbox}"` plus `", forwards externally"` when set; role_change `"{integration}: role {role_name} {change} for {user} by {actor}"`; email_message `"{integration}: message {message_id} from {sender} to {recipient_count} recipient(s), {verdict}, {delivery_location}"`; cloud_app `"{integration}: app {display_name} ({app_id}), consent {consent_type}, {n} permission(s)"`; generic `"{integration}: {name}"` plus up to three sorted `key=value` attributes.
+
+Rules: an action's evidence is exactly `cite(...)` of the records its rule names (14.3.1) plus, when `include_target_enrichment`, the target's `ANSWERED` enrichment records rated `MALICIOUS` or `SUSPICIOUS`. Derived statements (correlation, scores, thresholds) go into the rationale, never into evidence. Numbering (1..n) and the snapshot hash stay with `PackageBuilder` and `number_evidence` (13.5); `data["record_id"]` lets the decision card map a contribution's record id to its evidence number.
+
+#### 14.1.7 Containment recommendation builders (owner: containment-atomics)
+
+The builders turn a decision of a workflow rule into a `ProposedAction`, choosing the integration native first (section 4.2). They **never execute**: they return data that `PackageBuilder` packages and a human approves.
+
+```python
+# xdr_response/atomics/containment/models.py
+class RouteDecision(FrozenModel):
+    action_type: ActionType
+    integration: str | None                      # None: no execution path today
+    native: bool = False                         # executed through cisco_xdr respond/trigger
+    product: str | None = None                   # product the action lands on (verify_integration when native)
+    params: JsonDict = {}                        # routing params: integration and, when native, module_instance_id,
+                                                 # action_id, observable_type, observable_value, verify_integration
+    considered: tuple[str, ...] = ()             # e.g. "cisco_xdr: no configured native action for secure_endpoint"
+    reason: str = ""                             # why integration is None
+
+class BuiltRecommendation(FrozenModel):
+    action_type: ActionType
+    target: str                                  # normalized
+    proposal: ProposedAction | None              # None when unrouted
+    route: RouteDecision
+    warnings: tuple[CriticalAssetWarning, ...] = ()   # preview from CriticalAssetPolicy.evaluate; PackageBuilder decides
+    excluded_reason: str | None = None           # AllowlistPolicy preview; the proposal is still built and
+                                                 # PackageBuilder moves it to excluded_targets (shown, never dropped)
+    unrouted_reason: str | None = None           # set exactly when proposal is None
+
+# xdr_response/atomics/containment/routing.py
+NATIVE_OBSERVABLE_TYPES: Mapping[TargetKind, str]   # ENDPOINT "hostname", DOMAIN "domain", URL "url", IP "ip"/"ipv6",
+                                                    # HASH "sha256"/"sha1"/"md5", USER "user", EMAIL_MESSAGE "email_messageid"
+def choose_route(ctx: AtomicContext, action_type: ActionType, target: str, *,
+                 product: str | None = None) -> RouteDecision: ...
+
+# xdr_response/atomics/containment/builders.py
+RESERVED_PARAM_KEYS: frozenset[str]   # integration, verify_integration, restores, module_instance_id, action_id,
+                                      # observable_type, observable_value, approval_level, plus config FORBIDDEN_KEYS
+def build_containment(ctx: AtomicContext, action_type: ActionType, target: str, *,
+                      evidence: Sequence[EvidenceDraft], risk_score: int, confidence_score: int, rationale: str,
+                      asset: Asset | None = None, params: Mapping[str, Any] | None = None,
+                      product: str | None = None) -> BuiltRecommendation: ...
+    # ValueError (caller bug) when: action_type is not CONTAINMENT or REMEDIATION (restoration is only ever built
+    # by RestorationPlanner); evidence is empty; params use a RESERVED_PARAM_KEYS key or a sensitive key
+    # (Redactor.is_sensitive_key) or contain floats; target cannot be normalized for the catalog target kind.
+    # route = choose_route(...); proposal params = caller params + route.params (route wins).
+```
+
+`choose_route` (deterministic):
+
+1. `candidates = ctx.adapters.executors(action_type)`. With `product` given, only `cisco_xdr` (native, landing on that product) and `product` itself are eligible; the builder never silently switches product.
+2. Native first: when `cisco_xdr` is a candidate and `settings.integrations["cisco_xdr"].options["native_actions"][action_type.value][product or <first non-cisco candidate>]` names `{"module": ..., "action_id": ...}`, call `ctx.adapters.native_response_actions(Observable(NATIVE_OBSERVABLE_TYPES[...], target), module=module)` and keep the actions with that `action_id`. Exactly one: native route with `params = {integration: "cisco_xdr", module_instance_id, action_id, observable_type, observable_value: target, verify_integration: product}`. None, several, no configuration or a read error: recorded in `considered`, fall through. Native action ids are copied by the operator from the tenant's `respond/observables` listing; the framework never guesses them.
+3. Direct: `product` when it is a candidate, else the first non-`cisco_xdr` candidate.
+4. Nothing: `integration=None` with reason `"no enabled adapter has a VERIFIED write for <action>"`. The recommendation is still reported (notes, decision card), marked for manual handling, never silently dropped.
+
+Named builders (the brief's names). Each is `build_containment` with a fixed action type and product; the signature is `(ctx, target, *, evidence, risk_score, confidence_score, rationale, asset=None, params=None) -> BuiltRecommendation`.
+
+| Builder | Action type | Product | Route today (docs/integrations.md) |
+|---|---|---|---|
+| `isolate_secure_endpoint` | isolate_endpoint | secure_endpoint | native or direct; verify `UNABLE_TO_VERIFY` |
+| `isolate_defender_endpoint` | isolate_endpoint | defender_endpoint | native or direct; verify VERIFIED |
+| `block_domain_umbrella` | block_domain | umbrella | native or direct |
+| `block_url` | block_url | (catalog order) | umbrella / defender_endpoint / native |
+| `block_ip` | block_ip | (catalog order) | meraki / defender_endpoint / native (IPv4) |
+| `block_hash` | block_hash | (catalog order) | defender_endpoint / native |
+| `revoke_entra_sessions` | revoke_sessions | entra | direct only |
+| `disable_entra_user` | disable_user | entra | native or direct |
+| `quarantine_email` | quarantine_email | (catalog order) | secure_email / defender_o365 / native |
+| `delete_malicious_email` | delete_email | (catalog order) | defender_o365 softDelete / secure_email trash; never hard delete |
+| `intune_device_action` | lock_device | intune | direct; extra keyword `action: Literal["lock"] = "lock"`, any other value raises `ValueError` (UNVERIFIED) |
+| `terminate_process` | terminate_process | (catalog order) | unrouted with real adapters (UNVERIFIED); routes in the simulated lab |
+| `quarantine_file` | quarantine_file | (catalog order) | unrouted with real adapters (UNVERIFIED) |
+| `remove_persistence` | remove_persistence | (catalog order) | unrouted (no adapter) |
+| `remove_privileged_role` | remove_privileged_role | entra | direct; always ELEVATED by the catalog |
+
+Other catalog containment types (`confirm_user_compromised`, `block_network_client`, `reset_password`, `reset_mfa`, `revoke_app_credentials`, `remove_application`) are reachable through `build_containment`. `CONTAINMENT_BUILDERS: Mapping[str, Callable[..., BuiltRecommendation]]` maps the 15 names.
+
+`containment-atomics` also documents `native_actions` (commented example, no real ids) in `config/integrations.example.yaml`.
+
+#### 14.1.8 Notifications (owner: notifications)
+
+Incident notes, SOC notifications and analyst summaries are **read-zone bookkeeping**: rendered text stored in an outbox. They never call a vendor write; the Cisco XDR worklog note path is UNVERIFIED, so nothing is posted to XDR in Phase 1.
+
+```python
+# xdr_response/atomics/notifications/models.py
+class NotificationKind(StrEnum):
+    INCIDENT_NOTE = "incident_note"; SOC_NOTIFICATION = "soc_notification"; ANALYST_SUMMARY = "analyst_summary"
+
+class LifecycleEventKind(StrEnum):
+    DETECTION_COMPLETED = "detection_completed"      # investigation done, nothing proposed
+    PACKAGE_PROPOSED = "package_proposed"
+    DECISION_RECORDED = "decision_recorded"
+    CONTAINMENT_COMPLETED = "containment_completed"
+    RELEASE_PROPOSED = "release_proposed"
+    RESTORATION_COMPLETED = "restoration_completed"
+    INCIDENT_CLOSED = "incident_closed"
+
+class WorkflowSummary(FrozenModel):                  # read-zone facts of one workflow run
+    workflow_id: str
+    workflow_version: str
+    risk_score: Score
+    confidence_score: Score
+    risk_band: RiskBand
+    evidence: tuple[str, ...] = ()                   # "[<record_id>] <evidence summary>" of cited records
+    degraded_sources: tuple[str, ...] = ()
+    unrouted: tuple[str, ...] = ()                   # "<action_type> <target>: <reason>"
+    below_threshold: tuple[str, ...] = ()
+    blast_radius: BlastRadius = BlastRadius()
+
+class LifecycleEvent(FrozenModel):
+    kind: LifecycleEventKind
+    at: AwareDatetime
+    incident: Incident
+    package: ContainmentPackage | ReleasePackage | None = None
+    decision: AnalystDecision | None = None
+    report: ContainmentReport | RestorationReport | None = None
+    summary: WorkflowSummary | None = None
+    notes: tuple[str, ...] = ()
+    dry_run: bool = False
+
+class NotificationDraft(FrozenModel):
+    notification_id: str                             # sha256_hex(canonical_json([kind, incident_id, event, ref]))[:32]
+    kind: NotificationKind
+    event: LifecycleEventKind
+    incident_id: str
+    created_at: AwareDatetime
+    audience: Literal["incident", "soc", "analyst"]
+    title: str                                       # <= 200 chars; "[DRY RUN] " prefix in dry run
+    body: str                                        # <= 16 KiB, redacted
+    workflow_id: str | None = None
+    workflow_version: str | None = None
+    contains_ai_text: bool = False
+
+class DeliveryStatus(StrEnum):
+    STORED = "STORED"; DELIVERED = "DELIVERED"; NOT_DELIVERED_UNVERIFIED = "NOT_DELIVERED_UNVERIFIED"; FAILED = "FAILED"
+
+class DeliveryRecord(FrozenModel):
+    notification_id: str
+    sink: str
+    status: DeliveryStatus
+    detail: str = ""
+    at: AwareDatetime
+
+# xdr_response/atomics/notifications/render.py
+def render_incident_note(event: LifecycleEvent) -> NotificationDraft: ...
+def render_soc_notification(event: LifecycleEvent) -> NotificationDraft: ...
+def render_analyst_summary(event: LifecycleEvent) -> NotificationDraft: ...
+
+# xdr_response/atomics/notifications/sinks.py
+@runtime_checkable
+class NotificationSink(Protocol):
+    name: str
+    def deliver(self, draft: NotificationDraft) -> DeliveryRecord: ...   # never raises
+class MemoryNotificationSink: ...                    # name "memory"; .drafts list
+class JsonlNotificationSink:                         # name "jsonl"; append-only file, one canonical JSON line per draft
+    def __init__(self, path: Path | str, *, clock: Clock | None = None) -> None: ...
+class XdrIncidentNoteSink:                           # name "cisco_xdr_note"; always NOT_DELIVERED_UNVERIFIED
+    ...                                              # (worklog note path UNVERIFIED); never touches an adapter
+
+# xdr_response/atomics/notifications/service.py
+DEFAULT_ROUTING: Mapping[LifecycleEventKind, tuple[NotificationKind, ...]]
+    # PACKAGE_PROPOSED: incident note, SOC notification, analyst summary; DECISION_RECORDED: incident note;
+    # CONTAINMENT_COMPLETED and RESTORATION_COMPLETED: incident note, SOC notification;
+    # RELEASE_PROPOSED: SOC notification; DETECTION_COMPLETED and INCIDENT_CLOSED: incident note
+class NotificationService:                           # implements lifecycle.observers.LifecycleObserver
+    def __init__(self, sinks: Sequence[NotificationSink], *, clock: Clock | None = None,
+                 routing: Mapping[LifecycleEventKind, tuple[NotificationKind, ...]] = DEFAULT_ROUTING) -> None: ...
+    def on_event(self, event: LifecycleEvent) -> tuple[DeliveryRecord, ...]: ...   # never raises
+```
+
+Content rules (unit-tested): deterministic text; risk and confidence shown separately; evidence as numbered package evidence when a package exists (else the summary's record lines); the human decision with approver identities, approved and rejected actions; per action the catalog rollback action (`rollback_for`) or "not reversible"; never `params`, `rollback_params`, `external_ref` values, tokens, token ids beyond the first 8 characters, signatures, unlock codes, secrets or credentials; never an approval link or button that acts (the decision is taken only in the orchestrator's decision flow). AI text appears only in the analyst summary, under the heading "AI narrative (not evidence, not reviewed)", and sets `contains_ai_text`. Every body passes `get_redactor().redact_text`.
+
+#### 14.1.9 Atomic name table (owner: workflow-framework)
+
+```python
+# xdr_response/atomics/__init__.py   (lazy, like lifecycle/__init__.py)
+def read_atomics() -> Mapping[str, Callable[..., AtomicResult]]: ...
+    # ENRICHMENT_ATOMICS | INVESTIGATION_ATOMICS (23 names); names never collide
+def atomic_subject_types() -> Mapping[str, frozenset[ObservableType]]: ...
+def containment_builders() -> Mapping[str, Callable[..., BuiltRecommendation]]: ...   # CONTAINMENT_BUILDERS
+```
+
+No key edits another key's table; the framework only composes them.
+
+### 14.2 Scoring engine (owner: scoring)
+
+`docs/threat-scoring.md` sections 1, 2, 4 to 8 and 10 become binding with the changes below (the scoring key updates that document and `src/xdr_response/scoring/README.md` to say so). The one deliberate change: signals and contributions cite **record ids**, not evidence numbers, because numbers are only assigned later by `PackageBuilder`.
+
+#### 14.2.1 Models
+
+```python
+# xdr_response/models/scoring.py   (layer 0)
+class SignalCategory(StrEnum):
+    ENDPOINT_DETECTION = "endpoint_detection"; SANDBOX_VERDICT = "sandbox_verdict"; REPUTATION = "reputation"
+    NETWORK_BEHAVIOUR = "network_behaviour"; AUTHENTICATION_ANOMALY = "authentication_anomaly"
+    EMAIL_VERDICT = "email_verdict"; PERSISTENCE = "persistence"; LATERAL_MOVEMENT = "lateral_movement"
+    CAMPAIGN_ASSOCIATION = "campaign_association"
+
+DEFAULT_WEIGHTS: Mapping[SignalCategory, float]   # endpoint_detection 1.0, sandbox_verdict 0.9, network_behaviour 0.9,
+    # authentication_anomaly 0.9, email_verdict 0.8, persistence 0.8, lateral_movement 1.0,
+    # campaign_association 0.7, reputation 0.6
+
+class ScoringSignal(FrozenModel):
+    category: SignalCategory
+    integration: str                             # source adapter (INTEGRATION_NAMES)
+    observable: Observable                       # the target the signal is about (normalized)
+    verdict: Verdict
+    severity: Score                              # impact if true
+    confidence: Score                            # the source's confidence, or the record-kind default (14.2.3)
+    record_ids: tuple[str, ...]                  # >= 1; validated against the run's RecordIndex by the caller
+    health: HealthStatus = HealthStatus.CONNECTED
+    origin: str = "framework"                    # or "workflow:<id>" for hook-derived signals (14.3.3)
+    note: str = ""
+    vendor_verdict: bool = False                 # True for an enrichment answer (a vendor's verdict, 14.2.3), never a
+                                                 # behavioural detection; see 14.2.2 and 14.9.6
+
+class ScoringContext(FrozenModel):
+    critical_asset_classes: tuple[CriticalAssetClass, ...] = ()
+    expected_sources: tuple[str, ...] = ()
+    failed_sources: tuple[tuple[str, HealthStatus], ...] = ()     # (integration, health), sorted
+    not_queried: tuple[tuple[str, str], ...] = ()                 # (integration, reason), sorted
+
+class Contribution(FrozenModel):
+    category: SignalCategory | Literal["corroboration", "critical_asset", "independent_sources",
+                                       "contradiction", "failed_sources"]
+    integration: str | None
+    points: int                                  # signed; risk or confidence points
+    applies_to: Literal["risk", "confidence"]
+    record_ids: tuple[str, ...] = ()
+    note: str = ""
+
+class ScoreBreakdown(FrozenModel):
+    risk_score: Score
+    confidence_score: Score
+    risk_band: RiskBand
+    contributions: tuple[Contribution, ...]
+    caps_applied: tuple[str, ...] = ()           # e.g. "reputation capped at 50"
+    failed_sources: tuple[str, ...] = ()         # "<integration> (<HEALTH>)"
+    not_queried: tuple[str, ...] = ()            # "<integration> (<reason>)"
+    reputation_only: bool = False
+    settings_hash: str                           # sha256_hex(canonical_json(scoring settings, allow_floats=True))
+    def explain(self) -> str: ...
+        # one deterministic line: "risk 90 CRITICAL (endpoint_detection secure_endpoint 80; corroboration +10),
+        #  confidence 90 (base 85; independent sources +10; failed alienvault_otx -5), settings <hash[:12]>"
+```
+
+#### 14.2.2 Engine
+
+```python
+# xdr_response/scoring/engine.py
+class ScoringEngine:
+    def __init__(self, settings: ScoringSettings) -> None: ...
+    def score(self, signals: Sequence[ScoringSignal], *, context: ScoringContext,
+              weights: Mapping[SignalCategory, float] | None = None) -> ScoreBreakdown: ...
+        # weights: workflow overrides (14.3.1) of category weights only; caps, steps and penalties are not overridable
+    def package_scores(self, breakdowns: Sequence[ScoreBreakdown]) -> tuple[int, int]: ...
+        # (max risk, round-half-up mean confidence); (0, 0) for none
+    @property
+    def settings_hash(self) -> str: ...
+
+# xdr_response/scoring/verdict.py
+def aggregate_verdict(signals: Sequence[ScoringSignal], breakdown: ScoreBreakdown, *,
+                      bands: Mapping[str, int] | None = None) -> Verdict: ...
+    # bands None: the built-in HIGH lower bound 60 (14.1.3 step 4 calls it without bands; enrichment passes
+    # bands=settings.bands)
+```
+
+The calculation is exactly `docs/threat-scoring.md` 5.1 and 5.2 (risk: highest weighted category, reputation cap, corroboration bonus, critical-asset bonus; confidence: base, reputation-only cap, independent-source bonus, contradiction penalty, failed-source penalty), with these precisions:
+
+- Signals with verdict `UNKNOWN` are ignored; `CLEAN` signals count only for the contradiction penalty and never lower risk.
+- Rounding happens once, at the end, half up (`math.floor(x + 0.5)`); then clamp to 0-100. Input order never changes the output (signals are sorted by `(category, integration, observable.type, observable.value, record_ids)` first).
+- No signal at all: risk 0, confidence 0, band LOW, the failed sources listed; the decision card shows "insufficient evidence".
+- `risk_band` uses the configured bands (`risk_band(score, bands)`).
+- `AI` text, analyst comments and anything without a record id are never inputs: there is no parameter that could carry them.
+
+`aggregate_verdict`: `MALICIOUS` when risk is at least the HIGH band lower bound and there is a `MALICIOUS` **behavioural detection** (a non-reputation signal that is not a vendor verdict, `vendor_verdict=False`), or `MALICIOUS` vendor verdicts (reputation signals or enrichment answers, any category) from two or more distinct integrations and no `CLEAN` signal; otherwise `SUSPICIOUS` when any signal is `MALICIOUS` or `SUSPICIOUS`; otherwise `CLEAN` when at least one source answered `CLEAN` and no source failed; otherwise `UNKNOWN`. One vendor's `MALICIOUS` alone is therefore `SUSPICIOUS`, whether it is a reputation service, a sandbox, an email gateway or an identity provider answering an enrichment.
+
+Risk precisions (threat-scoring 5.1 and 5.4, 14.9.6): a category corroborates only through a signal of an integration other than the base signal's (a source never corroborates itself); when every supporting signal that carries weight comes from one integration (another integration counts only when one of its signals is weighted at least `corroboration.min`, 14.9.7) and none is a `MALICIOUS` behavioural detection (not a vendor verdict, not `reputation` or `campaign_association`) with severity at least the CRITICAL band lower bound, the risk before the critical-asset bonus is capped at that bound minus one (`caps_applied`: "single source capped at 79"). Confidence precision (5.2 step 5): a failed source is penalised once, whatever mix of failing health values it reported.
+
+#### 14.2.3 Signals from records
+
+```python
+# xdr_response/scoring/signals.py
+ENRICHMENT_CATEGORY: Mapping[str, SignalCategory]
+    # secure_malware_analytics: sandbox_verdict; secure_endpoint, defender_endpoint, intune: endpoint_detection;
+    # entra: authentication_anomaly; secure_email, defender_o365: email_verdict; every other integration: reputation
+SEVERITY_POINTS: Mapping[Severity, int]          # CRITICAL 95, HIGH 80, MEDIUM 60, LOW 30, INFO 10
+LEVEL_POINTS: Mapping[str, int]                  # high 80, medium 60, low 40, none 0, unknown 0
+RECORD_CONFIDENCE: Mapping[RecordKind, int]      # detection 80, process_event 70, network_connection 60, dns_query 60,
+    # hash_prevalence 70, persistence_item 60, anomaly 70, mailbox_rule 70, role_change 75, email_message 80, cloud_app 60,
+    # user_profile 70
+def signals_from_enrichment(records: Sequence[EnrichmentRecord]) -> tuple[ScoringSignal, ...]: ...
+def signals_from_records(records: Sequence[AnyRecord], *, observable: Observable) -> tuple[ScoringSignal, ...]: ...
+```
+
+| Record | Signal | Severity | Verdict |
+|---|---|---|---|
+| enrichment (not `UNKNOWN`) | `ENRICHMENT_CATEGORY[integration]`, `vendor_verdict=True` | risk_score | record verdict; confidence = record confidence |
+| detection | endpoint_detection; persistence when `category` names persistence; lateral_movement when it names lateral movement | `SEVERITY_POINTS[severity]` | record verdict |
+| process_event with verdict `MALICIOUS` or `SUSPICIOUS` | endpoint_detection | 70 (malicious), 50 (suspicious) | record verdict |
+| network_connection / dns_query with verdict not `UNKNOWN` | network_behaviour | 70 / 50 | record verdict |
+| hash_prevalence with verdict `MALICIOUS` | endpoint_detection | 70 | MALICIOUS |
+| persistence_item with verdict `MALICIOUS` or `SUSPICIOUS` | persistence | 70 / 50 | record verdict |
+| anomaly | authentication_anomaly | `SEVERITY_POINTS[severity]` | SUSPICIOUS (MALICIOUS when severity HIGH or CRITICAL) |
+| user_profile with `risk_state == "confirmed_compromised"` or `risk_level == "high"` | authentication_anomaly | 85 / `LEVEL_POINTS[risk_level]` | MALICIOUS / SUSPICIOUS |
+| mailbox_rule with `external_forwarding` or `delete` | persistence | 70 | SUSPICIOUS |
+| role_change with `privileged` and change `assigned` or `activated` | persistence | 75 | SUSPICIOUS |
+| email_message with verdict not `UNKNOWN` | email_verdict | 80 malicious, 50 suspicious, 0 clean | record verdict |
+| cloud_app with verdict not `UNKNOWN` | persistence | 60 | record verdict |
+| sign_in, mfa_event, endpoint, generic | none (context only; patterns over them are hook-derived signals) | | |
+
+`campaign_association` and `lateral_movement` patterns come from correlation links and workflow hooks (14.3.3), always citing the records they were computed from.
+
+#### 14.2.4 Configuration
+
+```python
+# xdr_response/config/schema.py   (scoring owns only these classes in this file)
+class ScoringCaps(BaseModel):
+    reputation_max_contribution: int = 50        # 0-100
+    reputation_only_confidence_cap: int = 50
+class CorroborationSettings(BaseModel):
+    min: int = 30; step: int = 5; max: int = 15
+class ConfidenceSettings(BaseModel):
+    independent_source_step: int = 5; independent_source_max: int = 20; contradiction_penalty: int = 15
+    failed_source_penalty: int = 5; failed_source_max_penalty: int = 20
+class ScoringContextSettings(BaseModel):
+    critical_asset_bonus: int = 10
+class ScoringSettings(BaseModel):
+    bands: dict[str, int] = {"LOW": 0, "MEDIUM": 30, "HIGH": 60, "CRITICAL": 80}
+        # validator: exactly the four RiskBand names, LOW == 0, strictly increasing in band order, all <= 100
+    weights: dict[SignalCategory, float] = {}    # 0.0-1.0; missing categories use DEFAULT_WEIGHTS; unknown key refused
+    caps: ScoringCaps = ScoringCaps()
+    corroboration: CorroborationSettings = CorroborationSettings()
+    confidence: ConfidenceSettings = ConfidenceSettings()
+    context: ScoringContextSettings = ScoringContextSettings()
+    def weight(self, category: SignalCategory) -> float: ...
+```
+
+`config/thresholds.yaml` gets the shape of `docs/threat-scoring.md` section 7 with the defaults above (`extra="forbid"` stays; a Phase 0 file with `weights: {}` still loads). `models/recommendation.py`: `risk_band(score: int, bands: Mapping[str, int] | None = None) -> RiskBand` (None: the built-in cut-offs; existing callers unchanged).
+
+#### 14.2.5 What scores never do (tested)
+
+Scores never approve, skip approval, execute or change `approval_level`; a low score never hides an action (below-threshold actions are listed in the notes, 14.3.4); a high score never adds an action no rule proposes; dry run and live runs score identically. Required tests are `docs/threat-scoring.md` section 10 plus: weights override cannot change caps; `explain()` is stable; record ids in every contribution exist in the input signals.
+
+### 14.3 Workflow framework (owner: workflow-framework)
+
+A workflow is a validated, declarative `WorkflowDefinition` (plus optional pure hooks) in its own package. The framework investigates, correlates, scores and turns the definition's rules into `ProposedAction`s; the Phase 0 lifecycle does everything after that. A workflow contains no vendor HTTP code, no approval logic and no execution path.
+
+#### 14.3.1 `WorkflowDefinition`
+
+```python
+# xdr_response/workflows/definition.py   (layer 0 model module)
+WORKFLOW_ID_RE = r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$"        # kebab-case == workflows/<id>/
+SEMVER_RE = r"^\d+\.\d+\.\d+$"
+TACTICS: Mapping[str, str]   # ATT&CK Enterprise tactic ids: TA0043 Reconnaissance, TA0042 Resource Development,
+    # TA0001 Initial Access, TA0002 Execution, TA0003 Persistence, TA0004 Privilege Escalation, TA0005 Defense Evasion,
+    # TA0006 Credential Access, TA0007 Discovery, TA0008 Lateral Movement, TA0009 Collection,
+    # TA0011 Command and Control, TA0010 Exfiltration, TA0040 Impact
+APPROVAL_LIKE_KEYS: frozenset[str]   # config FORBIDDEN_KEYS | {"approval_level", "requires_approval", "approve", "approved"}
+
+class TriggerSpec(FrozenModel):
+    type: Literal["xdr_incident_rule", "webhook", "schedule", "manual"]
+    description: str
+    mitre_techniques: tuple[str, ...] = ()       # match incident.trigger["mitre_techniques"]
+    title_patterns: tuple[str, ...] = ()         # fnmatch, case-insensitive, on incident.title
+    sources: tuple[str, ...] = ()                # incident.source or incident.trigger["source"]
+    observable_types: tuple[ObservableType, ...] = ()   # the incident must carry at least one
+    priority: int = 100                          # higher wins when several workflows match
+    def matches(self, incident: Incident) -> bool: ...
+        # every non-empty criterion must hold (AND); within a criterion any value may match (OR);
+        # "manual" and "schedule" triggers never match automatically
+
+class IntegrationRequirement(FrozenModel):
+    integration: str                             # INTEGRATION_NAMES member
+    purpose: str                                 # one line for the README
+    atomics: tuple[str, ...] = ()                # read atomics that use it
+
+class InvestigationStep(FrozenModel):
+    id: str                                      # snake_case, unique in the workflow
+    atomic: str                                  # a read_atomics() name (14.1.9)
+    subjects: str | None = None                  # expression -> list[str]; default: incident observables of the
+                                                 # atomic's subject types plus values found by earlier steps (below)
+    subject_type: ObservableType | None = None   # required with `subjects` when the atomic accepts several types
+    when: str | None = None                      # expression -> bool; step skipped (noted) when false
+    integrations: tuple[str, ...] = ()           # restrict sources; subset of required + optional integrations
+    options: JsonDict = {}                       # passed to the atomic (adapter query options)
+    lookback_hours: int | None = None            # 1-720; default 24
+    max_subjects: int = 25                       # 1-200; further subjects are listed in notes, not queried
+
+class CorrelationSpec(FrozenModel):
+    description: str                             # README "Correlation logic" source
+    link_kinds: tuple[LinkKind, ...] = tuple(k for k in LinkKind if k is not LinkKind.WORKFLOW)
+    window_minutes: int = 60                     # 1-1440
+
+class ScoringInputs(FrozenModel):
+    description: str                             # README "Risk calculation" source
+    weights: Mapping[SignalCategory, float] = {} # category weight overrides, 0.0-1.0
+    expected_sources: tuple[str, ...] = ()       # default: the required integrations
+
+class RecommendationRule(FrozenModel):
+    id: str                                      # snake_case, unique in the workflow
+    description: str
+    action: ActionType                           # validator: CONTAINMENT or REMEDIATION catalog type
+    builder: str | None = None                   # a CONTAINMENT_BUILDERS name whose action type == action;
+                                                 # default build_containment(action)
+    for_each: str                                # expression -> list
+    when: str | None = None                      # expression -> bool
+    target: str                                  # expression -> str (normalized by the builder)
+    evidence: str                                # expression -> list[str] of record ids (>= 1 at run time)
+    include_target_enrichment: bool = True
+    asset: str | None = None                     # expression -> {"groups", "tags", "roles", "ip"} (optional keys)
+    params: Mapping[str, str] = {}               # param name -> expression; RESERVED_PARAM_KEYS refused; no floats
+    rationale: str                               # expression -> str
+    min_risk: int = 0                            # below: "considered, not proposed" note, never silent
+    min_confidence: int = 0
+    mitre: tuple[str, ...] = ()                  # technique / sub-technique ids this rule responds to
+
+class MitreMapping(FrozenModel):
+    tactic: str                                  # key of TACTICS
+    technique: str                               # r"^T\d{4}$"
+    technique_name: str
+    sub_technique: str | None = None             # r"^T\d{4}\.\d{3}$", must start with technique
+    sub_technique_name: str | None = None
+    rationale: str                               # why this workflow responds to it ("no forced mappings")
+    @property
+    def tactic_name(self) -> str: ...
+    @property
+    def attack_id(self) -> str: ...              # sub_technique or technique
+
+class WorkflowDefinition(FrozenModel):
+    id: str                                      # WORKFLOW_ID_RE
+    version: str                                 # SEMVER_RE; bound into packages and tokens (workflow_version)
+    name: str
+    description: str                             # README "Purpose" source
+    phase: Literal[2, 3, 4, 5]
+    default_severity: Severity
+    legacy_id: str | None = None                 # workflows/<legacy_id>/workflow.yaml this definition replaces
+    triggers: tuple[TriggerSpec, ...]            # >= 1
+    input_observables: tuple[ObservableType, ...]   # >= 1; README "Input data"
+    required_integrations: tuple[IntegrationRequirement, ...]   # >= 1
+    optional_integrations: tuple[IntegrationRequirement, ...] = ()
+    investigation: tuple[InvestigationStep, ...] # >= 1
+    correlation: CorrelationSpec
+    scoring: ScoringInputs
+    recommendations: tuple[RecommendationRule, ...]   # >= 1
+    mitre: tuple[MitreMapping, ...]              # >= 1
+    known_limitations: tuple[str, ...]           # >= 1
+    related_workflows: tuple[str, ...] = ()
+```
+
+Validators (all at import time, `ValueError`): unique step and rule ids; required and optional integrations disjoint; step `integrations` within them; every expression parses with `workflows.expr.parse` (syntax and function whitelist); `builder` matches `action`; rule `mitre` ids appear in `mitre`; no key in `APPROVAL_LIKE_KEYS` anywhere in the definition (walk of `model_dump`), so a workflow cannot carry an approval switch; `legacy_id` is either `id` or one of the legacy ids of 14.5.
+
+"Required" integrations are the **expected** sources: they feed `ScoringContext.expected_sources`, the README and the readiness note. A required integration that is disabled or failing never blocks a recommendation that other evidence supports; the run notes it and confidence drops (14.2).
+
+#### 14.3.2 Rule language: the `xdr_plan` evaluator is reused
+
+Recommendation rules keep the legacy plan-rule shape (`for_each` / `when` / `target` / `args`, section 1.2) and the same safe evaluator, so there is one rule system. Phase 1 makes `xdr_response/workflows/expr.py` the canonical evaluator: a copy of `engine/xdr_plan/expr.py` (same AST whitelist, no builtins, dict-only attribute access, `ExprError`) plus these functions in `FUNCTIONS`: `ids(items)` (list of `item["record_id"]` or of each item's `record_ids`, flattened), `flatten(lists)`, `distinct(values)` (sorted unique), `within_minutes(t1, t2, n)` (ISO timestamps), `in_cidr(ip, cidr)`. `legacy-alignment` then replaces `engine/xdr_plan/expr.py` with a re-export shim of the canonical module (14.4), after `workflow-framework` has landed it.
+
+Expression names available to rules and steps:
+
+| Name | Value |
+|---|---|
+| `incident` | `Incident.model_dump(mode="json")` plus `observables_by_type` (`{type: [values]}`) |
+| `results` | `{atomic name: [rule items of every subject]}`; atomics that did not run give `[]` |
+| `enrichment` | `{"<type>:<value>": ObservableReport.rule_item()}` |
+| `correlation` | `CorrelationResult.rule_item()` (empty structure before the correlation step) |
+| `blast` | `BlastRadiusReport.rule_item()` |
+| `facts` | the hook's `facts()` mapping (14.3.3), `{}` without hooks |
+| `item` | the current `for_each` element |
+
+Values found by earlier steps feed later default subjects: every entity value of the step's subject types mentioned in records of earlier steps (for example endpoints listed by `search_hash_enterprise` feed a later `investigate_endpoint`), de-duplicated, in first-seen order, capped by `max_subjects`.
+
+#### 14.3.3 Hooks (optional, pure)
+
+```python
+# xdr_response/workflows/hooks.py
+@dataclass(frozen=True)
+class RunView:                                   # read-only facts; no context, no adapters
+    workflow: WorkflowDefinition
+    incident: Incident
+    results: tuple[AtomicResult, ...]
+    index: RecordIndex
+    correlation: CorrelationResult | None
+    blast_radius: BlastRadiusReport | None
+
+class WorkflowHooks:
+    def correlate(self, view: RunView) -> Sequence[CorrelationLink]: return ()       # kind WORKFLOW, origin "workflow:<id>"
+    def derive_signals(self, view: RunView) -> Sequence[ScoringSignal]: return ()    # origin "workflow:<id>"
+    def facts(self, view: RunView) -> Mapping[str, Any]: return {}                   # JSON values for rule expressions
+```
+
+Hooks are called with `correlation=None` for `correlate` and with the final correlation for the other two. Every link and signal they return must cite existing record ids (`RecordIndex.require`); an invalid item, an exception or non-JSON facts are noted and ignored (never block, never crash the run). Hooks are read-zone code (14.0.1 lint applies) and get no context, so they cannot reach an adapter.
+
+#### 14.3.4 Runner
+
+```python
+# xdr_response/workflows/runner.py
+class RuleOutcomeStatus(StrEnum):
+    PROPOSED = "PROPOSED"; BELOW_THRESHOLD = "BELOW_THRESHOLD"; UNROUTED = "UNROUTED"
+    DUPLICATE = "DUPLICATE"; NO_EVIDENCE = "NO_EVIDENCE"; ERROR = "ERROR"
+
+class RuleOutcome(FrozenModel):
+    rule_id: str
+    status: RuleOutcomeStatus
+    action_type: ActionType
+    target: str | None = None
+    risk_score: int = 0
+    confidence_score: int = 0
+    record_ids: tuple[str, ...] = ()
+    detail: str = ""
+
+@dataclass(frozen=True)
+class WorkflowRun:
+    workflow: WorkflowDefinition
+    incident_id: str
+    dry_run: bool
+    started_at: datetime
+    finished_at: datetime
+    results: tuple[AtomicResult, ...]
+    index: RecordIndex
+    correlation: CorrelationResult
+    blast_radius: BlastRadiusReport
+    signals: tuple[ScoringSignal, ...]           # hook-derived, validated
+    built: tuple[BuiltRecommendation, ...]
+    outcomes: tuple[RuleOutcome, ...]
+    proposals: tuple[ProposedAction, ...]        # == [b.proposal for b in built if b.proposal]
+    breakdowns: Mapping[tuple[ActionType, str], ScoreBreakdown]
+    risk_score: int                              # ScoringEngine.package_scores
+    confidence_score: int
+    health: Mapping[str, HealthStatus]           # worst status per integration
+    notes: tuple[str, ...]
+    def summary(self) -> WorkflowSummary: ...
+    def raw_enrichments(self) -> tuple[EnrichmentResult, ...]: ...
+    def raw_investigations(self) -> tuple[InvestigationResult, ...]: ...
+
+class WorkflowRunner:
+    def __init__(self, adapters: ReadOnlyAdapters, settings: Settings, *, clock: Clock,
+                 scorer: ScoringEngine | None = None) -> None: ...
+    def run(self, workflow: WorkflowDefinition, hooks: WorkflowHooks | None, incident: Incident, *,
+            dry_run: bool) -> WorkflowRun: ...
+```
+
+`run` (deterministic; never raises for a source, rule or hook):
+
+1. `ctx = AtomicContext(...)` with the workflow's lookback.
+2. Investigation steps in order. A step whose `when` or `subjects` expression fails, or whose atomic raises, is noted and skipped; partial results stay.
+3. `index = RecordIndex(results)`; hook links; `correlate`; `blast_radius`; hook signals and facts.
+4. Rules in order. Per `for_each` item: `when`; `target`; `evidence` ids -> `EvidenceBuilder.cite` (unknown ids or an empty list: `NO_EVIDENCE`); scoring of the target: `signals_from_records(cited records)` + enrichment signals of the target + hook signals for the target, context = critical-asset classes of the target (with the rule's `asset`), expected sources, failed and not-queried sources of the results that concern the target; `min_risk` / `min_confidence` (`BELOW_THRESHOLD`); builder call (`UNROUTED` when no route); a second rule for the same `(action_type, target)` merges its evidence into the first and keeps the higher risk (`DUPLICATE`, as `PackageBuilder` would). Expression errors give `ERROR` with the message.
+5. `rationale = <rule rationale> + "; " + breakdown.explain()`; the explanation (with the settings hash) therefore reaches the package and the `PACKAGE_PROPOSED` audit record.
+6. Package scores, health, notes: degraded sources, disabled required integrations, skipped steps, truncated subjects, unrouted and below-threshold actions, rule and hook errors.
+
+#### 14.3.5 Discovery and routing (no shared registry)
+
+```python
+# xdr_response/workflows/discovery.py
+class WorkflowDiscoveryError(RuntimeError): ...
+
+@dataclass(frozen=True)
+class DiscoveredWorkflow:
+    definition: WorkflowDefinition
+    hooks: WorkflowHooks | None
+    module: str                                  # e.g. "xdr_response.workflows.ransomware"
+
+class WorkflowCatalog:
+    def __init__(self, workflows: Iterable[DiscoveredWorkflow]) -> None: ...   # duplicate id -> WorkflowDiscoveryError
+    def ids(self) -> tuple[str, ...]: ...                                    # sorted
+    def get(self, workflow_id: str) -> DiscoveredWorkflow: ...               # KeyError
+    def resolve(self, incident: Incident) -> DiscoveredWorkflow | None: ...
+        # 1 incident.workflow_id is a catalog id -> that workflow
+        # 2 else the matching automatic triggers, highest priority, then id; None when nothing matches
+    def assign(self, incident: Incident) -> Incident: ...
+        # copy with workflow_id / workflow_version of resolve(); unchanged when None
+
+def discover_workflows(package: str = "xdr_response.workflows") -> WorkflowCatalog: ...
+    # pkgutil.iter_modules(<package>.__path__): every sub-PACKAGE whose name does not start with "_" is a workflow;
+    # import it; it must export WORKFLOW (WorkflowDefinition) and may export HOOKS (WorkflowHooks instance);
+    # package name == WORKFLOW.id.replace("-", "_"). Import or validation errors raise WorkflowDiscoveryError
+    # naming the package: a broken workflow fails loudly, it is never skipped.
+```
+
+Framework modules in `xdr_response/workflows/` are plain modules (`definition.py`, `expr.py`, `hooks.py`, `runner.py`, `discovery.py`), never sub-packages, so adding a workflow is adding a directory: no file lists workflows. An incident whose `workflow_id` names a workflow that is not migrated yet (a legacy spec only) resolves to `None` and takes the Phase 0 generic path (`InvestigationService` + `RuleBasedRecommender`) with the note "workflow <id> not migrated yet". Cross-workflow correlation (Phase 5) is a framework feature over several runs, not a workflow directory.
+
+#### 14.3.6 Plugging into the lifecycle
+
+```python
+# xdr_response/lifecycle/workflow_adapter.py
+@dataclass(frozen=True)
+class WorkflowInvestigationReport(InvestigationReport):
+    run: WorkflowRun | None = None
+
+class WorkflowInvestigator:                      # same contract as InvestigationService.run
+    def __init__(self, catalog: WorkflowCatalog, runner: WorkflowRunner, fallback: InvestigationService, *,
+                 audit: AuditSink | None, dry_run: Callable[[], bool]) -> None: ...
+    def run(self, incident: Incident) -> InvestigationReport: ...
+        # resolve(); None -> fallback.run(incident). Else runner.run(...), then audit ENRICHMENT_RESULT per raw
+        # enrichment and INVESTIGATION_COMPLETED once (same payloads and failure policy as InvestigationService),
+        # and return WorkflowInvestigationReport(enrichments=raw, investigations=raw, health=run.health, run=run)
+
+class WorkflowRecommender:                       # implements lifecycle.recommendation.Recommender
+    def __init__(self, fallback: Recommender) -> None: ...
+    def recommend(self, incident: Incident, investigation: InvestigationReport) -> Recommendation: ...
+        # report with a run -> Recommendation(proposals=run.proposals, risk_score=run.risk_score,
+        #   confidence_score=run.confidence_score, summary=..., unrouted=(UnroutedAction per UNROUTED outcome),
+        #   notes=run.notes); otherwise fallback.recommend(...)
+
+# xdr_response/lifecycle/observers.py
+@runtime_checkable
+class LifecycleObserver(Protocol):
+    def on_event(self, event: LifecycleEvent) -> object: ...
+```
+
+Changes to Phase 0 lifecycle files (workflow-framework):
+
+- `build_runtime(..., workflows: WorkflowCatalog | None = None, observers: Sequence[LifecycleObserver] = ())`: with a catalog, the runtime's investigator is `WorkflowInvestigator(catalog, WorkflowRunner(ReadOnlyAdapters(adapters), settings, clock=clock), fallback=InvestigationService(...), audit=audit, dry_run=<orchestrator's dry-run check>)` and its recommender `WorkflowRecommender(RuleBasedRecommender(adapters))`; explicit `investigator=` / `recommender=` arguments still win. Without a catalog everything behaves exactly as in Phase 0, so every Phase 0 test is unchanged. `Runtime` gains `workflows: WorkflowCatalog | None = None` and `observers: tuple[LifecycleObserver, ...] = ()`.
+- `bootstrap(..., workflows: bool = True, notifications_path: Path | str | None = None)`: discovers the catalog; adds `NotificationService([JsonlNotificationSink(notifications_path or env XDR_RESPONSE_NOTIFICATIONS_PATH or "var/notifications/outbox.jsonl")])`.
+- `ResponseOrchestrator.open_incident` stores `runtime.workflows.assign(incident)` when a catalog is wired (before `INCIDENT_RECEIVED` is audited), so packages and tokens carry the workflow id and version.
+- The orchestrator emits a `LifecycleEvent` to every observer after `investigate_and_propose` (PACKAGE_PROPOSED or DETECTION_COMPLETED, with `run.summary()` when available), `submit_decision` (DECISION_RECORDED, then CONTAINMENT_COMPLETED when executed), `propose_release`, `submit_release_decision` and `close`. Observer exceptions are logged and swallowed; observers never change state and never see tokens.
+
+Nothing else in the lifecycle changes: packages, approval, execution, verification and restoration are Phase 0 code. ELEVATED, allow-list exclusion and blast-radius rules are applied by `PackageBuilder` to every workflow package, and re-checked at decision time (13.25).
+
+#### 14.3.7 Dry run
+
+Dry run is a framework property; a workflow cannot opt out or add its own switch. The read zone behaves identically in dry run (reads are allowed, nothing writes). The orchestrator marks the package `dry_run` and the `DryRunSimulator` renders the exact Phase 0 output; notifications get the `[DRY RUN]` title prefix. Every workflow ships a `dry-run.yaml` scenario asserting the exact `DRY RUN` lines and zero state-changing operations (14.5.3).
+
+#### 14.3.8 `plan_bridge` (section 12) and legacy replay
+
+```python
+# xdr_response/lifecycle/plan_bridge.py
+LEGACY_CONTAINMENT: Mapping[str, ActionType]   # isolate-endpoint, block-domain, block-url, block-ip, block-hash,
+                                               # disable-user, revoke-session (-> revoke_sessions), quarantine-email
+LEGACY_RESULT_SOURCES: Mapping[str, str]       # enrich-ip cisco_xdr, enrich-domain umbrella, enrich-hash cisco_xdr,
+                                               # investigate-host secure_endpoint, investigate-user entra
+LEGACY_SEVERITY_RISK: Mapping[str, int]        # info 10, low 25, medium 50, high 75, critical 90
+LEGACY_CONFIDENCE = 50
+
+@dataclass(frozen=True)
+class BridgedAction:
+    rule: str
+    legacy_atomic: str
+    legacy_target: str
+    status: str                                  # planned | skipped_allowlisted | skipped_internal (after C3, C5)
+    elevated: bool
+    action_type: ActionType
+    target: str                                  # runtime target (isolate: host name from the result item)
+    proposal: ProposedAction | None
+    note: str = ""
+
+@dataclass(frozen=True)
+class BridgeResult:
+    proposals: tuple[ProposedAction, ...]
+    actions: tuple[BridgedAction, ...]
+    records: tuple[GenericRecord, ...]
+    unrouted: tuple[BridgedAction, ...]
+    notes: tuple[str, ...]
+    escalate: bool
+
+def legacy_incident(data: Mapping[str, Any], *, workflow_id: str, created_at: datetime) -> Incident: ...
+    # id -> incident_id, severity upper-cased, observables, title, source, targets -> users/assets;
+    # workflow_version "legacy"
+def legacy_records(results: Mapping[str, Sequence[Mapping[str, Any]]]) -> tuple[GenericRecord, ...]: ...
+    # one GenericRecord per result item: integration LEGACY_RESULT_SOURCES[atomic], atomic "legacy:<atomic>",
+    # name "legacy:<atomic>", attributes = the item
+def guardrails_to_settings(guardrails: Mapping[str, Any], base: Settings) -> Settings: ...
+    # protected.hosts -> critical_assets production_server (hostname patterns, CIDRs); protected.users / groups ->
+    # privileged_account; allowlist.* -> allowlists.never_block (approved_rmm -> allowlists.approved_rmm);
+    # blast_radius max_hosts_isolated / max_users_disabled / max_indicators_blocked / max_messages_quarantined ->
+    # thresholds.blast_radius max_endpoints / max_users / max_indicators / max_messages
+def bridge_plan(plan: "xdr_plan.planner.Plan", *, incident: Incident,
+                results: Mapping[str, Sequence[Mapping[str, Any]]],
+                route: Callable[[ActionType, str], RouteDecision],
+                incident_data: Mapping[str, Any] | None = None) -> BridgeResult: ...
+    # planned actions -> ProposedAction: evidence = the GenericRecord of Action.source (results key and index), else
+    # every legacy record whose attributes mention the target; risk LEGACY_SEVERITY_RISK[severity], confidence
+    # LEGACY_CONFIDENCE, rationale "legacy plan rule <id> (replay; scores not computed)"; isolate-endpoint targets
+    # (connector GUIDs) map to the item's host name with params["connector_guid"]; skipped_* actions are not proposed
+
+# tools/simulator/legacy_replay.py   (owner: workflow-framework; outside the read zone because it builds a lab runtime)
+def replay_legacy_scenario(workflow_id: str, path: Path) -> "LegacyReplay": ...
+    # dry run only, on the simulated lab (full SIMULATION_SUITE) with guardrails_to_settings(...): build_plan ->
+    # bridge_plan -> PackageBuilder (dry_run=True) -> DryRunSimulator; returns the package, the DRY RUN report and
+    # the list of mismatches against the scenario's expect block (empty list = pass): planned actions are in the
+    # package, `elevated: true` matches ELEVATED, skipped_* actions are not in the package, `escalate` matches
+```
+
+Legacy replay is a migration and regression tool. In production an incident of an unmigrated workflow takes the Phase 0 generic path (14.3.5); `plan_bridge` is never on the production path. It is deleted at the end of Phase 5 with `engine/xdr_plan` (14.4).
+
+#### 14.3.9 Simulator and automatic scenario discovery
+
+- `tools/simulator/workflow_scenario.py`: `WorkflowScenario` (pydantic model of the 14.5.2 format), `load_workflow_scenario(path)`, `discover_workflow_scenarios(root=REPO_ROOT / "tests" / "fixtures" / "workflows") -> dict[str, list[Path]]` (every `<workflow id>/*.yaml`; the directory name must be a catalog id), `WorkflowScenarioRun` (extends `ScenarioRun`: `in_memory_runtime(..., workflows=discover_workflows())`, registers typed records as simulated findings, applies `config` overrides) and `check_coverage(workflow_id, scenarios, definition) -> list[str]` (14.5.3).
+- `tools/simulator/simulate.py`: `--workflow <id> [--scenario <name>]`, `--list-workflows`, `--legacy <workflow> [<scenario>]`; dry run by default, `--live` for simulated live, `--check` to assert `expect`.
+- `tests/simulation/test_workflow_scenarios.py` parametrizes over `discover_workflow_scenarios()` and runs every scenario in its modes, plus the implicit assertions of 14.5.3; `tests/simulation/test_legacy_replay.py` parametrizes over every remaining `workflows/<id>/scenarios/*.yaml`. Neither file lists workflows or scenarios, so workflow agents never edit them.
+
+### 14.4 Legacy alignment (owner: legacy-alignment)
+
+Phase 1 brings the spec layer (`atomic/`, `workflows/`, `engine/xdr_plan`, `docs/deployment/guardrails.example.yaml`) in line with the lifecycle, so that no legacy file, test or scenario asserts a weaker rule than the runtime enforces.
+
+#### 14.4.1 Conflicts C1 to C5 (section 1.3)
+
+| # | Change | Files | New check (fails `python -m xdr_plan check`) |
+|---|---|---|---|
+| C1 revoke-session requires approval | `atomic/revoke-session/atomic.yaml` `requires_approval: true` (README text too); every contain-phase step with `requires_approval: false` becomes `true`; every scenario expectation `requires_approval: false` becomes `true`; the planner sets `requires_approval=True` for every atomic whose category is `containment` | `atomic/revoke-session/*`, `workflows/*/workflow.yaml`, `workflows/*/scenarios/*.yaml`, `engine/xdr_plan/planner.py` | any containment atomic, contain-phase step or scenario expectation with `requires_approval: false` |
+| C2 `auto_approve` removed | delete the `auto_approve` section from `docs/deployment/guardrails.example.yaml`; delete the planner branch; delete every "eligible for auto-approval" phrase from `workflow.yaml` notes, READMEs and agents; `repo.load_guardrails` raises `ValueError` for any key in `LEGACY_FORBIDDEN_KEYS` at any depth | `docs/deployment/guardrails.example.yaml`, `engine/xdr_plan/{planner,repo}.py`, `engine/README.md`, `workflows/**`, `.claude/agents/wf-*.md` | `LEGACY_FORBIDDEN_KEYS` (in `engine/xdr_plan/guardrails.py`, a test asserts it equals `xdr_response.config.loader.FORBIDDEN_KEYS`) in guardrails, specs or scenarios |
+| C3 protected becomes ELEVATED | `host_protected` / `user_protected` return the marker `"elevated:protected"`; the planner keeps such actions with `status="planned"`, `elevated=True`, reason `"protected asset: ELEVATED approval required"`; status `skipped_protected` is removed | `engine/xdr_plan/{guardrails,planner,validate}.py`, scenarios | a scenario expecting `skipped_protected` |
+| C4 unlock codes removed | delete every `{plan.unlock_codes}` placeholder and any template text that copies an unlock code; "the unlock code stays in the Secure Endpoint console" wording may stay | `workflows/*/workflow.yaml` (11 files), READMEs | a template containing `unlock_code` |
+| C5 over-limit becomes ELEVATED | over a blast-radius cap the planned actions stay `planned` with `elevated=True` and reason `"<cap>: <n> planned > limit <limit>: ELEVATED approval required"`; `escalate` stays `True`; status `skipped_limit` is removed | `engine/xdr_plan/planner.py`, scenarios | a scenario expecting `skipped_limit` |
+
+Planner contract after Phase 1 (`engine/xdr_plan/planner.py`):
+
+```python
+@dataclass
+class Action:
+    rule: str
+    atomic: str
+    target: str
+    status: str                       # planned | skipped_allowlisted | skipped_internal
+    requires_approval: bool           # always True for containment atomics
+    args: dict[str, Any] = field(default_factory=dict)
+    elevated: bool = False            # C3 protected asset or C5 over the cap
+    reasons: list[str] = field(default_factory=list)
+    source: tuple[str, int] | None = None   # (results key, index) when the for_each item is an element of results[key]
+```
+
+Scenario `expect.actions[*]` accepts `elevated` (default `false`, compared strictly) and `requires_approval` (only `true` allowed). The coverage rule "a scenario exercises a guardrail" accepts either a `skipped_*` status or `elevated: true`. `url_check` honours the per-action allow-list: a URL on an allow-listed domain is still planned when the domain is in `allowlist.url_block_allowed_domains` (mirrors `AllowlistPolicy`).
+
+`engine/xdr_plan/expr.py` becomes `from xdr_response.workflows.expr import *` plus `ExprError`, `FUNCTIONS`, `parse`, `evaluate`, `_domain_of` re-exported, once `xdr_response/workflows/expr.py` exists (until then it stays unchanged).
+
+#### 14.4.2 Renames and new directories
+
+Phase 1 (legacy-alignment, one commit): move `workflows/powershell` to `workflows/malicious-powershell` and `workflows/rmm` to `workflows/unauthorized-rmm`; update their `id`, every `related_workflows` and atomic `used_by` reference, `workflows/README.md`, `engine/README.md`, rename `.claude/agents/wf-powershell.md` to `wf-malicious-powershell.md` and `wf-rmm.md` to `wf-unauthorized-rmm.md` (name, description and paths inside), and regenerate `docs/mitre-mapping/` (14.5.5). `repo.workflow_ids()` lists only directories that contain a `workflow.yaml`, so migrated and new workflows drop out of the legacy checks automatically; `tests/test_repo.py` accepts as a valid workflow id any directory under `workflows/` that holds a `README.md`.
+
+The new directories `workflows/mfa-fatigue`, `workflows/suspicious-authentication` and `workflows/threat-intel-sweep` are created by their workflow owners in Phases 2, 4 and 5 (14.5), not in Phase 1.
+
+Phase 1 also rewrites every `.claude/agents/wf-<X>.md` to the Phase 2-5 ownership model of 14.5.1 (owned paths, definition of done = 14.5.4, the non-negotiable rules of this document, no edits to framework or generated files).
+
+#### 14.4.3 Fate of `engine/xdr_plan` and the legacy tests
+
+| When | `engine/xdr_plan` | `tests/test_workflows.py`, `test_repo.py`, `test_engine.py` | Specs |
+|---|---|---|---|
+| Phase 1 | aligned (14.4.1); `expr.py` becomes a shim | updated for C1-C5 and renames; still run in CI with `python -m xdr_plan check` | all 19 specs replay through `plan_bridge` in dry run (`test_legacy_replay.py`) |
+| Phases 2-5 | unchanged; covers only specs not yet migrated | parametrized over the remaining specs, so they shrink as workflows migrate | a migrating workflow deletes its `workflow.yaml` and `scenarios/` in the same commit that adds its definition and its `legacy-*` scenarios |
+| End of Phase 5 (when no `workflows/*/workflow.yaml` remains; framework integrator) | deleted with `engine/README.md`; `pyproject.toml` packages and `pythonpath` drop `engine`; CI drops `python -m xdr_plan check` | `test_workflows.py` and `test_engine.py` deleted; `test_repo.py` keeps the YAML-parse and link checks and checks MITRE docs through the generator | `lifecycle/plan_bridge.py`, `tools/simulator/legacy_replay.py`, `test_legacy_replay.py` and `docs/deployment/guardrails.example.yaml` deleted; `atomic/` spec dirs replaced by a README pointing to `xdr_response.atomics` |
+
+### 14.5 Workflow directory conventions (Phases 2 to 5)
+
+#### 14.5.1 Workflows and owned paths
+
+`<X>` is the workflow id (kebab-case), `<x_snake>` is `<X>` with `-` replaced by `_`.
+
+| Phase | Workflow `<X>` | Package `<x_snake>` | Legacy spec (`legacy_id`) | Notes |
+|---|---|---|---|---|
+| 2 | ransomware | ransomware | ransomware | |
+| 2 | phishing | phishing | phishing | |
+| 2 | account-takeover | account_takeover | account-takeover | |
+| 2 | mail-bombing | mail_bombing | mail-bombing | |
+| 2 | malware | malware | malware | |
+| 2 | mfa-fatigue | mfa_fatigue | none (new) | seeded from `account-takeover/05-mfa-fatigue-approved` (that scenario migrates here) |
+| 2 | password-spray | password_spray | password-spray | |
+| 2 | bec | bec | bec | shares email atomics with phishing |
+| 3 | malicious-powershell | malicious_powershell | malicious-powershell (renamed in Phase 1) | |
+| 3 | credential-dumping | credential_dumping | credential-dumping | |
+| 3 | lateral-movement | lateral_movement | lateral-movement | |
+| 3 | persistence | persistence | persistence | |
+| 3 | unauthorized-rmm | unauthorized_rmm | unauthorized-rmm (renamed in Phase 1) | `allowlists.approved_rmm` |
+| 4 | c2 | c2 | c2 | |
+| 4 | dns-tunneling | dns_tunneling | dns-tunneling | `allowlists.approved_dns_tools` |
+| 4 | exfiltration | exfiltration | exfiltration | |
+| 4 | suspicious-authentication | suspicious_authentication | none (new) | |
+| 4 | cloud-compromise | cloud_compromise | cloud-compromise | |
+| 5 | privilege-escalation | privilege_escalation | privilege-escalation | |
+| 5 | threat-intel-sweep | threat_intel_sweep | none (new) | `manual` / `schedule` triggers over indicator lists |
+| 5 | vulnerability-exploitation | vulnerability_exploitation | vulnerability-exploitation | add-on, aligned last |
+| 5 | web-attacks | web_attacks | web-attacks | add-on, aligned last |
+
+Phase 5 cross-source correlation is a framework change (`correlation-evidence` and `workflow-framework` successors), not a workflow directory.
+
+Each workflow agent owns exactly these paths and nothing else:
+
+| Path | Contents |
+|---|---|
+| `src/xdr_response/workflows/<x_snake>/__init__.py` | exports `WORKFLOW` and, when hooks exist, `HOOKS` |
+| `src/xdr_response/workflows/<x_snake>/definition.py` | `WORKFLOW = WorkflowDefinition(...)` |
+| `src/xdr_response/workflows/<x_snake>/hooks.py` (optional) | `class <Name>Hooks(WorkflowHooks)`; `HOOKS = <Name>Hooks()` |
+| `workflows/<X>/README.md` | the 17 sections of 14.5.4 |
+| `workflows/<X>/xdr/*.json` (optional) | XDR Automation exports from a real tenant only (never hand-written), without secure-string values |
+| `workflows/<X>/workflow.yaml`, `workflows/<X>/scenarios/` | legacy spec: deleted by the migration commit |
+| `tests/workflows/<x_snake>/test_*.py` | workflow-specific unit tests (rules, hooks) |
+| `tests/fixtures/workflows/<X>/*.yaml` | simulation scenarios (14.5.2, 14.5.3) |
+| `.claude/agents/wf-<X>.md` | the workflow's agent file |
+
+A workflow agent never edits framework code, atomics, config files, other workflows, `docs/` or the generated files of 14.5.5. A missing atomic, record field, builder or config option is reported as a contract change (14.7.2).
+
+#### 14.5.2 Scenario fixture format
+
+```yaml
+schema: 1                                # required
+name: tp-approve-all                     # == file stem
+workflow: ransomware                     # == parent directory == WORKFLOW.id
+description: >-
+  True positive on one workstation; analyst approves everything.
+tags: [true_positive, approve_all]       # closed vocabulary below
+legacy_source: workflows/ransomware/scenarios/01-workstation-encryption.yaml   # legacy-* files only
+mode: both                               # dry_run | live | both (default both)
+suite: {secure_endpoint: [endpoint], entra: [identity]}   # optional; default SIMULATION_SUITE
+config:                                  # optional, lab only, deep-merged over config/*.yaml; forbidden keys refused
+  critical_assets: {}
+  allowlists: {}
+  thresholds: {blast_radius: {max_endpoints: 1}}
+incident:                                # Phase 0 Incident fields; workflow_id == workflow; workflow_version omitted
+  incident_id: XDR-RW-0001
+  title: Ransomware detected on finance workstation
+  severity: CRITICAL
+  workflow_id: ransomware
+  observables: [{type: hostname, value: TH-LT-1047}, {type: sha256, value: <fake 64-hex>}]
+  users: [jsmith@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1486]}
+environment:
+  reputations: []                        # Phase 0 format (13.23)
+  records:                               # typed records served by simulated adapters (14.1.4)
+    - integration: secure_endpoint       # must be a suite member whose family serves the atomic
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, name: Ransomware.Generic, verdict: MALICIOUS, severity: CRITICAL,
+               endpoint: TH-LT-1047}     # never record_id / integration / atomic / subject: the normalizer fills them
+  preexisting: []                        # Phase 0 format
+  faults: []                             # Phase 0 format
+  health: {}                             # Phase 0 format
+  invalid_targets: []
+analyst: {decision: APPROVE_ALL, approvers: [analyst], select: [], comment: ""}
+release: {decision: APPROVE_ALL, approvers: [analyst], select: []}      # optional
+expect:
+  package: true                          # false: nothing proposed (state stays NOT_STARTED)
+  actions: ["isolate_endpoint:TH-LT-1047", "block_hash:<fake 64-hex>"]  # exact set in the package
+  elevated: []                           # exact set of ELEVATED actions
+  excluded: []                           # exact set of allow-listed (excluded_targets) actions
+  unrouted: []                           # exact set of UNROUTED outcomes
+  below_threshold: []                    # exact set of BELOW_THRESHOLD outcomes
+  risk: {min: 80, max: 100}
+  confidence: {min: 70, max: 100}
+  degraded_sources: []                   # exact set
+  warnings: []                           # substrings that must appear in some CriticalAssetWarning
+  evidence_min: 1                        # per action
+  dry_run_lines: []                      # exact DRY RUN output (dry_run mode)
+  decision_state: null                   # state after the decision when not executed (CLOSED, NOT_STARTED)
+  containment: CONTAINED                 # CONTAINED | PARTIALLY_CONTAINED | CONTAINMENT_FAILED
+  results: {}                            # {"action_type:target": ActionResultStatus}
+  already_contained: []
+  controls: 2                            # registry entries after containment
+  restoration: null                      # RESTORED | PARTIALLY_RESTORED | RESTORATION_FAILED
+  final_state: null
+  notifications: []                      # NotificationKind values rendered
+```
+
+Tag vocabulary: `true_positive`, `benign`, `approve_all`, `approve_selected`, `reject`, `more_investigation`, `degraded_source`, `critical_asset`, `partial_failure`, `dry_run`, `release`, `edge_case`, `legacy`. All data is fake (section 10 test-data rules: `example.com`, `*.example`, `*.test`, documentation IP ranges, fake 64-hex hashes, hosts like `TH-LT-1047`, users like `jsmith@example.com`).
+
+#### 14.5.3 Minimum scenario set per workflow
+
+| File | Tags | Must assert |
+|---|---|---|
+| `tp-approve-all.yaml` | true_positive, approve_all | package, exact actions, `containment: CONTAINED`, controls; mode both |
+| `tp-approve-selected.yaml` | true_positive, approve_selected | unselected actions `SKIPPED` / `REJECTED_BY_ANALYST` in `results`; only selected ones executed |
+| `tp-reject.yaml` | true_positive, reject | `decision_state: CLOSED`, `controls: 0` |
+| `benign-no-action.yaml` | benign | `package: false` (or only `below_threshold` entries) |
+| `degraded-source.yaml` | degraded_source | a fault or health override on an expected source; `package: true`; `degraded_sources` lists it |
+| `critical-asset-elevated.yaml` | critical_asset | `elevated` non-empty, `warnings`; approved by `lead` |
+| `partial-failure.yaml` | partial_failure | an injected fault on one approved action; `containment: PARTIALLY_CONTAINED`; that action `FAILED` |
+| `dry-run.yaml` | dry_run | `mode: dry_run`; exact `dry_run_lines`; state unchanged |
+| `release-restoration.yaml` | release | approve, then release; `restoration: RESTORED` |
+| `edge-<slug>.yaml` (at least two) | edge_case | workflow-specific behaviour (examples below) |
+| `legacy-<NN>-<slug>.yaml` | legacy | one per legacy scenario of the workflow, converted to typed records, expectations aligned with C1-C5 |
+
+Implicit assertions the framework test makes for every scenario (the scenario cannot switch them off): zero `STATE_CHANGING` operations and zero guard denials before the analyst decision; every proposed action has at least `evidence_min` evidence items and every item's `data["record_id"]` is in the run's `RecordIndex` (`EvidenceBuilder.verify`); risk and confidence are separate integers; every critical-asset target is ELEVATED with a warning, and for `critical_asset` scenarios an `APPROVE_ALL` by `analyst` alone is refused (`ApproverNotAllowedError`); `AI` and `automation` principals cannot approve any package; the audit chain verifies; no rule or hook `ERROR` outcome. `check_coverage` also requires: every tag of the table present, every recommendation rule `PROPOSED` in at least one scenario, at least one `BELOW_THRESHOLD` or `benign` scenario, every legacy scenario of `legacy_id` migrated while the legacy directory still exists.
+
+Edge-case examples (each workflow picks at least two relevant to it): ransomware (domain controller, widespread hash not blocked, backup tool look-alike); phishing (malicious path on an owned domain with `url_block_allowed_domains`, campaign over `max_messages`); account-takeover (IP already blocked: `ALREADY_CONTAINED`, break-glass account); mfa-fatigue (approved after many denials vs denials only); password-spray (internal source IP, one success among many failures); bec (external forwarding rule, look-alike sender domain); mail-bombing (volume over the cap); malware (unknown verdict hash not blocked); malicious-powershell (signed admin script); credential-dumping (domain controller); lateral-movement (admin jump host); persistence (`remove_persistence` unrouted, manual note); unauthorized-rmm (approved RMM excluded); c2 (shared CDN IP); dns-tunneling (approved DNS tool); exfiltration (sanctioned cloud storage); suspicious-authentication (corporate VPN egress); cloud-compromise (OAuth consent by an admin); privilege-escalation (`remove_privileged_role` always ELEVATED); threat-intel-sweep (no hits; hits over the indicator cap); vulnerability-exploitation and web-attacks (allow-listed internal scanner).
+
+#### 14.5.4 README (17 sections) and validator
+
+Every `workflows/<X>/README.md` of a migrated or new workflow starts with `# <WORKFLOW.name>` and has exactly these `##` headings, in this order, each with at least one non-empty line (`###` sub-headings are free). Brief 46 lists 16 items with "required/optional integrations" as one; here they are two sections, so there are 17 headings:
+
+1. Purpose
+2. Trigger
+3. Required integrations
+4. Optional integrations
+5. Input data
+6. Investigation steps
+7. Correlation logic
+8. Risk calculation
+9. Containment recommendations
+10. Approval requirements
+11. Containment execution
+12. Verification
+13. Rollback
+14. Failure handling
+15. MITRE mapping
+16. Testing instructions
+17. Known limitations
+
+`tools/validation/check_workflow_readmes.py [--workflow <X>]` (owner workflow-framework) checks every discovered workflow: README present; H1 equals `WORKFLOW.name`; exact H2 list and order; non-empty sections; "Required integrations" and "Optional integrations" name exactly the definition's integrations (backticked); "MITRE mapping" names every tactic, technique and sub-technique id of the definition and no other ATT&CK id; "Approval requirements" states that every action needs human approval and when ELEVATED applies; "Testing instructions" names `tests/fixtures/workflows/<X>/` and `tests/workflows/<x_snake>/`; "Known limitations" has at least as many bullets as `known_limitations`; no `auto_approve`, `unlock_code`, secret-like literal or non-documentation IP address; and `check_coverage` (14.5.3). Exit code 1 with one line per problem. Legacy READMEs of unmigrated workflows are not checked.
+
+A workflow is done when: its definition imports and validates; `check_workflow_readmes.py --workflow <X>` passes; `python -m pytest -q -p no:cacheprovider tests/workflows/<x_snake> tests/simulation/test_workflow_scenarios.py -k <X>` passes; the read-zone safety tests pass; `generate_workflow_docs.py --check` reports only the expected regeneration (applied by the phase integrator, 14.5.5).
+
+#### 14.5.5 Generated documentation
+
+`tools/validation/generate_workflow_docs.py [--write | --check]` (owner legacy-alignment) reads the discovered definitions (`discover_workflows()`) and the remaining legacy specs (`xdr_plan.repo`) and writes:
+
+- `docs/mitre-mapping/mitre-mapping.yaml` (`schema_version: 2`): techniques sorted by ATT&CK id, each `{id, name, tactics: [{id, name}], workflows: [ids]}` (legacy specs contribute `tactics: []`);
+- `docs/mitre-mapping/README.md`: the same as a table (technique, name, tactics, workflows with links to `workflows/<X>/README.md`);
+- `docs/workflows/README.md`: index of all workflows (id, phase, status `migrated` / `legacy spec`, severity, ATT&CK ids, recommended action types, required integrations, scenario count).
+
+Each generated file starts with `<!-- generated by tools/validation/generate_workflow_docs.py; do not edit -->` (YAML: a `#` comment). Output is deterministic. `--check` exits 1 on any difference and runs in CI. Nobody hand-edits these files: during Phases 2-5 workflow agents run `--check` only, and the phase integrator (the framework owner) runs `--write` once per merge batch. `tests/test_repo.py::test_mitre_mapping_in_sync` calls the generator in check mode.
+
+### 14.6 Phase 1 file ownership
+
+Every file created or changed in Phase 1 belongs to exactly one key. Paths are relative to the repository root; `src/` means `src/xdr_response/`. A directory entry covers every file under it. Files not listed are not changed in Phase 1.
+
+| Key | Owns (new unless marked *changed*) |
+|---|---|
+| **scoring** | `src/models/scoring.py`; `src/scoring/engine.py`, `src/scoring/signals.py`, `src/scoring/verdict.py`; *changed*: `src/scoring/__init__.py`, `src/scoring/README.md`, `src/config/schema.py` (only `ScoringSettings` and the four new settings classes of 14.2.4), `src/models/recommendation.py` (only `risk_band`), `config/thresholds.yaml`, `docs/threat-scoring.md`; tests: `tests/unit/scoring/` |
+| **enrichment** | `src/atomics/enrichment/` (`__init__.py`, `models.py`, `atomics.py`, private helpers); tests: `tests/unit/atomics/enrichment/` |
+| **investigation** | `src/atomics/records.py`; `src/atomics/investigation/` (`__init__.py`, `atomics.py`, `normalize/__init__.py`, `normalize/{cisco_xdr,secure_endpoint,defender_endpoint,entra,microsoft_cloud,secure_email,intune,splunk,typed}.py`); tests: `tests/unit/atomics/investigation/`, `tests/unit/atomics/records/` |
+| **correlation-evidence** | `src/atomics/evidence.py`; `src/atomics/correlation/` (`__init__.py`, `models.py`, `correlate.py`, `blast_radius.py`); tests: `tests/unit/atomics/correlation/`, `tests/unit/atomics/evidence/` |
+| **containment-atomics** | `src/atomics/containment/` (`__init__.py`, `models.py`, `routing.py`, `builders.py`); *changed*: `config/integrations.example.yaml` (commented `native_actions` example only); tests: `tests/unit/atomics/containment/` |
+| **notifications** | `src/atomics/notifications/` (`__init__.py`, `models.py`, `render.py`, `sinks.py`, `service.py`); tests: `tests/unit/atomics/notifications/` |
+| **workflow-framework** | `src/atomics/__init__.py`, `src/atomics/context.py`; `src/workflows/` framework modules (`__init__.py`, `definition.py`, `expr.py`, `hooks.py`, `runner.py`, `discovery.py`); `src/lifecycle/plan_bridge.py`, `src/lifecycle/workflow_adapter.py`, `src/lifecycle/observers.py`; *changed*: `src/lifecycle/runtime.py`, `src/lifecycle/orchestrator.py`, `src/lifecycle/__init__.py`; `tools/simulator/workflow_scenario.py`, `tools/simulator/legacy_replay.py`; *changed*: `tools/simulator/simulate.py`, `tools/simulator/scenario.py`, `tools/simulator/README.md`; `tools/validation/check_workflow_readmes.py`, `tools/validation/validate_config.py`, `tools/validation/check_endpoints.py`, `tools/validation/README.md`; `tools/deployment/xdr-trigger-workflow.md` (the XDR trigger workflow of section 12: new-incident or webhook rule sending only the incident id; JSON exports only from a real tenant); *changed*: `.github/workflows/ci.yml`, `CHANGELOG.md`, `docs/architecture.md` (section 14 "as built" notes and contract changes); tests: `tests/unit/workflows/`, `tests/unit/atomics/test_context.py`, `tests/unit/lifecycle/test_plan_bridge.py`, `tests/unit/lifecycle/test_workflow_adapter.py`, `tests/simulation/test_workflow_scenarios.py`, `tests/simulation/test_legacy_replay.py`, `tests/safety/test_read_zone.py`, `tests/fixtures/sample_workflows/` (a tests-only workflow package and its scenarios, discovered with `discover_workflows("tests.fixtures.sample_workflows")`), `tests/fixtures/workflows/README.md`, `tests/workflows/README.md` |
+| **legacy-alignment** | *changed*: `atomic/` (every `atomic.yaml` and README: C1, `used_by` renames), `workflows/` (all 19 legacy dirs, `workflows/README.md`, the two renames of 14.4.2), `engine/xdr_plan/` (`planner.py`, `guardrails.py`, `validate.py`, `repo.py`, `expr.py` shim, `cli.py`), `engine/README.md`, `docs/deployment/guardrails.example.yaml`, `docs/deployment/README.md`, `.claude/agents/` (all `wf-*.md`, two renamed), `docs/mitre-mapping/` (generated), `tests/test_workflows.py`, `tests/test_repo.py`, `tests/test_engine.py`; new: `docs/workflows/README.md` (generated), `tools/validation/generate_workflow_docs.py`; tests: `tests/unit/legacy/` |
+
+Shared-file rule: `src/config/schema.py`, `src/models/recommendation.py`, `config/integrations.example.yaml` and the lifecycle files are Phase 0 files changed by exactly one key each, limited to the parts named. `src/models/__init__.py`, `src/models/enums.py`, `src/models/catalog.py`, `src/errors.py`, the adapters, `pyproject.toml` and the Phase 0 engines are not changed in Phase 1; a key that believes one must change reports it (14.7.2).
+
+Cross-key ordering inside Phase 1 (everything else is parallel after step 0, 14.0.3):
+
+- `legacy-alignment` turns `engine/xdr_plan/expr.py` into the shim only after `src/workflows/expr.py` exists, and runs `generate_workflow_docs.py --write` after the renames.
+- `workflow-framework` wires the lifecycle (step 2) after the step 1 keys have landed; `test_legacy_replay.py` needs the planner contract of 14.4.1.
+
+### 14.7 Phase 1 exit criteria and the process for Phases 2 to 5
+
+#### 14.7.1 Phase 1 is done when
+
+1. Every Phase 0 test and the legacy tests (`tests/test_*.py`, as updated by legacy-alignment) pass, with `python -m pytest -q -p no:cacheprovider` on Python 3.12 and 3.13.
+2. `PYTHONPATH=engine python -m xdr_plan check` passes with the C1-C5 checks; no file asserts `requires_approval: false`, `auto_approve`, `skipped_protected`, `skipped_limit` or an unlock-code placeholder.
+3. All 105 legacy scenarios replay in dry run through `plan_bridge` and the runtime (`tests/simulation/test_legacy_replay.py`) with zero state-changing operations.
+4. Unit tests of every key pass, including `docs/threat-scoring.md` section 10, the record-id determinism and refusal tests, evidence-builder refusal of unknown ids, routing native-first and fallback, notification content rules, and the definition validators.
+5. `tests/safety/test_read_zone.py` passes; the tests-only sample workflow runs every scenario category of 14.5.3 through the full lifecycle (approve all, approve selected, reject, benign, degraded source, critical asset, partial failure, dry run, release).
+6. `generate_workflow_docs.py --check` is clean; `check_workflow_readmes.py` passes (no migrated workflow yet, plus its unit tests); CI runs both, the workflow scenario tests and the legacy replay.
+7. The Phase 1 "as built" notes are appended to this section (14.8 onward), and `CHANGELOG.md` has the Phase 1 entry.
+
+#### 14.7.2 Phases 2 to 5
+
+- Each workflow is built by its own agent in its owned paths (14.5.1) and is done per 14.5.4; the phase exit criteria of section 12 apply.
+- Contract changes (a new atomic option, record field, record kind, builder, link kind, signal rule, config option or framework hook) are reported by the workflow agent; the framework owner applies them to the owning module and to this section in one commit, with tests, before the workflow depends on them. Adding a record kind is such a change.
+- The framework owner integrates each phase: runs the full test suite, regenerates the docs (14.5.5), updates `CHANGELOG.md`, and at the end of Phase 5 performs the retirement of 14.4.3.
+- Nothing in Phases 2 to 5 may weaken a rule of sections 5 to 8, 13 or 14: workflows only investigate and recommend; approval stays human; containment executes only after approval; verification is automatic; release needs its own human approval.
+
+### 14.8 As built: workflow framework (Phase 1, step 1 and lifecycle wiring)
+
+Written by `workflow-framework` on 2026-10-08. Binding additions to 14.1.1, 14.1.9 and 14.3; everything else in 14.3 is implemented as written.
+
+Additions (public, owned by workflow-framework):
+
+- `workflows.definition`: `WorkflowDefinition.attack_ids()`, `.integrations()`, `.expected_sources()`, `.matches(incident) -> TriggerSpec | None`, `.package_name`; `InvestigationStep.subject_types()`. Extra validators: an automatic (`xdr_incident_rule` / `webhook`) trigger needs at least one criterion (an empty trigger would match every incident); an `enrich_*` step takes no `integrations` or `options` (enrichment asks every enricher under the disclosure policy); rule `params` keys are refused when reserved, approval-like or secret-like (`Redactor.is_sensitive_key`). A reported sub-technique (`T1204.002`) matches a trigger that lists its parent technique. The read-atomic subject types, builder action types and reserved param keys are mirrored as private constants (layer 0 may not import the atomics); `tests/unit/workflows/test_definition.py` asserts the mirrors equal `atomic_subject_types()`, `containment_builders()` and `RESERVED_PARAM_KEYS`.
+- `workflows.expr`: dict literals with string keys (needed by a rule's `asset` expression) and `names_used(src)`. Dispatch goes through a fixed table (no `getattr`), so the module passes the read-zone lint; helper failures (including `ZeroDivisionError`) are wrapped in `ExprError` with the expression.
+- `workflows.discovery`: `DEFAULT_PACKAGE`, `not_migrated(workflow_id, catalog)`. Discovery re-validates every `WORKFLOW` (`model_validate(model_dump())`), so a definition built with `model_construct` cannot skip a validator. `discovery.py` is the one documented read-zone exception to the "no `importlib`" rule (importing the packages it finds is its job). `resolve()` returns `None` for an incident whose `workflow_id` is a legacy spec id (14.5.1) without a definition, before triggers are tried.
+- `workflows.runner`: `RuleOutcome.selector` (`"<action_type>:<target>"`), `WorkflowRun.outcomes_with(status)` and `.degraded_sources()`. Rule scoring never counts a record twice (target enrichment records already cited by the rule are not added again). The run notes critical-asset warnings and allow-list exclusions of built recommendations; a correlation failure caused by hook links is retried without them, then falls back to an empty `CorrelationResult`.
+- `lifecycle.workflow_adapter`: `WorkflowInvestigationReport.notes` (routing notes such as `"workflow <id> not migrated yet: Phase 0 generic investigation used"`, prepended to the fallback recommendation's notes). A `WorkflowRunner` exception (a framework bug) falls back to the generic path with a redacted note instead of failing the detection.
+- `lifecycle.observers.notify_observers(observers, event)`. Events: `PACKAGE_PROPOSED` / `DETECTION_COMPLETED` (with `run.summary()` when a workflow ran), `DECISION_RECORDED` for every containment or release decision, `CONTAINMENT_COMPLETED` / `RESTORATION_COMPLETED` only for live (non dry-run) reports, `RELEASE_PROPOSED`, `INCIDENT_CLOSED`. Without observers the orchestrator imports nothing new (Phase 0 behaviour unchanged).
+- `lifecycle.runtime`: `DEFAULT_NOTIFICATIONS_PATH`, `NOTIFICATIONS_PATH_ENV`; `build_runtime` refuses an observer without `on_event`.
+- `tools/simulator`: `ScenarioRun(..., workflows=None, observers=())`; `WorkflowScenarioRun(scenario, *, live=False, catalog=None, clock=None)` with `.play()`, `.check()`, `.implicit_problems()`, `.workflow_run` and an in-memory notification outbox; `check_coverage(..., proposed_rules=None, legacy_root=...)` (static check by expected action types when no runs are given). In scenario `expect`, an omitted key is not asserted; a given set is compared exactly. A `dry_run`-tagged scenario must use `mode: dry_run`; `legacy` tag and `legacy_source` go together; scenario `config` may override only `critical_assets`, `allowlists`, `thresholds`, `exclusions`.
+- Read-zone lint (`tests/safety/test_read_zone.py`): imports inside `if TYPE_CHECKING:` are type-only and exempt; `xdr_response.audit` is forbidden except in `lifecycle/workflow_adapter.py`; `xdr_response.integrations.{registry,simulated}` only in `atomics/context.py`; `.execute()` and methods named after state-changing action types may be called only in `atomics/containment/builders.py`. The tests-only sample workflow packages are linted too.
+
+Built at the Phase 1 integration step (14.9): `lifecycle/plan_bridge.py`, `tools/simulator/legacy_replay.py`, `simulate.py --legacy`, `tests/unit/lifecycle/test_plan_bridge.py`, `tests/simulation/test_legacy_replay.py` and `tools/deployment/xdr-trigger-workflow.md`.
+
+### 14.9 As built: Phase 1 integration (contract amendments and decisions)
+
+Written at the Phase 1 integration step (step 2 of 14.0.3) on 2026-10-08. It is binding. Where it differs from 14.0 to 14.8, it wins, and the signatures above are already updated (`aggregate_verdict`, `RECORD_CONFIDENCE`, `correlate`, `InvestigationBundle`, `bridge_plan`).
+
+#### 14.9.1 Lifecycle, legacy replay and simulator
+
+- **`lifecycle/plan_bridge.py`** (read zone, linted):
+  - **Names.** Besides the contract names it has `LEGACY_RESULT_SUBJECTS` (the result item field that names a record's subject: `ip`, `domain`, `sha256`, `host` (or `hostname`), `user`), `LEGACY_VERSION = "legacy"`, `LEGACY_INCIDENT_ATOMIC = "legacy:incident"`, `LEGACY_PROTECTED_HOST_TAG` and `LEGACY_PROTECTED_USER_TAG`, `legacy_incident_record(data)`, and `BridgeResult.risk_score` / `.confidence_score` (max over proposals).
+  - **Incident.** `legacy_incident` keeps the legacy context, targets and unmapped observable types (for example `email_subject`) in `incident.trigger`. These are data, never evidence on their own.
+  - **Evidence.** It comes from, in order: the `Action.source` item's record; else every legacy record whose item has a string equal (case-insensitive) to the target; else the legacy **incident record** (integration `cisco_xdr`, attributes title, severity, source, observables, targets, context) when the incident mentions the target. Seven of the 294 planned legacy actions need the incident record: reported senders and alerted URLs. A planned action that nothing mentions is **not proposed**. It is reported in `unrouted` with "no evidence", never with invented evidence.
+  - **Asset context.** An investigated legacy item with `is_protected: true` gives the proposal an asset tag (`legacy-protected-host` / `legacy-protected-user`). User items also contribute `profile.groups`. A host whose name is an IP gives `asset.ip`. `guardrails_to_settings` adds these tags to the `production_server` / `privileged_account` matches, so **PackageBuilder** decides ELEVATED. The legacy `elevated` flag is reported in `BridgedAction.elevated` and is never copied into a proposal as an approval level. When the legacy planner elevated an action for a **protected asset** (`PROTECTED_REASON` in `Action.reasons`, or an elevation with no reason at all), the proposal asset also gets the protected tag of its kind (isolation: host tag; disable / revoke: user tag). A host protected by connector GUID or IP glob, a user protected by `upn` / `email`, or a protected item that is not the plan source therefore never comes out weaker than the legacy verdict (14.9.6). An elevation explained only by blast-radius caps (C5) adds no tag.
+  - **Guardrails.** `guardrails_to_settings` **replaces** the base critical assets and allow-lists, so a replay is judged by the scenario's own guardrails. Host patterns that are CIDRs become `ip_cidrs`. `approved_rmm` names become `{name}` entries.
+- **`tools/simulator/legacy_replay.py`.** It provides `legacy_scenarios()`, `LegacyPlanRecommender` (bound to the runtime after build; it routes with `choose_route` over `build_context`), `LegacyReplay` (`package`, `ok`, `dry_run_text()`, `mismatches`) and `replay_legacy_scenario(workflow_id, path)`. The replay runs the Phase 0 runtime (`ScenarioRun(..., recommender=...)`, full `SIMULATION_SUITE`, global dry run ON). The detection uses the real `InvestigationService` (reads only), then `PackageBuilder`, then the DRY RUN simulation. A mismatch is any of the following:
+  - a planned action missing from the package;
+  - a skipped action present in the package;
+  - an unexpected package action;
+  - `elevated` ≠ ELEVATED;
+  - ELEVATED without a warning;
+  - the legacy `escalate` ≠ the expected value, or ≠ "a blast-radius warning is in the package";
+  - a legacy action without `requires_approval`;
+  - evidence that does not verify against the legacy records;
+  - any state-changing call, guard denial or registered control;
+  - a package not marked `dry_run`;
+  - a DRY RUN report that does not cover every action.
+
+  **The runtime may be stricter, never weaker.** The legacy `max_users_disabled` cap counts `disable-user` only, while `blast_radius.max_users` counts every user an action touches (`revoke_sessions` too). So when the legacy plan escalates, an action expected STANDARD may be ELEVATED, but only through blast-radius warnings. This affects 4 scenarios.
+- **Result.** All 105 legacy scenarios replay with zero mismatches (`tests/simulation/test_legacy_replay.py`). The same file asserts that every scenario file is replayed and that no scenario asserts `requires_approval` other than `true`.
+- **`simulate.py --legacy <workflow> [<scenario>]`** prints the bridged actions, the decision card and the DRY RUN block; `--check` lists the mismatches. The execution guard allows **one runtime per process** (its verifier slot is sealed), so `--workflow <id>` without `--scenario` and `--legacy <workflow>` without a scenario now run each scenario in a child process. Before this change, the second scenario was refused with `ApprovalRequiredError`.
+- **Runner fixes.**
+  - `WorkflowRunner` runs each read call at most once per run. The key is atomic + subject, plus options, sources and lookback for investigation. With a real clock, a second fetch would collide with the first record id.
+  - `WorkflowRun.health` is the worst health over sources that were actually **called**. A source withheld by the disclosure policy or not enabled (`NOT_QUERIED`, health `UNKNOWN`) no longer hides a real `CONNECTED` answer. An integration seen only that way is reported `UNKNOWN`. `degraded_sources()` already counted only `FAILED`.
+- **CI** additionally runs the legacy replay of every workflow and the sample workflow scenarios. `xdr_plan check` runs with `PYTHONPATH=engine:src`.
+- **`tools/deployment/xdr-trigger-workflow.md`** describes the trigger (incident or webhook rule; payload `{"incident_id"}` only; the incident is re-read through the VERIFIED APIs). No export is committed: an export is accepted only from a real tenant. The repository ships no HTTP listener. A deployment's intake calls `handle_detection` after the re-read.
+- **End-to-end integration tests.** `tests/integration/test_atomics_scoring_evidence.py` runs the real Umbrella, VirusTotal and Entra adapters over fake vendor APIs:
+  - enrichment, scoring and evidence citation, with fabricated ids refused;
+  - a failed source that degrades without blocking;
+  - correlation and blast radius;
+  - a builder followed by `PackageBuilder`;
+  - typed investigation records, scoring signals and a critical asset that stays ELEVATED whatever the score;
+  - a tests-only workflow through the production lifecycle: zero writes before the decision, AI and automation refused, then analyst approval, execution, verification and a separately approved release;
+  - dry run scoring like live, and the Phase 0 path for unmatched incidents.
+
+#### 14.9.2 Amendments by key (from the component reports)
+
+**scoring**
+- `aggregate_verdict(..., bands=None)` means the built-in HIGH bound 60.
+- `RECORD_CONFIDENCE["user_profile"] = 70` is now a public table entry, no longer a private constant.
+- `signals.py` dispatches on `str(record.kind)` and imports the record models only for typing.
+- Interpretations confirmed:
+  - (a) the critical-asset bonus applies only with at least one MALICIOUS or SUSPICIOUS signal;
+  - (b) when `expected_sources` is empty, every failed source with health UNAVAILABLE, AUTH_FAILED or RATE_LIMITED is penalised;
+  - (c) for reputation-only evidence, the independent-source bonus never lifts confidence above `reputation_only_confidence_cap`;
+  - (d) the reputation risk cap does not cap the critical-asset bonus;
+  - (e) `settings_hash` is computed over the settings with workflow overrides merged in;
+  - (f) half-up rounding uses `round(x, 9)` before `floor(x + 0.5)`.
+- Extra validators: `ScoringSignal.integration` must be in `INTEGRATION_NAMES`, `record_ids` must be non-empty and non-blank, and `origin` must be `framework` or `workflow:<id>`. `ScoringContext` sorts and deduplicates its tuples.
+- `config/thresholds.yaml` spells out the defaults, so its `settings_hash` differs from `ScoringSettings()` while scoring identically.
+
+**enrichment**
+- `_sources.py` imports `integrations.health.classify_exception`, which is allowed. The lint forbids only vendor modules, `integrations.{http,auth,registry,simulated}` and `httpx`.
+- A source withheld by `ctx.disclosure` is `NOT_QUERIED` with health `UNKNOWN`. Health aggregation ignores it (14.9.1).
+- **Decision:** when `ctx.disclosure` allows an observable but the adapter's own built-in policy refuses it (`NOT_SUPPORTED` error, verdict UNKNOWN), the source is `FAILED`. Nothing is sent either way; production builds both policies from `settings.exclusions`, and the conservative mapping costs confidence.
+- `ObservableReport.subject` drops `Observable.source`.
+- The runner de-duplicates enrichment per subject (14.9.1).
+
+**investigation**
+- `InvestigationBundle.critical_asset_classes` (signature above).
+- `RecordBase.record_id` may be omitted when building a record. A before-validator computes `make_record_id(...)`, and a supplied id is still checked and refused on mismatch.
+- Typed simulated findings use `{"xdr_record": {"kind": ..., <fields>}, "xdr_integration": "<adapter>"}` (preferred) or the flat `{"xdr_record": true, "kind": ...}`. A body carrying `record_id`, `integration`, `atomic` or `subject` is refused. A malformed typed record fails only its own source (FAILED, INTERNAL).
+- Rule items are chosen by `action_type`, so legacy-replay bundles (`legacy:<id>`, INVESTIGATION type) get the family keys of 14.1.4.
+- Reported sources: the catalog integrations for the type plus the enabled investigators. Disabled ones are `NOT_QUERIED` ("not enabled"). Enabled ones that do not serve the type are `NOT_SUPPORTED`, and no health check is made for them.
+- Confirmed interpretations: `mfa_denied_count` counts `denied` + `fraud_reported`; `distinct_ips` / `distinct_countries` count over sign-ins and MFA events; the hash item's verdict is the worst reported, or `None` without records; an alerts_v2 alert without a classification is SUSPICIOUS; severity `unknown` maps to INFO; MDE riskScore `Informational` maps to level `low`.
+
+**correlation-evidence**
+- The `correlate` signature is updated above. `CorrelationLink` computes `link_id` when it is omitted (a supplied id must match). Entities and record ids are sorted and deduplicated. Kind `WORKFLOW` is required exactly when the origin is `workflow:<id>`.
+- `CorrelationResult` checks that the clusters partition the entities. Entities named only by a link are added to `entities`.
+- New public names: `FRAMEWORK_ORIGIN`, `BLAST_RADIUS_CAP_NAMES`, `EntityRef.sort_key()`, `EntityRef.key()`, `CorrelationLink.rule_item()`, `CorrelationResult.cluster_of()`, `DEFAULT_WINDOW`, `FRAMEWORK_LINK_KINDS`, `SUMMARY_MAX_CHARS`, `RecordIndex.records()`, `EvidenceBuilder.index`. `BlastRadiusReport.rule_item()` adds `endpoint_count`, `user_count`, `indicator_count`, `critical_asset_classes` and `has_critical_asset`.
+- Confirmed interpretations:
+  - **Entity mentions.** Asset attributes are not entities (endpoint IPs and MACs, DNS `client_ip`, `local_ip`, `response_ips`, `sender_domain`, mailbox-rule `created_by`). Recipients are USER entities; senders and forward addresses are EMAIL_ADDRESS. Enrichment and generic records mention only their subject.
+  - **Blast-radius default scope.** The incident clusters plus the incident entities, widened by one hop (endpoints and users of in-scope records; recipients, URLs, domains and hashes of in-scope messages). Hits are always reported and `exceeds` is informational.
+  - **email_to_click.** The click domain must equal, or be a subdomain of, a domain the message carries. The click comes from a recipient user, or from an endpoint a record names together with a recipient, within `received_at` (or `observed_at`) plus the window.
+  - **process_lineage.** `parent_pid` matches before `parent_sha256`.
+- `evidence_draft` stores `data["fields"]` as canonical JSON. `verify()` also accepts numbered package `Evidence`, and `cite()` refuses a bare string. Evidence summaries start with the integration name (they stand alone in notifications), so the decision card shows `source: source: ...`; this is cosmetic and was kept.
+- `correlation/__init__.py` imports its modules directly (no lazy loading in the read zone). Importing `atomics.correlation.models` therefore also loads `correlate`, `evidence` and `records`; this is acceptable at layer 0 because there is no cycle.
+
+**containment-atomics**
+- Read-only `BuiltRecommendation` properties: `routed`, `reversible`, `rollback_action_type` and `elevation_expected` (a preview only).
+- Extra `ValueError`s:
+  - evidence drafts must carry `data["record_id"]` (`rec_` + 32 hex), so they must come from the evidence builder;
+  - scores must be ints in 0..100;
+  - `rationale` must be non-empty and is redacted;
+  - `delete_email.delete_action` must be `softDelete` or `moveToDeletedItems`;
+  - target normalization is stricter (hex hashes; `FILE`/`PROCESS` as `<ENDPOINT>/<id>`; composites need both parts).
+- `NATIVE_OBSERVABLE_TYPES` holds one CTIM type per target kind. IPv6 and sha1/md5 targets are chosen by value.
+- A non-`lock` `intune_device_action` raises an error that is both `ValueError` and `UnverifiedEndpointError`.
+- **Decision (limitation carried to Phase 2):** with `product=None`, a tenant whose only enabled executor is `cisco_xdr` has no landing product. The action is then **unrouted and reported** ("no product to land a native <action> on"), never dropped. Such tenants need product-pinned builders, which is a Phase 2 contract change if a workflow needs it.
+
+**notifications**
+- The `ref` in `notification_id` is the first of `report:<report_id>`, `decision:<decision_id>`, `package:<package_id>` and `at:<format_datetime(event.at)>`.
+- A draft is dry run when `event.dry_run`, `package.dry_run` or `report.dry_run` is set.
+- Draft validators: the id is 32 hex; the title is one line of at most 200 chars; the body is at most 16 KiB; the audience matches the kind; `contains_ai_text` is set exactly when the body has the AI narrative heading, and only for analyst summaries. `LifecycleEvent` refuses a package, decision or report of another incident. The orchestrator builds events that satisfy these checks (lifecycle tests).
+- The `NotificationService` constructor may raise for invalid sinks or routing, while `on_event` never raises. Sinks do not deduplicate, so consumers deduplicate by `notification_id`.
+
+**workflow-framework**
+- The as-built notes are in 14.8. The fallback copies of `SignalCategory` / `LinkKind` in `workflows/definition.py` are removed: it imports the step 0 models.
+- Event semantics are confirmed: in dry run only `PACKAGE_PROPOSED` / `DETECTION_COMPLETED` and `DECISION_RECORDED` are emitted, with `dry_run=True`.
+
+**legacy-alignment**
+- The C1 to C5 planner contract is in place.
+- Rollback templates, READMEs and atomic specs no longer say blocks "auto-expire". `expires_hours` is a release-review reminder, and removal needs a separate human release approval (1.2).
+- The legacy approval-template placeholder `{plan.elevated}` is not rendered by the runtime: the decision card and notifications show ELEVATED with its warnings. `BridgedAction.elevated` carries the legacy flag for any future renderer.
+- Behaviour notes:
+  - elevated actions count towards the legacy caps;
+  - credential-dumping plans no account action when a protected DC is confirmed, and that DC's isolation stays planned and ELEVATED (kept for the Phase 3 owner to review);
+  - every workflow directory with a README needs an agent file `wf-<id>.md` (`test_one_agent_per_workflow`).
+- Phase 0 test fixtures now use the workflow id `malicious-powershell` instead of the old `powershell`.
+- `docs/deployment.md`, `README.md` and `docs/testing.md` no longer describe `auto_approve` or the spec conflicts as pending.
+
+#### 14.9.3 Phase 0 changes made at integration (14.7.2)
+
+- `logs/redaction.py`: the `key=value` rule accepts a command-line flag prefix (`-key=value`, `--key=value`). Command lines in process and persistence records therefore no longer keep `--password=...`-style values. Hyphenated ordinary keys (`--control-key=...`) are unchanged. Tests are in `tests/unit/core/test_secrets_redaction.py`. Space-separated flags (`--password value`) are not recognised; normalizers must not rely on the redactor for them.
+- `tests/conftest.py` gives every test a fresh process-wide redactor. Secrets one test registers no longer redact another test's text, which had made exact-text assertions order-dependent.
+- `tools/simulator/scenario.py`: `ScenarioRun(..., recommender=None)` (legacy replay).
+
+#### 14.9.4 Known limitations carried into Phase 2
+
+- **Field schemas not documented.** docs/integrations.md does not document field schemas for Secure Endpoint trajectory events, Secure Email message search, Cisco XDR sightings, Splunk rows or `runHuntingQuery` rows. Those findings stay `GenericRecord`s: citable, never scored. A workflow that needs them first adds the verified schema and a typed mapping (a contract change, 14.7.2).
+- **Python 3.12.** Only Python 3.13 was available locally. Every source file parses with the 3.12 grammar, and CI runs the 3.12 / 3.13 matrix.
+
+#### 14.9.6 Safety hardening, Phase 1 round 1 (binding)
+
+Fixes for the defects proven by `tests/safety/test_phase1_atomics.py` and `tests/safety/test_phase1_evidence.py`. They only add protection; no approval path changed.
+
+- **Critical assets: IP-named endpoints.** `CriticalAssetPolicy` matches an `ENDPOINT` target (and the endpoint part of a `FILE` / `PROCESS` / `PERSISTENCE_ITEM` composite, and an `ENDPOINT` asset name) both as a host name and, when it parses as an IP address, against the class `ip_cidrs`. `isolate_*_endpoint("203.0.113.10")` or `quarantine_file("203.0.113.10/<sha256>")` inside a critical CIDR is ELEVATED with a warning in the builder preview and in `PackageBuilder`.
+- **Runner duplicate merge.** When a second rule proposes the same `(action_type, target)`, `WorkflowRunner._merge` unions the proposal asset contexts (groups, tags, roles; the first IP wins, as in `PackageBuilder`) and the critical-asset warnings, besides merging evidence and keeping the higher risk. A duplicate rule that saw a critical asset therefore keeps the package ELEVATED.
+- **Approval markers in params.** `containment.builders.APPROVAL_MARKER_KEYS` (equal to the workflow definition's `APPROVAL_LIKE_KEYS`: `FORBIDDEN_KEYS` plus `approval_level`, `requires_approval`, `approve`, `approved`) is refused at **every depth** of builder params (`ValueError`); `RESERVED_PARAM_KEYS` includes it at the top level. A rule param expression that yields such a key is a rule ERROR, never a proposal.
+- **Hook signal attribution.** A hook signal is kept only when `signal.integration` is the integration of at least one record it cites; otherwise it is dropped and noted ("attributed to X but cites only records of Y"). A hook can no longer attribute evidence to sources that never answered, nor inflate the independent-source bonus. A hook signal citing only enrichment records is marked `vendor_verdict=True`.
+- **Vendor verdicts.** Enrichment answers are vendor verdicts (`ScoringSignal.vendor_verdict`, 14.2.1 and 14.2.3): one vendor's MALICIOUS enrichment is never an aggregate MALICIOUS verdict and never CRITICAL on its own (14.2.2).
+- **No self-corroboration, single-source cap, one penalty per failed source** (14.2.2 risk and confidence precisions; threat-scoring 5.1, 5.2 and 5.4). The runner passes the worst health per failed integration in `ScoringContext.failed_sources`.
+- **Disclosure policy (Phase 0 `config/policy.py`, section 13).** HIBP never receives an address of an internal domain (`internal_domains`, `third_party_lookup.internal_domain_suffixes`, the built-in suffixes, single-label domains), in addition to `user_domains`. A URL with userinfo (`user:pass@`) or a sensitive query key (`sig`, `token`, `access_token` and the rest of `SENSITIVE_KEY_PATTERN`) is never disclosed to a third party. An IPv6 address that embeds an IPv4 address (IPv4-mapped, NAT64 `64:ff9b::/96`, 6to4, Teredo) is judged by the embedded address too.
+- **Evidence data.** `RecordBase.evidence_fields()` (copied into `EvidenceDraft.data["fields"]`) redacts every string on the way out: URLs by `Redactor.redact_url` (userinfo removed, sensitive query values replaced), other strings by `redact_text`, sensitive mapping keys masked. Records keep their own values, so rule targets are unchanged.
+- **Same fact from two atomics.** `RecordIndex` treats two records with the same id whose content differs only by `atomic` as one fact (the first copy is kept). The runner no longer drops the second atomic's whole result, including evidence only it held. Any other content difference is still refused.
+- **Unlock codes in prose (Phase 0 `logs/redaction.py`).** `redact_text` also redacts an unlock code or passcode phrased in prose (`isolation unlock code: X`, `unlock code X`, `unlock code is X`, `Device passcode: X`) when the value looks like a code (it has a digit, or is all upper case). `passcode` / `pass_code` are sensitive keys. Notifications, notes and summaries therefore never carry them (14.1.8).
+
+#### 14.9.7 Safety hardening, Phase 1 round 2 (binding)
+
+Fixes for the round 2 defects proven by `tests/safety/test_phase1_atomics.py` and `tests/safety/test_phase1_evidence.py`. They only add protection; no approval path changed.
+
+- **Runner duplicate merge, unrouted side.** The runner keeps, per `(action_type, target)`, the union of the asset contexts and the cited record ids of every rule that recommended it, routed or not. A routed proposal always carries that union (groups, tags, roles; the first IP wins) and the unioned critical-asset warnings, so an unrouted duplicate that saw the investigated critical asset (for example a rule pinned to a product that is not enabled) still makes the packaged action ELEVATED. Only a routed duplicate can raise the kept risk.
+- **An unrouted rule never suppresses a routable duplicate.** When the first entry for a key is unrouted and a later rule routes the same action, the routed proposal replaces the unrouted entry (evidence, asset context and warnings unioned) and that rule's outcome is `PROPOSED`; the first rule's `UNROUTED` outcome and note stay visible. A missing product never blocks a recommendation another route can execute.
+- **Critical assets: IPv6 forms of an IPv4 address.** `CriticalAssetPolicy` matches an IPv6 target or asset IP by the IPv4 address it embeds too (IPv4-mapped, IPv4-translated `::ffff:0:0:0/96`, IPv4-compatible `::/96`, NAT64 `64:ff9b::/96` and `64:ff9b:1::/48`, 6to4, Teredo; `config.policy.embedded_ipv4`, shared with the disclosure policy). `block_ip("::ffff:203.0.113.10")` is ELEVATED like `block_ip("203.0.113.10")`.
+- **Critical assets: directory roles.** `AssetMatch.roles` (case-insensitive) is evaluated against `Asset.roles`. `config/critical-assets.yaml` lists the `PRIVILEGED_ROLE_NAMES` roles under `privileged_account`, so `disable_entra_user` / `revoke_entra_sessions` on a Global Administrator or Privileged Role Administrator is ELEVATED with a warning whatever the UPN or groups, and the 13.25 role union in `PackageBuilder` now has effect.
+- **Incident asset lookup by IP.** The builder preview and `PackageBuilder._incident_asset` (also used by `policy_violations`) find the incident's asset record by name or, for an endpoint named by an IP address, by the asset's `ip` (`approval.critical_assets.find_incident_asset`; several matches are unioned).
+- **Notification bodies keep the ELEVATED warning and the DRY RUN notice.** The header shows at most 300 characters of the incident title. When a body exceeds 16 KiB, the DRY RUN notice and the ELEVATED section are budgeted first and never truncated; the other sections share the rest in order (the overflowing one is cut and marked `[truncated]`).
+- **Hook signals: vendor verdict by attribution.** A hook signal is marked `vendor_verdict=True` when every cited record **of its own integration** is an enrichment record. Citing another source's context record beside a vendor's answer no longer turns that answer into a behavioural detection.
+- **Single-source cap: only weighty sources count.** The cap of 14.2.2 applies when only one integration carries weight; a second integration counts only when one of its supporting signals is weighted at least `corroboration.min`.
+- **Disclosure policy (Phase 0 `config/policy.py`).** Fragment parameters are checked like query parameters (`#access_token=...`). `X-Amz-Signature`, `X-Goog-Signature` (suffix `signature`) and `X-Amz-Credential` / `X-Goog-Credential` (`x-<vendor>-credential(s)`) are sensitive keys of `SENSITIVE_KEY_PATTERN`. A URL with an email address in its path, query or fragment is never disclosed. A host or domain whose last label is numeric or `0x` hex is an IPv4 literal in any spelling (trailing dot, short form `10.0.258`, hex, octal, `127.1`) and is judged by the address it denotes (`host_ip`, `parse_ipv4_literal`); one no parser accepts is refused, and the enrichment `DOMAIN` normalizer refuses such names. IPv4-compatible and IPv4-translated IPv6 forms are judged by the embedded address, and site-local `fec0::/10` is never public.
+- **Redaction (Phase 0 `logs/redaction.py`).** `redact_url` redacts sensitive fragment parameters too. `redact_text` also redacts an unlock code or passcode with words between the label and the value when an explicit separator (`:`, `=`, `is`) precedes it, on one line within 80 characters: `unlock code for TH-LT-1047 is X`, `unlock code (TH-LT-1047): X`, `the code to unlock TH-LT-1047 is X`.
+- **Evidence verified at the lifecycle boundary.** `WorkflowRecommender.recommend` verifies every proposal's evidence against the run's `RecordIndex` (`EvidenceBuilder.verify`). A proposal whose evidence cites a record the run never produced, or differs from it, is not forwarded to `PackageBuilder`; the refusal is a recommendation note.
+
+#### 14.9.5 Exit criteria (14.7.1)
+
+1. The whole suite passes with `python -m pytest -q -p no:cacheprovider` (3.13 locally; CI runs 3.12 and 3.13).
+2. `PYTHONPATH=engine python -m xdr_plan check` passes with C1 to C5. No scenario asserts `requires_approval: false` (test).
+3. All 105 legacy scenarios replay in dry run through `plan_bridge` and the runtime with zero state-changing operations (`tests/simulation/test_legacy_replay.py`).
+4. The unit tests of every key pass.
+5. `tests/safety/test_read_zone.py` passes (it covers `plan_bridge.py`). The sample workflow runs every 14.5.3 category through the lifecycle.
+6. `generate_workflow_docs.py --check` and `check_workflow_readmes.py` are clean, and CI runs them together with the workflow scenarios and the legacy replay.
+7. The as-built notes are 14.8 and 14.9, and `CHANGELOG.md` has the Phase 1 entry.
