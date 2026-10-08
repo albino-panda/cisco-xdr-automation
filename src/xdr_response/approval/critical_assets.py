@@ -3,18 +3,25 @@
 A containment action on a critical asset is never blocked silently: the package builder marks it
 ``ELEVATED`` and attaches a :class:`CriticalAssetWarning` naming the asset, its class and role, the
 action and the potential impact. Matching is deterministic: exact names and ``fnmatch`` patterns are
-case-insensitive, groups and tags are compared case-insensitively, IPs are matched against CIDRs.
+case-insensitive, groups, tags and directory roles (``Asset.roles``, for example
+``Global Administrator``) are compared case-insensitively, IPs are matched against CIDRs. An
+endpoint (or endpoint composite) named by an IP address is matched both as a host name and as an
+IP, so an IP-named endpoint inside a critical CIDR is still ELEVATED. An IPv6 address that embeds
+an IPv4 address (IPv4-mapped, IPv4-translated, IPv4-compatible, NAT64, 6to4, Teredo) is matched
+by the embedded IPv4 address too.
 """
 from __future__ import annotations
 
 import ipaddress
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 
 from xdr_response.config import AssetMatch, CriticalAssetClassConfig, CriticalAssetsConfig
+from xdr_response.config.policy import embedded_ipv4, host_ip
 from xdr_response.models import ActionType, Asset, CriticalAssetClass, CriticalAssetWarning, TargetKind
 
-__all__ = ["CriticalAssetPolicy", "WARNING_PREFIX", "format_warning"]
+__all__ = ["CriticalAssetPolicy", "WARNING_PREFIX", "format_warning", "find_incident_asset"]
 
 WARNING_PREFIX = "WARNING: ELEVATED APPROVAL REQUIRED"
 
@@ -31,25 +38,32 @@ class _Subject:
     ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = field(default_factory=list)
     groups: set[str] = field(default_factory=set)
     tags: set[str] = field(default_factory=set)
+    roles: set[str] = field(default_factory=set)
 
 
 def _add_ip(subject: _Subject, value: str | None) -> None:
     if not value:
         return
     try:
-        subject.ips.append(ipaddress.ip_address(value.strip()))
+        ip = ipaddress.ip_address(value.strip())
     except ValueError:
         return
+    subject.ips.append(ip)
+    # An IPv6 form that carries an IPv4 address (IPv4-mapped, IPv4-translated, IPv4-compatible,
+    # NAT64, 6to4, Teredo) reaches the same host: it is matched by the embedded address too.
+    subject.ips.extend(embedded_ipv4(ip))
 
 
 def _add_name(subject: _Subject, value: str, kind: TargetKind) -> None:
     v = value.strip()
     if not v:
         return
-    if kind is TargetKind.ENDPOINT:
-        subject.hosts.add(v.lower())
-    elif kind in _ENDPOINT_COMPOSITES:
-        subject.hosts.add(v.partition("/")[0].lower())
+    if kind is TargetKind.ENDPOINT or kind in _ENDPOINT_COMPOSITES:
+        # Detections often name a host by its IP: an IP-shaped endpoint name is also matched
+        # against the class CIDRs (it can only add a class, never remove one).
+        host = v if kind is TargetKind.ENDPOINT else v.partition("/")[0].strip()
+        subject.hosts.add(host.lower())
+        _add_ip(subject, host)
     elif kind in _USER_KINDS:
         subject.users.add(v.lower())
     elif kind is TargetKind.ROLE_ASSIGNMENT:
@@ -66,6 +80,7 @@ def _subject(target: str, target_kind: TargetKind, asset: Asset | None) -> _Subj
         _add_ip(subject, asset.ip)
         subject.groups.update(g.lower() for g in asset.groups)
         subject.tags.update(t.lower() for t in asset.tags)
+        subject.roles.update(" ".join(r.split()).lower() for r in asset.roles)
     return subject
 
 
@@ -82,8 +97,33 @@ def _matches(match: AssetMatch, subject: _Subject) -> bool:
         return True
     if subject.groups & {g.lower() for g in match.groups} or subject.tags & {t.lower() for t in match.tags}:
         return True
+    if subject.roles & {" ".join(r.split()).lower() for r in match.roles}:
+        return True
     networks = [ipaddress.ip_network(c, strict=False) for c in match.ip_cidrs]
     return any(ip.version == n.version and ip in n for ip in subject.ips for n in networks)
+
+
+def find_incident_asset(assets: Iterable[Asset], name: str, kind: TargetKind) -> Asset | None:
+    """The incident asset record(s) of kind ``kind`` for ``name``, merged (never shrinks).
+
+    An asset matches by name, or (for an ``ENDPOINT``) when ``name`` is an IP address equal to the
+    asset's ``ip``: detections often name a host by its IP, and the incident's own asset record
+    says what that host is. Several matches are unioned (groups, tags, roles; the first IP wins).
+    """
+    wanted_ip = host_ip(name) if kind is TargetKind.ENDPOINT else None
+    found: Asset | None = None
+    for asset in assets:
+        if asset.kind is not kind:
+            continue
+        same_ip = wanted_ip is not None and asset.ip is not None and host_ip(asset.ip) == wanted_ip
+        if asset.name == name or same_ip:
+            found = asset if found is None else found.model_copy(update={
+                "groups": tuple(dict.fromkeys((*found.groups, *asset.groups))),
+                "tags": tuple(dict.fromkeys((*found.tags, *asset.tags))),
+                "roles": tuple(dict.fromkeys((*found.roles, *asset.roles))),
+                "ip": found.ip or asset.ip,
+            })
+    return found
 
 
 def format_warning(action_type: ActionType, target: str, display_name: str, role: str,

@@ -184,6 +184,7 @@ class AssetMatch(_Model):
     user_patterns: list[str] = []
     groups: list[str] = []
     tags: list[str] = []
+    roles: list[str] = []  # directory roles (Asset.roles, e.g. "Global Administrator"), case-insensitive
     ip_cidrs: list[str] = []
 
     @field_validator("ip_cidrs")

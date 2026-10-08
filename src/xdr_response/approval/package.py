@@ -23,7 +23,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from xdr_response.approval.critical_assets import WARNING_PREFIX, CriticalAssetPolicy
+from xdr_response.approval.critical_assets import WARNING_PREFIX, CriticalAssetPolicy, find_incident_asset
 from xdr_response.clock import Clock, SystemClock
 from xdr_response.config import AllowlistPolicy, BlastRadiusSettings, Settings
 from xdr_response.models import (
@@ -230,12 +230,9 @@ class PackageBuilder:
 
     @staticmethod
     def _incident_asset(incident: Incident, target: str, kind: TargetKind) -> Asset | None:
-        name = _subject(target, kind)
+        """The incident's asset record for the target: by name, or by ``ip`` for an IP-named endpoint."""
         wanted = TargetKind.ENDPOINT if kind in _ENDPOINT_KINDS else TargetKind.USER if kind in _USER_KINDS else kind
-        for asset in incident.assets:
-            if asset.kind is wanted and asset.name == name:
-                return asset
-        return None
+        return find_incident_asset(incident.assets, _subject(target, kind), wanted)
 
     def _split_allowlisted(self, drafts: list[_Draft]) -> tuple[list[_Draft], list[ExcludedTarget]]:
         included: list[_Draft] = []

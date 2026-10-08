@@ -79,6 +79,22 @@ classes:
     match:
       user_patterns: ["adm-*", "admin-*", "*-admin@*", "breakglass*"]
       groups: ["Domain Admins", "Global Administrators"]
+      # Entra admin rights are directory roles, not groups (Asset.roles, compared case-insensitively).
+      # Keep in step with PRIVILEGED_ROLE_NAMES in src/xdr_response/atomics/records.py.
+      roles:
+        - Global Administrator
+        - Privileged Role Administrator
+        - Privileged Authentication Administrator
+        - Security Administrator
+        - Exchange Administrator
+        - SharePoint Administrator
+        - User Administrator
+        - Authentication Administrator
+        - Application Administrator
+        - Cloud Application Administrator
+        - Conditional Access Administrator
+        - Hybrid Identity Administrator
+        - Intune Administrator
 
   automation_account:
     display_name: Automation account
