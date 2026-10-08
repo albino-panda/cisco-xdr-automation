@@ -8,7 +8,23 @@ scoring:
     MEDIUM: 30
     HIGH: 60
     CRITICAL: 80
-  weights: {}                   # design-only in Phase 0 (src/xdr_response/scoring/README.md)
+  weights:                      # category weight, 0.0-1.0 (docs/threat-scoring.md section 7)
+    endpoint_detection: 1.0
+    sandbox_verdict: 0.9
+    network_behaviour: 0.9
+    authentication_anomaly: 0.9
+    email_verdict: 0.8
+    persistence: 0.8
+    lateral_movement: 1.0
+    campaign_association: 0.7
+    reputation: 0.6
+  caps:                         # never overridable by a workflow
+    reputation_max_contribution: 50
+    reputation_only_confidence_cap: 50
+  corroboration: {min: 30, step: 5, max: 15}
+  confidence: {independent_source_step: 5, independent_source_max: 20,
+               contradiction_penalty: 15, failed_source_penalty: 5, failed_source_max_penalty: 20}
+  context: {critical_asset_bonus: 10}
 
 blast_radius:                   # above a cap, every action of that kind needs ELEVATED approval
   max_endpoints: 5

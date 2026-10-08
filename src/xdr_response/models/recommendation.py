@@ -1,6 +1,8 @@
 """Recommendations and action packages (containment and release)."""
 from __future__ import annotations
 
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Literal
 
 from pydantic import AwareDatetime, Field, field_validator, model_validator
@@ -33,17 +35,35 @@ __all__ = [
 ]
 
 
-def risk_band(score: int) -> RiskBand:
-    """0-29 LOW, 30-59 MEDIUM, 60-79 HIGH, 80-100 CRITICAL; anything else raises ValueError."""
+_DEFAULT_BANDS: Mapping[str, int] = MappingProxyType({"LOW": 0, "MEDIUM": 30, "HIGH": 60, "CRITICAL": 80})
+
+
+def _band_bounds(bands: Mapping[str, int]) -> tuple[tuple[RiskBand, int], ...]:
+    """Validate a band table (same rules as ``ScoringSettings.bands``) and return it in band order."""
+    if set(bands) != {b.value for b in RiskBand}:
+        raise ValueError(f"bands must name exactly {[b.value for b in RiskBand]}, got {sorted(bands)}")
+    ordered = tuple((band, bands[band.value]) for band in RiskBand)
+    bounds = [bound for _, bound in ordered]
+    if any(isinstance(b, bool) or not isinstance(b, int) for b in bounds):
+        raise ValueError("band lower bounds must be ints")
+    if bounds[0] != 0 or bounds[-1] > 100 or any(hi <= lo for lo, hi in zip(bounds, bounds[1:])):
+        raise ValueError("bands must start with LOW == 0, increase strictly and stay <= 100")
+    return ordered
+
+
+def risk_band(score: int, bands: Mapping[str, int] | None = None) -> RiskBand:
+    """Map a risk score to its band; anything but an int in 0..100 raises ValueError.
+
+    ``bands`` maps each RiskBand name to its lower bound (``thresholds.yaml`` ``scoring.bands``);
+    None uses the built-in cut-offs 0-29 LOW, 30-59 MEDIUM, 60-79 HIGH, 80-100 CRITICAL.
+    """
     if isinstance(score, bool) or not isinstance(score, int) or not 0 <= score <= 100:
         raise ValueError(f"score must be an int in 0..100, got {score!r}")
-    if score >= 80:
-        return RiskBand.CRITICAL
-    if score >= 60:
-        return RiskBand.HIGH
-    if score >= 30:
-        return RiskBand.MEDIUM
-    return RiskBand.LOW
+    result = RiskBand.LOW
+    for band, lower in _band_bounds(_DEFAULT_BANDS if bands is None else bands):
+        if score >= lower:
+            result = band
+    return result
 
 
 class CriticalAssetWarning(FrozenModel):

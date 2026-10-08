@@ -4,14 +4,15 @@ from __future__ import annotations
 import ipaddress
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import parse_qsl, urlsplit
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from xdr_response.logs.redaction import Redactor
 from xdr_response.models.catalog import INTEGRATION_NAMES, ActionType
-from xdr_response.models.enums import CriticalAssetClass
+from xdr_response.models.enums import CriticalAssetClass, RiskBand
+from xdr_response.models.scoring import DEFAULT_WEIGHTS, SignalCategory
 
 __all__ = [
     "INTEGRATION_NAMES",
@@ -23,6 +24,10 @@ __all__ = [
     "BlastRadiusSettings",
     "VerificationSettings",
     "TemporaryControlSettings",
+    "ScoringCaps",
+    "CorroborationSettings",
+    "ConfidenceSettings",
+    "ScoringContextSettings",
     "ScoringSettings",
     "Thresholds",
     "AssetMatch",
@@ -164,9 +169,70 @@ class TemporaryControlSettings(_Model):
         return value
 
 
+_Points = Annotated[int, Field(ge=0, le=100)]
+_Weight = Annotated[float, Field(ge=0.0, le=1.0, allow_inf_nan=False)]
+_BAND_ORDER: tuple[str, ...] = tuple(b.value for b in RiskBand)
+
+
+class ScoringCaps(_Model):
+    """Reputation caps (docs/threat-scoring.md 5.1 step 3 and 5.2 step 2). Never overridable by workflows."""
+
+    reputation_max_contribution: _Points = 50
+    reputation_only_confidence_cap: _Points = 50
+
+
+class CorroborationSettings(_Model):
+    """Risk bonus for other categories at or above ``min`` (5.1 step 5)."""
+
+    min: _Points = 30
+    step: _Points = 5
+    max: _Points = 15
+
+
+class ConfidenceSettings(_Model):
+    """Confidence bonus and penalties (5.2 steps 3 to 5)."""
+
+    independent_source_step: _Points = 5
+    independent_source_max: _Points = 20
+    contradiction_penalty: _Points = 15
+    failed_source_penalty: _Points = 5
+    failed_source_max_penalty: _Points = 20
+
+
+class ScoringContextSettings(_Model):
+    """Context bonuses (5.1 step 7)."""
+
+    critical_asset_bonus: _Points = 10
+
+
 class ScoringSettings(_Model):
+    """``thresholds.yaml`` ``scoring:`` (architecture 14.2.4)."""
+
     bands: dict[str, int] = {"LOW": 0, "MEDIUM": 30, "HIGH": 60, "CRITICAL": 80}
-    weights: dict[str, float] = {}  # design-only in Phase 0
+    weights: dict[SignalCategory, _Weight] = {}  # missing categories use DEFAULT_WEIGHTS
+    caps: ScoringCaps = ScoringCaps()
+    corroboration: CorroborationSettings = CorroborationSettings()
+    confidence: ConfidenceSettings = ConfidenceSettings()
+    context: ScoringContextSettings = ScoringContextSettings()
+
+    @field_validator("bands")
+    @classmethod
+    def _bands(cls, value: dict[str, int]) -> dict[str, int]:
+        if set(value) != set(_BAND_ORDER):
+            raise ValueError(f"scoring.bands must name exactly {list(_BAND_ORDER)}, got {sorted(value)}")
+        bounds = [value[name] for name in _BAND_ORDER]
+        if bounds[0] != 0:
+            raise ValueError("scoring.bands.LOW must be 0")
+        if any(upper <= lower for lower, upper in zip(bounds, bounds[1:])):
+            raise ValueError(f"scoring.bands must be strictly increasing in order {list(_BAND_ORDER)}")
+        if bounds[-1] > 100:
+            raise ValueError("scoring.bands values must be <= 100")
+        return {name: value[name] for name in _BAND_ORDER}
+
+    def weight(self, category: SignalCategory) -> float:
+        """Configured weight of ``category``, or its DEFAULT_WEIGHTS value."""
+        category = SignalCategory(category)
+        return float(self.weights.get(category, DEFAULT_WEIGHTS[category]))
 
 
 class Thresholds(_Model):
