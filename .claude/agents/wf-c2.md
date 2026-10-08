@@ -48,6 +48,12 @@ Legacy containment rules (each one is a recommendation that needs human approval
 
 Scenarios (14.5.3): `tp-approve-all`, `tp-approve-selected`, `tp-reject`, `benign-no-action`, `degraded-source`, `critical-asset-elevated`, `partial-failure`, `dry-run`, `release-restoration`, at least two `edge-<slug>` (for example: shared CDN IP) and one `legacy-<NN>-<slug>` per legacy scenario. Test data is fake only: `example.com`, `*.example`, `*.test`, documentation IP ranges, fake 64-hex hashes, hosts like `TH-LT-1047`, users like `jsmith@example.com`.
 
+## Framework conventions (Phase 2 integration, architecture 14.10)
+
+- An action the workflow examines and deliberately does not recommend (a widespread hash, shared infrastructure, a policy that forbids the action) is returned by the hook `considered()` as a `Consideration` citing its records; a step with no VERIFIED write is a `Consideration(manual=True)`. Never leave it only in facts or rationale text.
+- A suggestion to run another workflow is a hook `handoffs()` item (`Handoff`), and its target must be listed in the definition's `handoff_to` (a subset of `related_workflows`). An entry-vector workflow that concludes an account is compromised hands off to `account-takeover`. Keep `workflows/README.md` in step (a test compares it with `handoff_to`); pin hand-offs and considered items in scenarios with `expect.handoffs`, `expect.considered`, `expect.manual_steps`.
+- Email quarantine and delete rules pass the message's single `recipient` and never a vendor verdict: the Secure Email verdict comes from `integrations.secure_email.options.quarantine_verdict` (14.10.3).
+
 ## Non-negotiable rules
 
 - Investigation and recommendation are automatic. Human approval is mandatory before any state-changing action, including session revocation, release and restoration. After approval the lifecycle executes the approved containment automatically and verifies it automatically; restoration needs a separate human release approval.
