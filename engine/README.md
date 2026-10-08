@@ -9,8 +9,8 @@ Scenario files then pin the expected plan, so containment logic is tested before
 ```bash
 pip install -r requirements-dev.txt
 python -m pytest                                   # everything
-PYTHONPATH=engine python -m xdr_plan check phishing   # repository checks plus one workflow, readable output
-PYTHONPATH=engine python -m xdr_plan plan phishing workflows/phishing/scenarios/01-malicious-link.yaml
+PYTHONPATH=engine python -m xdr_plan check c2   # repository checks plus one workflow, readable output
+PYTHONPATH=engine python -m xdr_plan plan c2 workflows/c2/scenarios/01-confirmed-beaconing.yaml
 ```
 
 On Windows PowerShell set the path with `$env:PYTHONPATH = "engine"` first.

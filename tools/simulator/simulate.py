@@ -9,8 +9,8 @@ Usage:
     python tools/simulator/simulate.py tests/fixtures/incidents/account_takeover.yaml --live --check
     python tools/simulator/simulate.py --list-workflows
     python tools/simulator/simulate.py --workflow ransomware --scenario tp-approve-all --live --check
-    python tools/simulator/simulate.py --legacy malware                       # every legacy scenario
-    python tools/simulator/simulate.py --legacy malware 01-executed-payload --check
+    python tools/simulator/simulate.py --legacy web-attacks                   # every legacy scenario
+    python tools/simulator/simulate.py --legacy web-attacks 01-confirmed-web-shell --check
 
 Workflow scenarios (``tests/fixtures/workflows/<workflow id>/*.yaml``, architecture 14.5.2) run
 through the workflow framework: the incident is routed to its workflow, investigated with typed

@@ -96,26 +96,33 @@ def test_check_endpoints_reports_inconsistent_manifests():
                         "meraki: supports block_ip without a VERIFIED state-changing operation"]
 
 
+#: A legacy spec that stays legacy until the end of Phase 5 (14.5.1: web-attacks is aligned last); the
+#: legacy replay and these tests are retired together then (14.4.3).
+LEGACY_WORKFLOW = "web-attacks"
+
+
 def test_legacy_replay_cli_prints_the_dry_run_and_checks():
     out = io.StringIO()
-    code = simulate.main(["--legacy", "malware", "01-executed-payload", "--check"], out=out)
+    code = simulate.main(["--legacy", LEGACY_WORKFLOW, "01-confirmed-web-shell", "--check"], out=out)
     text = out.getvalue()
     assert code == simulate.EXIT_OK, text
-    assert "DRY RUN" in text and "Would isolate: WKS-0142" in text
-    assert "legacy rule isolate_hosts_with_execution" in text
+    assert "DRY RUN" in text and "Would isolate: WEB-SHOP-01" in text
+    assert "legacy rule isolate_web_shell_host" in text
     assert "Simulated vendor state changes: 0" in text and "All scenario expectations met." in text
 
 
 def test_legacy_replay_cli_usage_errors():
     assert simulate.main(["--legacy", "no-such-workflow"], out=io.StringIO()) == simulate.EXIT_USAGE
-    assert simulate.main(["--legacy", "malware", "99-missing"], out=io.StringIO()) == simulate.EXIT_USAGE
+    assert simulate.main(["--legacy", LEGACY_WORKFLOW, "99-missing"], out=io.StringIO()) == simulate.EXIT_USAGE
+    # A migrated workflow (Phase 2) has no legacy spec any more.
+    assert simulate.main(["--legacy", "malware"], out=io.StringIO()) == simulate.EXIT_USAGE
 
 
 def test_several_scenarios_run_in_child_processes():
     """The guard seals its verifier per process: a second runtime in-process would be refused."""
     out = io.StringIO()
-    code = simulate._run_isolated([["--legacy", "malware", "01-executed-payload", "--check"],
-                                   ["--legacy", "malware", "03-clean-disposition", "--check"]], out)
+    code = simulate._run_isolated([["--legacy", LEGACY_WORKFLOW, "01-confirmed-web-shell", "--check"],
+                                   ["--legacy", LEGACY_WORKFLOW, "03-scanning-only", "--check"]], out)
     text = out.getvalue()
     assert code == simulate.EXIT_OK, text
     assert text.count("All scenario expectations met.") == 2

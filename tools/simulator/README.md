@@ -83,8 +83,8 @@ proposals by `xdr_response.lifecycle.plan_bridge` (evidence cites the legacy res
 guardrails) and simulated. Nothing is approved and nothing is executed.
 
 ```
-python tools/simulator/simulate.py --legacy malware                         # every scenario of the workflow
-python tools/simulator/simulate.py --legacy malware 01-executed-payload --check
+python tools/simulator/simulate.py --legacy web-attacks                     # every scenario of the workflow
+python tools/simulator/simulate.py --legacy web-attacks 01-confirmed-web-shell --check
 ```
 
 `--check` compares the package with the scenario's `expect` block (planned actions in the package,

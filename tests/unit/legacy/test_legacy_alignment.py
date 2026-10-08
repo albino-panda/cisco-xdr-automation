@@ -79,7 +79,14 @@ def test_templates_never_copy_unlock_codes(wid):
 def test_renamed_workflows(old, new):
     assert not (ROOT / "workflows" / old).exists()
     assert not (ROOT / ".claude" / "agents" / f"wf-{old}.md").exists()
-    assert repo.load_workflow(new)["id"] == new
+    if new in repo.workflow_ids():  # legacy spec not migrated yet
+        assert repo.load_workflow(new)["id"] == new
+    else:  # migrated (14.5.1): the legacy spec is deleted and the framework definition carries the id
+        from xdr_response.workflows.discovery import discover_workflows
+
+        definition = discover_workflows().get(new).definition
+        assert definition.id == new and definition.legacy_id == new
+        assert (ROOT / "workflows" / new / "README.md").is_file()
     agent = (ROOT / ".claude" / "agents" / f"wf-{new}.md").read_text(encoding="utf-8")
     assert f"name: wf-{new}\n" in agent and f"workflows/{new}/" in agent
     assert f"workflows/{old}/" not in agent

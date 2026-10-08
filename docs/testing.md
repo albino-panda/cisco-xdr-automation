@@ -158,7 +158,7 @@ PYTHONPATH=engine python -m xdr_plan check
 `tests/test_workflows.py` runs the same scenarios inside pytest. `tests/simulation/test_legacy_replay.py` replays every one of them through the `xdr_response` runtime in dry run (`plan_bridge`, `PackageBuilder`, the DRY RUN simulator) and checks the `expect` block, zero state-changing calls and zero guard denials ([architecture.md](architecture.md) sections 12 and 14.3.8). One scenario from the command line:
 
 ```bash
-python tools/simulator/simulate.py --legacy malware 01-executed-payload --check
+python tools/simulator/simulate.py --legacy web-attacks 01-confirmed-web-shell --check
 ```
 
 ## 7. Before you merge
