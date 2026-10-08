@@ -1,0 +1,69 @@
+# Data exfiltration scenario; fake lab data only.
+schema: 1
+name: critical-asset-elevated
+workflow: exfiltration
+description: >-
+  Critical assets. A production file server is still uploading a database export to a file share that
+  two reputation sources rate malicious, driven by an administrator account with identity risk high.
+  The server is a production server and the account is privileged, so the isolation, the session
+  revocation and the disable are ELEVATED with visible warnings (never skipped). An analyst alone is
+  refused; the SOC lead approves and everything executes.
+tags: [critical_asset, true_positive, approve_all]
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel], entra: [identity],
+        microsoft_cloud: [network]}
+incident:
+  incident_id: XDR-EXF-0009
+  title: Large outbound transfer from production file server PRD-FS-02
+  severity: CRITICAL
+  workflow_id: exfiltration
+  observables:
+    - {type: hostname, value: PRD-FS-02}
+    - {type: domain, value: share-upload.test}
+  users: [adm-rlee@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1041]}
+environment:
+  reputations:
+    - {type: domain, value: share-upload.test, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [umbrella, virustotal], summary: "file share used to receive stolen data"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: PRD-FS-02
+      record: {kind: endpoint, hostname: PRD-FS-02, connector_guid: 00000000-0000-4000-8000-000000000f02,
+               os: Windows Server 2022, groups: [Production File Servers], tags: [production],
+               users: [adm-rlee@example.com], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: PRD-FS-02
+      record: {kind: network_connection, endpoint: PRD-FS-02, user: adm-rlee@example.com, domain: share-upload.test,
+               remote_ip: 198.51.100.66, remote_port: 443, protocol: tcp, direction: outbound, process_name: browser.exe,
+               bytes_out: 2147483648, count: 3, action: allowed, first_seen: "2026-01-15T11:10:00Z",
+               last_seen: "2026-01-15T11:58:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: adm-rlee@example.com
+      record: {kind: user_profile, user: adm-rlee@example.com, department: IT, groups: [Server Admins],
+               risk_level: high, risk_state: at_risk, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: adm-rlee@example.com
+      record: {kind: anomaly, anomaly_id: an-exf-0009, anomaly_type: anonymous_ip, severity: MEDIUM,
+               user: adm-rlee@example.com, ip: 198.51.100.9, first_seen: "2026-01-15T10:55:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - block_domain:share-upload.test
+    - block_ip:198.51.100.66
+    - isolate_endpoint:PRD-FS-02
+    - revoke_sessions:adm-rlee@example.com
+    - disable_user:adm-rlee@example.com
+  elevated:
+    - isolate_endpoint:PRD-FS-02
+    - revoke_sessions:adm-rlee@example.com
+    - disable_user:adm-rlee@example.com
+  warnings: [ELEVATED APPROVAL REQUIRED, Production server, Privileged account]
+  handoffs: ["account-takeover:adm-rlee@example.com"]
+  containment: CONTAINED
+  controls: 4

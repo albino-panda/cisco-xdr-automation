@@ -1,0 +1,78 @@
+# Data exfiltration scenario; fake lab data only. Migrated from the legacy plan-rule spec.
+schema: 1
+name: legacy-05-insider-personal-cloud
+workflow: exfiltration
+description: >-
+  Legacy 05, insider case. A Defender XDR insider-risk alert names a departing employee who uploaded
+  design files to a clean, widely used personal cloud storage service. Clean destinations are not
+  blocked (considered) and the transfer has finished (the laptop is not isolated, considered), so only
+  the named account's sessions are revoked and the account is disabled (C1: revocation needs approval).
+  A second user of the incident (the file owner) has no risk and no alert names her, which proves the
+  insider decision does not spread. The legacy insider_risk context flag now comes from the alert
+  record, never from an incident field.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/exfiltration/scenarios/05-insider-personal-cloud.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel], entra: [identity],
+        microsoft_cloud: [endpoint, network]}
+incident:
+  incident_id: INC-TEST-EXF-0005
+  title: Departing employee uploaded design files to personal cloud storage
+  severity: HIGH
+  workflow_id: exfiltration
+  observables:
+    - {type: domain, value: personal-drive.example}
+    - {type: ip, value: 203.0.113.80}
+    - {type: hostname, value: ENG-LT-21}
+    - {type: user, value: a.khan@example.com}
+    - {type: user, value: b.ortiz@example.com}
+  users: [a.khan@example.com, b.ortiz@example.com]
+  trigger: {source: microsoft_cloud, mitre_techniques: [T1567.002]}
+environment:
+  reputations:
+    - {type: domain, value: personal-drive.example, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [umbrella, virustotal], summary: "personal online storage"}
+    - {type: ip, value: 203.0.113.80, verdict: CLEAN, risk_score: 0, confidence: 70,
+       integrations: [umbrella], summary: "personal online storage front end"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ENG-LT-21
+      record: {kind: endpoint, hostname: ENG-LT-21, connector_guid: 00000000-0000-4000-8000-00000000e705,
+               os: Windows 11, groups: [Engineering], users: [a.khan@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ENG-LT-21
+      record: {kind: network_connection, endpoint: ENG-LT-21, user: a.khan@example.com, domain: personal-drive.example,
+               remote_ip: 203.0.113.80, remote_port: 443, protocol: tcp, direction: outbound, process_name: browser.exe,
+               bytes_out: 2147483648, count: 640, action: allowed, first_seen: "2026-01-14T17:30:00Z",
+               last_seen: "2026-01-14T18:10:00Z"}
+    - integration: microsoft_cloud
+      atomic: investigate_endpoint
+      subject: ENG-LT-21
+      record: {kind: detection, detection_id: da-exf-e705-1, name: "Insider risk: data theft by departing user",
+               category: InsiderRisk, verdict: SUSPICIOUS, severity: HIGH, endpoint: ENG-LT-21, user: a.khan@example.com,
+               mitre_techniques: [T1567.002], status: active, first_seen: "2026-01-14T19:00:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: a.khan@example.com
+      record: {kind: user_profile, user: a.khan@example.com, department: Engineering, groups: [Engineering],
+               risk_level: none, risk_state: none, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: b.ortiz@example.com
+      record: {kind: user_profile, user: b.ortiz@example.com, department: Engineering, groups: [Engineering],
+               risk_level: none, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - revoke_sessions:a.khan@example.com
+    - disable_user:a.khan@example.com
+  elevated: []
+  considered: [block_domain:personal-drive.example, block_ip:203.0.113.80, isolate_endpoint:ENG-LT-21]
+  manual_steps: [assess data exposure from ENG-LT-21]
+  handoffs: []
+  containment: CONTAINED
+  controls: 1

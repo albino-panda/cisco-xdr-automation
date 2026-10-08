@@ -1,0 +1,62 @@
+# Data exfiltration scenario; fake lab data only. Migrated from the legacy plan-rule spec.
+schema: 1
+name: legacy-04-finished-transfer
+workflow: exfiltration
+description: >-
+  Legacy 04, edge case specific to exfiltration. The same evidence as a running transfer, but the
+  upload to a malicious drop site finished overnight (its last record is hours before the incident).
+  The destinations are still blocked so they cannot be reused, but the laptop is not isolated because
+  nothing is left to stop (listed as considered; the evidence stays on it). The account shows no
+  compromise and no insider-risk detection, so it is left alone.
+tags: [legacy, edge_case, true_positive, approve_all]
+legacy_source: workflows/exfiltration/scenarios/04-finished-transfer.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel], entra: [identity],
+        microsoft_cloud: [network]}
+incident:
+  incident_id: INC-TEST-EXF-0004
+  title: Overnight upload to malicious file share completed
+  severity: CRITICAL
+  workflow_id: exfiltration
+  observables:
+    - {type: domain, value: share-upload.test}
+    - {type: ip, value: 198.51.100.66}
+    - {type: hostname, value: FIN-LT-12}
+    - {type: user, value: m.ng@example.com}
+  users: [m.ng@example.com]
+  trigger: {source: umbrella, mitre_techniques: [T1567.002]}
+environment:
+  reputations:
+    - {type: domain, value: share-upload.test, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [umbrella, virustotal], summary: "malware-hosting file share"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: FIN-LT-12
+      record: {kind: endpoint, hostname: FIN-LT-12, connector_guid: 00000000-0000-4000-8000-00000000e704,
+               os: Windows 11, groups: [Finance], users: [m.ng@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: FIN-LT-12
+      record: {kind: network_connection, endpoint: FIN-LT-12, user: m.ng@example.com, domain: share-upload.test,
+               remote_ip: 198.51.100.66, remote_port: 443, protocol: tcp, direction: outbound, process_name: browser.exe,
+               bytes_out: 1073741824, count: 212, action: allowed, first_seen: "2026-01-14T23:10:00Z",
+               last_seen: "2026-01-15T00:05:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: m.ng@example.com
+      record: {kind: user_profile, user: m.ng@example.com, department: Finance, groups: [Finance],
+               risk_level: low, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - block_domain:share-upload.test
+    - block_ip:198.51.100.66
+  elevated: []
+  considered: [isolate_endpoint:FIN-LT-12]
+  manual_steps: [assess data exposure from FIN-LT-12]
+  handoffs: []
+  containment: CONTAINED
+  controls: 2

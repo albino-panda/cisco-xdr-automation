@@ -1,0 +1,87 @@
+# Data exfiltration scenario; fake lab data only. Migrated from the legacy plan-rule spec.
+schema: 1
+name: legacy-03-guardrail-skips
+workflow: exfiltration
+description: >-
+  Legacy 03, guardrails. A risky admin account uploads from a domain controller, through an internal
+  relay, to a sanctioned partner transfer site that has no reputation yet. The partner domain is
+  allow-listed (lab config override), so its block is shown as excluded with the reason (C3); the relay
+  is an internal address (an internal connection), never blocked and listed as considered. The host is a
+  domain controller and the account is a Domain Admin, so the isolation, the session revocation and the
+  disable stay proposed and need ELEVATED approval with visible warnings (C3, never skipped). The SOC
+  lead approves.
+tags: [legacy, critical_asset, true_positive, approve_all]
+legacy_source: workflows/exfiltration/scenarios/03-guardrail-skips.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel], entra: [identity],
+        microsoft_cloud: [network]}
+config:
+  allowlists:
+    never_block:
+      domains: [example.com, microsoft.com, cisco.com, partner-sftp.example]
+incident:
+  incident_id: INC-TEST-EXF-0003
+  title: Unusual upload from domain controller by admin account
+  severity: CRITICAL
+  workflow_id: exfiltration
+  observables:
+    - {type: domain, value: partner-sftp.example}
+    - {type: hostname, value: DC-02}
+    - {type: user, value: adm-r.lee@example.com}
+  users: [adm-r.lee@example.com]
+  trigger: {source: cisco_xdr, mitre_techniques: [T1048]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-02
+      record: {kind: endpoint, hostname: DC-02, connector_guid: 00000000-0000-4000-8000-00000000e703,
+               os: Windows Server 2022, groups: [Domain Controllers], users: [adm-r.lee@example.com],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-02
+      record: {kind: network_connection, endpoint: DC-02, user: adm-r.lee@example.com, domain: partner-sftp.example,
+               remote_port: 22, protocol: tcp, direction: outbound, process_name: sftpclient.exe,
+               bytes_out: 734003200, count: 3, action: allowed, first_seen: "2026-01-15T11:02:00Z",
+               last_seen: "2026-01-15T11:50:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-02
+      record: {kind: network_connection, endpoint: DC-02, user: adm-r.lee@example.com, remote_ip: 192.0.2.40,
+               remote_port: 1080, protocol: tcp, direction: internal, process_name: sftpclient.exe,
+               bytes_out: 734003200, count: 3, action: allowed, first_seen: "2026-01-15T11:02:00Z",
+               last_seen: "2026-01-15T11:50:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-02
+      record: {kind: dns_query, endpoint: DC-02, domain: partner-sftp.example, query_type: A, count: 2,
+               categories: [File Transfer Services], action: allowed, first_seen: "2026-01-15T11:01:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: adm-r.lee@example.com
+      record: {kind: user_profile, user: adm-r.lee@example.com, department: IT, groups: [Domain Admins],
+               risk_level: high, risk_state: at_risk, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: adm-r.lee@example.com
+      record: {kind: anomaly, anomaly_id: an-exf-e703, anomaly_type: unfamiliar_location, severity: MEDIUM,
+               user: adm-r.lee@example.com, ip: 198.51.100.9, first_seen: "2026-01-15T10:40:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:DC-02
+    - revoke_sessions:adm-r.lee@example.com
+    - disable_user:adm-r.lee@example.com
+  elevated:
+    - isolate_endpoint:DC-02
+    - revoke_sessions:adm-r.lee@example.com
+    - disable_user:adm-r.lee@example.com
+  excluded: [block_domain:partner-sftp.example]
+  warnings: [ELEVATED APPROVAL REQUIRED, Domain controller, Privileged account]
+  considered: [block_ip:192.0.2.40]
+  manual_steps: [assess data exposure from DC-02]
+  handoffs: ["account-takeover:adm-r.lee@example.com"]
+  containment: CONTAINED
+  controls: 2

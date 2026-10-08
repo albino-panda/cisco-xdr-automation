@@ -1,0 +1,75 @@
+# Data exfiltration scenario; fake lab data only. Migrated from the legacy plan-rule spec.
+schema: 1
+name: legacy-02-sanctioned-backup
+workflow: exfiltration
+description: >-
+  Legacy 02, benign. An outbound volume anomaly fires while the backup server copies data to the
+  organisation's own backup service. The destination domain and IP are clean and widely used
+  (enterprise search shows the service from several servers), the host has no detection and the service
+  account no risk. The transfer is still running, which proves that a running transfer alone does not
+  isolate a host. Nothing is proposed; the clean destinations are listed as considered.
+tags: [legacy, benign]
+legacy_source: workflows/exfiltration/scenarios/02-sanctioned-backup.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel], entra: [identity],
+        microsoft_cloud: [network]}
+incident:
+  incident_id: INC-TEST-EXF-0002
+  title: Outbound volume anomaly from backup server
+  severity: HIGH
+  workflow_id: exfiltration
+  observables:
+    - {type: domain, value: backup.example.com}
+    - {type: ip, value: 198.51.100.20}
+    - {type: hostname, value: BKP-SRV-01}
+    - {type: user, value: svc-backup@example.com}
+  users: [svc-backup@example.com]
+  trigger: {source: cisco_xdr}
+environment:
+  reputations:
+    - {type: domain, value: backup.example.com, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [umbrella, virustotal], summary: "online storage and backup"}
+    - {type: ip, value: 198.51.100.20, verdict: CLEAN, risk_score: 0, confidence: 70,
+       integrations: [umbrella], summary: "backup service front end"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: BKP-SRV-01
+      record: {kind: endpoint, hostname: BKP-SRV-01, connector_guid: 00000000-0000-4000-8000-00000000e702,
+               os: Windows Server 2022, groups: [Backup Servers], users: [svc-backup@example.com],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: BKP-SRV-01
+      record: {kind: network_connection, endpoint: BKP-SRV-01, user: svc-backup@example.com, domain: backup.example.com,
+               remote_ip: 198.51.100.20, remote_port: 443, protocol: tcp, direction: outbound, process_name: backupagent.exe,
+               bytes_out: 268435456000, count: 48211, action: allowed, first_seen: "2026-01-15T09:00:00Z",
+               last_seen: "2026-01-15T11:50:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_ip_enterprise
+      subject: 198.51.100.20
+      record: {kind: network_connection, endpoint: BKP-SRV-02, remote_ip: 198.51.100.20, remote_port: 443,
+               direction: outbound, action: allowed, first_seen: "2026-01-15T01:00:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_ip_enterprise
+      subject: 198.51.100.20
+      record: {kind: network_connection, endpoint: BKP-SRV-03, remote_ip: 198.51.100.20, remote_port: 443,
+               direction: outbound, action: allowed, first_seen: "2026-01-15T01:00:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_ip_enterprise
+      subject: 198.51.100.20
+      record: {kind: network_connection, endpoint: BKP-SRV-04, remote_ip: 198.51.100.20, remote_port: 443,
+               direction: outbound, action: allowed, first_seen: "2026-01-15T01:00:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: svc-backup@example.com
+      record: {kind: user_profile, user: svc-backup@example.com, department: IT, groups: [Backup Operators],
+               risk_level: none, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  considered: [block_domain:backup.example.com, block_ip:198.51.100.20]
+  manual_steps: []
+  handoffs: []
+  notifications: [incident_note]

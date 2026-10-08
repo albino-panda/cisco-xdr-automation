@@ -1,0 +1,120 @@
+# Data exfiltration scenario; fake lab data only. Migrated from the legacy plan-rule spec.
+schema: 1
+name: legacy-06-spread-destinations-over-limit
+workflow: exfiltration
+description: >-
+  Legacy 06, blast radius and shared infrastructure. A running transfer is split across three unrated
+  external IPs and one shared CDN address that five endpoints of the estate reach. The CDN address is
+  not blocked (more than three endpoints: listed as considered). The three IP blocks exceed the lab's
+  indicator cap (2 in this override), so they stay proposed and need ELEVATED approval with a
+  blast-radius warning (C5). The isolation and the compromised account (identity risk medium with two
+  anomalies) stay proposed. The SOC lead approves. The destination IPs moved from 203.0.113.10-12 to
+  203.0.113.70-72, outside the lab's production_server range, so only the cap elevates them.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/exfiltration/scenarios/06-spread-destinations-over-limit.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel], entra: [identity],
+        microsoft_cloud: [network]}
+config:
+  thresholds: {blast_radius: {max_indicators: 2}}
+incident:
+  incident_id: INC-TEST-EXF-0006
+  title: Outbound transfer split across several cloud addresses
+  severity: CRITICAL
+  workflow_id: exfiltration
+  observables:
+    - {type: ip, value: 203.0.113.70}
+    - {type: ip, value: 203.0.113.71}
+    - {type: ip, value: 203.0.113.72}
+    - {type: ip, value: 198.51.100.200}
+    - {type: hostname, value: ENG-WS-03}
+    - {type: user, value: c.park@example.com}
+  users: [c.park@example.com]
+  trigger: {source: cisco_xdr, mitre_techniques: [T1048]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ENG-WS-03
+      record: {kind: endpoint, hostname: ENG-WS-03, connector_guid: 00000000-0000-4000-8000-00000000e706,
+               os: Windows 11, groups: [Engineering], users: [c.park@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ENG-WS-03
+      record: {kind: network_connection, endpoint: ENG-WS-03, user: c.park@example.com, remote_ip: 203.0.113.70,
+               remote_port: 443, protocol: tcp, direction: outbound, process_name: uploader.exe, bytes_out: 3221225472,
+               count: 1, action: allowed, first_seen: "2026-01-15T11:05:00Z", last_seen: "2026-01-15T11:50:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ENG-WS-03
+      record: {kind: network_connection, endpoint: ENG-WS-03, user: c.park@example.com, remote_ip: 203.0.113.71,
+               remote_port: 443, protocol: tcp, direction: outbound, process_name: uploader.exe, bytes_out: 3221225472,
+               count: 1, action: allowed, first_seen: "2026-01-15T11:05:00Z", last_seen: "2026-01-15T11:50:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ENG-WS-03
+      record: {kind: network_connection, endpoint: ENG-WS-03, user: c.park@example.com, remote_ip: 203.0.113.72,
+               remote_port: 443, protocol: tcp, direction: outbound, process_name: uploader.exe, bytes_out: 3221225472,
+               count: 1, action: allowed, first_seen: "2026-01-15T11:05:00Z", last_seen: "2026-01-15T11:50:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ENG-WS-03
+      record: {kind: network_connection, endpoint: ENG-WS-03, user: c.park@example.com, remote_ip: 198.51.100.200,
+               remote_port: 443, protocol: tcp, direction: outbound, process_name: uploader.exe, bytes_out: 536870912,
+               count: 1, action: allowed, first_seen: "2026-01-15T11:05:00Z", last_seen: "2026-01-15T11:50:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_ip_enterprise
+      subject: 198.51.100.200
+      record: {kind: network_connection, endpoint: ENG-WS-11, remote_ip: 198.51.100.200, remote_port: 443,
+               direction: outbound, action: allowed, first_seen: "2026-01-15T08:00:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_ip_enterprise
+      subject: 198.51.100.200
+      record: {kind: network_connection, endpoint: ENG-WS-12, remote_ip: 198.51.100.200, remote_port: 443,
+               direction: outbound, action: allowed, first_seen: "2026-01-15T08:00:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_ip_enterprise
+      subject: 198.51.100.200
+      record: {kind: network_connection, endpoint: ENG-WS-13, remote_ip: 198.51.100.200, remote_port: 443,
+               direction: outbound, action: allowed, first_seen: "2026-01-15T08:00:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_ip_enterprise
+      subject: 198.51.100.200
+      record: {kind: network_connection, endpoint: ENG-WS-14, remote_ip: 198.51.100.200, remote_port: 443,
+               direction: outbound, action: allowed, first_seen: "2026-01-15T08:00:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: c.park@example.com
+      record: {kind: user_profile, user: c.park@example.com, department: Engineering, groups: [Engineering],
+               risk_level: medium, risk_state: at_risk, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: c.park@example.com
+      record: {kind: anomaly, anomaly_id: an-exf-e706-1, anomaly_type: new_device, severity: MEDIUM,
+               user: c.park@example.com, first_seen: "2026-01-15T10:30:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: c.park@example.com
+      record: {kind: anomaly, anomaly_id: an-exf-e706-2, anomaly_type: unfamiliar_location, severity: MEDIUM,
+               user: c.park@example.com, ip: 192.0.2.150, first_seen: "2026-01-15T10:30:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - block_ip:203.0.113.70
+    - block_ip:203.0.113.71
+    - block_ip:203.0.113.72
+    - isolate_endpoint:ENG-WS-03
+    - revoke_sessions:c.park@example.com
+    - disable_user:c.park@example.com
+  elevated:
+    - block_ip:203.0.113.70
+    - block_ip:203.0.113.71
+    - block_ip:203.0.113.72
+  warnings: [ELEVATED APPROVAL REQUIRED, blast-radius cap]
+  considered: [block_ip:198.51.100.200]
+  manual_steps: [assess data exposure from ENG-WS-03]
+  handoffs: ["account-takeover:c.park@example.com"]
+  containment: CONTAINED
+  controls: 5

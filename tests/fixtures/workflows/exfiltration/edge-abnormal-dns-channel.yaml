@@ -1,0 +1,54 @@
+# Data exfiltration scenario; fake lab data only.
+schema: 1
+name: edge-abnormal-dns-channel
+workflow: exfiltration
+description: >-
+  Edge case: abnormal DNS. A workstation sends hundreds of queries with long, unique child labels to a
+  domain no reputation source knows; the queries are still running and no web upload is seen. The
+  queried domain is the destination of the data, so its block is recommended. Nothing else shows
+  exfiltration (no rating, no detection, the account has no risk), so the endpoint is not isolated
+  and is listed as considered; the analyst approves the block.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel], entra: [identity],
+        microsoft_cloud: [network]}
+incident:
+  incident_id: XDR-EXF-0012
+  title: Outbound volume anomaly in DNS from TH-LT-4410
+  severity: HIGH
+  workflow_id: exfiltration
+  observables:
+    - {type: hostname, value: TH-LT-4410}
+  users: [pnair@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1048]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-4410
+      record: {kind: endpoint, hostname: TH-LT-4410, connector_guid: 00000000-0000-4000-8000-000000004410,
+               os: Windows 11, groups: [Workstations], users: [pnair@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-4410
+      record: {kind: dns_query, endpoint: TH-LT-4410, domain: sync-telemetry.test, query_type: TXT, count: 1840,
+               unique_subdomains: 1795, max_label_length: 63, action: allowed, first_seen: "2026-01-15T10:40:00Z",
+               last_seen: "2026-01-15T11:58:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: pnair@example.com
+      record: {kind: user_profile, user: pnair@example.com, department: Research, groups: [Research],
+               risk_level: none, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - block_domain:sync-telemetry.test
+  elevated: []
+  degraded_sources: []
+  considered: [isolate_endpoint:TH-LT-4410]
+  manual_steps: [assess data exposure from TH-LT-4410]
+  handoffs: []
+  containment: CONTAINED
+  controls: 1

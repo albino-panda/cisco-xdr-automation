@@ -1,0 +1,63 @@
+# Data exfiltration scenario; fake lab data only.
+schema: 1
+name: edge-sanctioned-cloud-storage
+workflow: exfiltration
+description: >-
+  Edge case: sanctioned cloud storage. An engineer uploads 2 GiB of build artefacts, still running,
+  to the organisation's own cloud storage tenant. No reputation source knows the tenant host and it is
+  categorised as online storage, so the workflow recommends the block; the domain is listed in
+  allowlists.never_block, so the package builder excludes the block (noted with the reason, never
+  executed) and no package remains. The account has no risk and no detection names the endpoint, so
+  the endpoint is not isolated (listed as considered) and nothing executes. The upload volume still
+  gets the manual data impact review.
+tags: [edge_case, benign]
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel], entra: [identity],
+        microsoft_cloud: [network]}
+config:
+  allowlists:
+    never_block:
+      domains: [example.com, microsoft.com, cisco.com, files.corp-storage.test]
+incident:
+  incident_id: XDR-EXF-0010
+  title: Unusual upload volume to cloud storage from TH-LT-2210
+  severity: HIGH
+  workflow_id: exfiltration
+  observables:
+    - {type: hostname, value: TH-LT-2210}
+  users: [mlopez@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1567.002]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: endpoint, hostname: TH-LT-2210, connector_guid: 00000000-0000-4000-8000-000000002210,
+               os: Windows 11, groups: [Engineering Workstations], users: [mlopez@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: network_connection, endpoint: TH-LT-2210, user: mlopez@example.com, domain: files.corp-storage.test,
+               remote_port: 443, protocol: tcp, direction: outbound, process_name: storagesync.exe,
+               bytes_out: 2147483648, count: 640, action: allowed, first_seen: "2026-01-15T11:05:00Z",
+               last_seen: "2026-01-15T11:57:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: dns_query, endpoint: TH-LT-2210, domain: files.corp-storage.test, query_type: A, count: 9,
+               categories: [Online Storage and Backup], action: allowed, first_seen: "2026-01-15T11:04:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: mlopez@example.com
+      record: {kind: user_profile, user: mlopez@example.com, department: Engineering, groups: [Engineering],
+               risk_level: none, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  degraded_sources: []
+  considered: [isolate_endpoint:TH-LT-2210]
+  manual_steps: [assess data exposure from TH-LT-2210]
+  handoffs: []
+  notifications: [incident_note]

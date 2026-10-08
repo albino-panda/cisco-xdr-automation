@@ -1,141 +1,319 @@
-# Workflow: Data exfiltration
+# Data exfiltration
 
-Stop large or unusual outbound transfers and preserve evidence for impact assessment.
+Phase 4 workflow `exfiltration` (definition version 2.0.0). Code:
+`src/xdr_response/workflows/exfiltration/` (`definition.py`, `hooks.py`). It replaces the legacy
+plan-rule spec (`workflow.yaml` and its six scenarios), which were migrated to typed simulation
+scenarios and deleted. The binding design is [docs/architecture.md](../../docs/architecture.md)
+sections 12 to 14.
 
-|  |  |
-|---|---|
-| Default severity | critical |
-| Status | Specification. Not yet built in XDR Automation. |
-| Machine-readable spec | [`workflow.yaml`](workflow.yaml) |
-| Integrations | [Cisco XDR](../../integrations/cisco-xdr/README.md), [Cisco Umbrella / Secure Access](../../integrations/umbrella/README.md), [Splunk](../../integrations/splunk/README.md), [Cisco Secure Endpoint](../../integrations/secure-endpoint/README.md), [Cisco Meraki](../../integrations/meraki/README.md), [Microsoft Entra ID (via Microsoft Graph)](../../integrations/microsoft-entra/README.md), [Cloudflare](../../integrations/cloudflare/README.md), [ServiceNow](../../integrations/servicenow/README.md) |
+## Purpose
 
-## Triggers
+Stop large or unusual outbound transfers and preserve evidence for impact assessment. The workflow
+automatically investigates an outbound transfer that looks like data theft: an unusual upload volume,
+a new or unrated external destination, unusual cloud storage, abnormal DNS, an unusual session of the
+account that drives the transfer, or a large transfer reported by an endpoint or network source. It
+correlates user, endpoint, process, destination, volume and authentication, and then **recommends** a
+containment package with numbered evidence and separate risk and confidence scores:
 
-- **Incident rule** in XDR Automation matching the techniques below or the detection titles your sources produce.
-- **Pivot menu** on an incident or observable for manual runs.
-- **Playbook task** in the matching XDR incident response playbook.
+- block the destination domains and public IPs that receive the data;
+- isolate a source endpoint while its transfer is still running and shows exfiltration evidence;
+- revoke the sign-in sessions of, and disable, an account that drives the transfer and is compromised
+  or named by an insider-risk detection.
 
-## Detection signals
+Clean, shared and internal destinations are never proposed for a block; they are listed as
+considered with their records. Sanctioned backup, file-transfer and partner services belong in
+`allowlists.never_block`: the package builder excludes their blocks (shown, never executed).
 
-Typical alerts that should route to this workflow:
+The workflow never executes, approves or chooses an approval level. A human approves the package; only
+then does the lifecycle orchestrator execute, verify and (after a separate human release approval)
+restore.
 
-- Outbound volume anomaly
-- Upload to unsanctioned cloud storage
-- Archive creation followed by transfer
+Default severity: CRITICAL. Related workflows: [c2](../c2/README.md) (a command and control channel
+that also carries data), [dns-tunneling](../dns-tunneling/README.md) (DNS tunnels in general),
+[cloud-compromise](../cloud-compromise/README.md) (data taken from cloud tenants),
+[account-takeover](../account-takeover/README.md) (the hand-off for a compromised account),
+[ransomware](../ransomware/README.md) (double extortion: ransomware wins the routing).
 
-## MITRE ATT&CK
+## Trigger
 
-| Technique | Name |
-|---|---|
-| [T1041](https://attack.mitre.org/techniques/T1041/) | Exfiltration Over C2 Channel |
-| [T1567.002](https://attack.mitre.org/techniques/T1567/002/) | Exfiltration to Cloud Storage |
-| [T1048](https://attack.mitre.org/techniques/T1048/) | Exfiltration Over Alternative Protocol |
-
-## Response flow
-
-1. **Intake.** Load the incident summary, observables and the guardrails file.
-2. **Enrich.** [`enrich-domain`](../../atomic/enrich-domain/README.md), [`enrich-ip`](../../atomic/enrich-ip/README.md).
-3. **Investigate.** [`investigate-host`](../../atomic/investigate-host/README.md), [`investigate-user`](../../atomic/investigate-user/README.md).
-4. **Decide.** Build a containment plan and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
-5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
-6. **Record.** Add an incident note and [`create-ticket`](../../atomic/create-ticket/README.md).
-7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
-
-### Containment actions
-
-| Action | When | Approval |
+| Type | Matches | Priority |
 |---|---|---|
-| [`block-domain`](../../atomic/block-domain/README.md) | Domain with verdict malicious or suspicious, or a transfer destination with verdict unknown. Clean destinations are not blocked at the domain level; sanctioned services are allow-listed and skipped. | yes |
-| [`block-ip`](../../atomic/block-ip/README.md) | IP seen from at most 3 internal hosts (not shared infrastructure) with verdict malicious or suspicious, or a transfer destination with verdict unknown. Internal and allow-listed ranges are skipped. | yes |
-| [`isolate-endpoint`](../../atomic/isolate-endpoint/README.md) | Isolation-capable source host while the transfer is still running and shows exfiltration evidence. Finished transfers are not isolated. Protected hosts need ELEVATED approval. | yes |
-| [`disable-user`](../../atomic/disable-user/README.md) | Account driving the transfer that is compromised (risk high, or risk medium with a sign-in anomaly) or flagged as an insider by the source. Protected users and groups need ELEVATED approval. | yes |
+| XDR incident rule | the incident reports an exfiltration technique of the MITRE mapping (a reported sub-technique matches its parent) | 150 |
+| XDR incident rule | the title matches `*exfiltration*`, `*exfil *`, `*data theft*`, `*data loss*`, `*large outbound transfer*`, `*large upload*`, `*unusual upload*`, `*outbound volume anomaly*`, `*upload to unsanctioned*`, `*upload to personal cloud*` or `*data staged and sent*` **and** the incident carries a hostname, a user, a domain or an IP | 140 |
+| Manual | an analyst starts the workflow from an incident, an endpoint, a user or a destination (never matches automatically) | n/a |
 
-### Error handling
+An incident whose `workflow_id` is `exfiltration` always runs this workflow. When several workflows
+match, the highest priority wins, then the workflow id. The workflow outranks account-takeover (100),
+which it hands off to; ransomware (200) wins a double-extortion incident. Secure Network Analytics
+volume alerts and DLP or insider-risk alerts reach the workflow as Cisco XDR incidents through these
+rules (the trigger workflow sends only the incident id).
 
-| Steps | `on_error` | Why |
-|---|---|---|
-| Intake (`load_incident`, `load_guardrails`) | `stop` | Without the incident or the guardrails no safe plan can be built. |
-| Enrich and investigate | `continue` | A missing lookup only removes evidence. Records with an `error` are never actioned. |
-| Decide (`build_plan`, `approval`) | `escalate` | A human decides when the plan cannot be built or approved. |
-| Contain (all four actions) | `escalate` | A failed block, isolation or disable leaves a data loss path open; a human must close it. |
-| Record and notify | `continue` | The note, ticket and message are retried by hand; they never undo containment. |
+## Required integrations
 
-## Containment rules
+These are the expected sources: when one is disabled or failing, the run notes it and confidence
+drops, but a recommendation backed by other evidence is still made.
 
-The `plan` block in [`workflow.yaml`](workflow.yaml) turns the conditions above into rules that the
-[plan engine](../../engine/README.md) evaluates. Guardrails (protected, allow-listed, internal, blast
-radius) run after each rule and are not repeated in it. A record whose enrichment or investigation
-returned an `error` never matches.
+- `secure_endpoint`: endpoint detections, staging events, outbound connections with their volumes and
+  the DNS of the source endpoint (`investigate_endpoint`), and the isolation of the endpoint (VERIFIED
+  computer read and isolation write).
+- `umbrella`: status and categories of the destination domains (`enrich_domain`, VERIFIED
+  categorization endpoint: cloud storage, newly seen), and the landing product for approved domain
+  blocks (destination lists, VERIFIED).
+- `entra`: profile, risk state, sign-ins and anomalies of the accounts that drive the transfer
+  (`investigate_user`, VERIFIED user and sign-in reads), and the session revocation and account
+  disable (VERIFIED writes).
 
-| Rule id | Atomic | Condition |
-|---|---|---|
-| `block_exfil_domains` | `block-domain` | Any enriched domain with verdict malicious or suspicious, or a domain in `destination_domains` with verdict unknown. Expiry from `expiry_hours.block-domain`. |
-| `block_exfil_ips` | `block-ip` | Any enriched IP that at most 3 internal hosts talk to, with verdict malicious or suspicious, or listed in `destination_ips` with verdict unknown. Expiry from `expiry_hours.block-ip`. |
-| `isolate_active_source_hosts` | `isolate-endpoint` | `transfer_ongoing` is true, the host can be isolated, it is a source host (every investigated host when `source_hosts` is absent), and there is evidence: a destination domain or IP that is not clean, a malicious detection on the host, or `insider_risk`. |
-| `disable_compromised_actor` | `disable-user` | The user drives the transfer (every investigated user when `actor_users` is absent) and has Entra risk high, or risk medium with at least one sign-in anomaly. |
-| `disable_insider_actor` | `disable-user` | `insider_risk` is true and the user is named in `actor_users`. There is no default, so the decision never spreads to other users. |
+## Optional integrations
 
-### Incident context
+- `defender_endpoint`: second endpoint source (machine, alerts, timeline, connections) and isolation
+  or IP and domain indicators for the endpoints it manages.
+- `cisco_xdr`: platform verdicts and sightings for the destinations, and the native response actions
+  (`respond/observables`, `respond/trigger`) the router prefers when configured.
+- `microsoft_cloud`: Defender XDR alerts of the source endpoint (`alerts_v2`, including data-loss and
+  insider-risk alerts) and advanced hunting across the estate (which other endpoints reach a
+  destination).
+- `splunk`: enterprise search of proxy, firewall and DNS logs for the destinations (optional, disabled
+  by default).
+- `virustotal`: public reputation of the public destination domains and IPs (disclosure policy
+  applies: internal values are never sent).
+- `alienvault_otx`: independent reputation (OTX pulses) for the destination domains and IPs.
+- `meraki`: landing product for approved blocks of a destination IP at the MX firewall.
 
-The rules and templates read these source-specific facts from `incident.context`. Missing keys fall back
-to the defaults shown, which never widen containment beyond what the enrichment verdicts support.
+## Input data
 
-| Key | Type | Used for | Default |
+Incident observables of type `hostname`, `user`, `domain` and `ip`, the incident users, and
+`trigger.mitre_techniques` / `trigger.source` for routing. Values found by earlier steps feed later
+steps (the destinations of the endpoint's connections are enriched and searched, the accounts named on
+the connections and endpoints are investigated). Detection-source context such as the legacy
+`transfer_ongoing`, `insider_risk`, `data_types` or `bytes_out` fields is data, never evidence on its
+own: whether a transfer still runs comes from the record times, an insider flag from an insider-risk
+detection record, a volume from the connection records. All test data is fake.
+
+## Investigation steps
+
+All steps are read-only atomics; a failing step or source is noted and the run continues.
+
+| # | Step | Atomic | Subjects | Sources |
+|---|---|---|---|---|
+| 1 | `endpoint_triage` | `investigate_endpoint` | incident hostnames | Secure Endpoint, Defender, Cisco XDR, Defender XDR alerts |
+| 2 | `destination_domains` | `enrich_domain` | incident domains, domains of outbound connections, domains of abnormal DNS queries (at most 15) | every enricher |
+| 3 | `destination_ips` | `enrich_ip` | incident IPv4 addresses and remote IPs of outbound connections (at most 15) | every enricher |
+| 4 | `destination_reach_domains` | `search_domain_enterprise` | the same domains (at most 10) | Cisco XDR, Defender, Defender XDR hunting, Splunk |
+| 5 | `destination_reach_ips` | `search_ip_enterprise` | the same IPs (at most 10) | the same |
+| 6 | `transfer_actors` | `investigate_user` | incident users and the accounts the endpoints, connections and detections name (at most 10) | Entra |
+
+The hooks (`hooks.py`) then derive facts from the run's own records, each with the record ids it was
+computed from:
+
+- **destinations**: every external domain and public IP that receives data (an outbound connection
+  record with a volume, or abnormal DNS: at least 50 distinct child labels or a label of 40
+  characters), the incident's domains and IPs, and what the source endpoints contacted; with the
+  volume, whether the transfer still runs, the rating, cloud-storage and newly-seen categories, and how
+  many endpoints of the estate reach it;
+- **sources**: the endpoints the data leaves from, whether their transfer still runs (last record at
+  most 30 minutes before the incident, or later), archives staged before the transfer, and the
+  exfiltration evidence;
+- **actors**: the accounts that drive the transfers, whether each is compromised (identity risk high
+  or confirmed compromised, risk medium with an anomaly, or a high-severity anomaly) or named by an
+  insider-risk detection.
+
+## Correlation logic
+
+- Framework links: the same domain or IP reached from two or more endpoints or users, the same user on
+  several endpoints and the same endpoint used by several users. Window 180 minutes.
+- Workflow links (hooks, kind `workflow`): each transfer (the source endpoint, the account and the
+  destination domain or IP its connection record names), each abnormal DNS channel (endpoint and
+  domain), and staging (an archive written on the source endpoint up to 180 minutes before a transfer
+  from it).
+- Exfiltration evidence for a source is concluded from records: a destination rated malicious or
+  suspicious (by reputation or by the source's own connection verdict), a malicious detection or an
+  active exfiltration detection on the endpoint, a compromised account driving the transfer, or an
+  insider-risk detection naming an account of the endpoint.
+- How many endpoints of the estate reach a destination comes from the enterprise searches plus the
+  source endpoints; more than 3 means shared infrastructure.
+- Links shape the clusters, the blast radius and the decision card. They are never evidence on their
+  own and never change an approval level.
+
+## Risk calculation
+
+Each target is scored by the scoring engine (docs/threat-scoring.md) from the records its rule cites
+plus the target's enrichment and the workflow signals for it:
+
+- endpoint detections (exfiltration, data-loss, insider-risk or any malicious detection):
+  `endpoint_detection` (weight 1.0);
+- network connections and DNS queries with a verdict: `network_behaviour`;
+- the transfer pattern (workflow signal, `network_behaviour`, SUSPICIOUS, of the source that reported
+  the records): a large or abnormal upload to a destination that is not rated clean (severity 70, 50
+  for a smaller upload), a running transfer from the source endpoint (70), an account that drives such
+  a transfer (60);
+- identity risk and anomalies: `authentication_anomaly`;
+- Umbrella, Cisco XDR, VirusTotal and OTX answers: vendor reputation, capped by the engine; one vendor
+  alone is never an aggregate MALICIOUS verdict;
+- a critical asset adds the engine's critical-asset bonus (only with malicious evidence).
+
+Risk and confidence are separate integers. When every weighty signal comes from one source, risk stays
+below CRITICAL. Expected sources are Secure Endpoint, Umbrella and Entra: a failed one costs
+confidence once and is listed as degraded. Rule thresholds (below them the action is "considered, not
+proposed" and listed in the notes, never hidden): isolation and disable risk 50, blocks and session
+revocation risk 40.
+
+## Containment recommendations
+
+| Rule | Action (builder) | Proposed when | Evidence cited |
 |---|---|---|---|
-| `destination_domains` | list | Which domains received the data (domain block, isolation evidence) | `[]` |
-| `destination_ips` | list | Which IPs received the data (IP block, isolation evidence) | `[]` |
-| `source_hosts` | list | Hosts that sent the data (isolation) | every investigated host |
-| `actor_users` | list | Accounts that drove the transfer (disable) | every investigated user; none for insider cases |
-| `transfer_ongoing` | boolean | Isolation only while the transfer runs | `false` |
-| `insider_risk` | boolean | Insider disable and isolation evidence | `false` |
-| `data_types`, `bytes_out`, `file_count`, `transfer_started`, `transfer_last_seen` | various | Approval, incident note and ticket for legal and privacy review | not used by rules |
+| `block_exfil_domain` | `block_domain` (catalog order: native, Umbrella, Defender) | the domain is rated malicious or suspicious, or it is unrated (not clean), receives data (an upload or an abnormal DNS channel) that is large, new, cloud storage or abnormal DNS, and is reached from 3 endpoints or fewer | the transfer and DNS records, the rating records, the categorizing DNS records |
+| `block_exfil_ip` | `block_ip` (catalog order: native, Meraki, Defender) | the same for a public IPv4 address, which must also not be shared when rated | the same |
+| `isolate_source_secure_endpoint` | `isolate_endpoint` (`isolate_secure_endpoint`, `connector_guid` param) | the transfer from the endpoint still runs, the endpoint shows exfiltration evidence, it has a Secure Endpoint connector and isolation is not known to be impossible | the exfiltration evidence, the running transfer records, staged archives, the endpoint record |
+| `isolate_source_defender_endpoint` | `isolate_endpoint` (`isolate_defender_endpoint`) | the same, for an endpoint with a Defender machine id (a duplicate of the Secure Endpoint proposal is merged) | the same |
+| `revoke_actor_sessions` | `revoke_sessions` (`revoke_entra_sessions`) | an account that drives the transfer is compromised or named by an insider-risk detection | the compromise or insider records and the account's transfer records |
+| `disable_compromised_actor` | `disable_user` (`disable_entra_user`) | an account that drives the transfer is compromised | the same |
+| `disable_insider_actor` | `disable_user` (`disable_entra_user`) | an insider-risk detection names the account explicitly (never spreads to other accounts of the incident) | the same |
 
-## Inputs
+Allow-listed targets are still built and shown as excluded with the reason, never dropped; a package
+whose only action is excluded is not proposed and the run notes the exclusion. Internal and
+non-public addresses are never block candidates.
 
-| Variable | Type | Required | Description |
-|---|---|---|---|
-| `incident_id` | string | no | Cisco XDR incident ID, used for notes and audit. |
-| `dry_run` | boolean | no | When true, report the planned change without making it. Default true for containment. |
-| `observables` | list | no | Overrides the incident observables. |
+### Hand-offs and items not proposed
 
-## Guardrails
+- Not proposed, and listed as considered: a destination that receives data but is rated clean (the
+  analyst confirms it is sanctioned); a shared destination (reached from more than 3 endpoints); an
+  internal relay or proxy address that received data; the isolation of an endpoint whose transfer has
+  finished (nothing left to stop; the evidence stays on it), whose running transfer shows no
+  exfiltration evidence beyond the transfer, or that has no isolation-capable record; and the session
+  revocation and disable of an account that drives the transfer but could not be assessed because the
+  identity source failed; and the disable of a compromised account that no transfer record names (for
+  example a second user of the source endpoint): account decisions never spread from the transfer's
+  account to another user of the endpoint. A transfer record that names no account is attributed only
+  to the endpoint's single user.
+- Manual step (no VERIFIED write or read): assess the data exposure from each source endpoint with
+  exfiltration indications. Legal and privacy assess what was sent (the cited volume, destinations and
+  window) and decide notification obligations; the evidence stays on the endpoint (no reimage before
+  forensic collection and legal sign-off).
+- Hand-off: `account-takeover` for every compromised account tied to the transfer (review its
+  sign-ins, mailbox and cloud activity beyond this transfer).
 
-- `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
-- Blast-radius limits cap how many hosts, users or indicators a single run may touch.
-- Every containment action is reversible except session revocation, and the rollback is written into the incident note.
-- Sanctioned backup, file-transfer and partner services go into `allowlist.domains`, so they are never blocked.
+They appear in the run notes and in the analyst summary ("Considered, deliberately not proposed",
+"Manual steps", "Suggested hand-offs"), each with the record ids that show it. A hand-off is a
+suggestion only: it starts nothing and never changes the package (architecture 14.10.1).
 
-## Notes
+## Approval requirements
 
-- Involve legal and privacy teams early. The ticket captures data types, volumes, file count, transfer window and
-  destinations from `incident.context` for notification decisions.
-- Clean, widely used cloud storage is not blocked at the domain or IP level because that would break sanctioned use;
-  containment then relies on the account and, while the transfer runs, the host.
-- Isolation preserves evidence: the host stays powered on with the management channel open. Do not reimage before
-  forensic collection and legal sign-off.
+- Every action in the package needs human approval before it runs: domain and IP blocks, isolation,
+  session revocation, account disable, and later every release. AI and automation principals can never
+  approve, and nothing in the workflow can switch approval off.
+- ELEVATED approval (a human holding the elevated approver role, for example the SOC lead) applies,
+  with a visible warning on the decision card, when a target is a critical asset (a domain controller,
+  a production server, a privileged or service account, an executive's endpoint or account) or when a
+  blast-radius cap is exceeded (for example more destination blocks than `blast_radius.max_indicators`).
+  ELEVATED is decided by `PackageBuilder` from the investigated asset context; the workflow never sets
+  it and a critical asset is never skipped silently.
+- The analyst may approve all, approve a selection, reject, or ask for more investigation. For an
+  insider case, legal and HR agree before the account is disabled.
 
-## Scenarios
+## Containment execution
 
-Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them with
-`PYTHONPATH=engine python -m xdr_plan check exfiltration` from the repository root.
+After approval the orchestrator executes the approved actions automatically, through the guard and
+the approval token, native first (Cisco XDR `respond/trigger` when `native_actions` is configured),
+then directly:
 
-| File | What it proves |
+| Action | Route with the real adapters |
 |---|---|
-| [`01-ongoing-upload-compromised-account.yaml`](scenarios/01-ongoing-upload-compromised-account.yaml) | True positive: an ongoing upload to an unknown domain and IP by a high-risk account plans all four actions, each behind approval. |
-| [`02-sanctioned-backup.yaml`](scenarios/02-sanctioned-backup.yaml) | Benign: a running backup to the allow-listed, clean backup service produces no actions; an ongoing transfer alone never isolates a host. |
-| [`03-guardrail-skips.yaml`](scenarios/03-guardrail-skips.yaml) | Guardrails: an allow-listed partner domain, an internal relay IP, a `dc-*` host and a Domain Admins account are kept in the plan as `skipped_allowlisted`, `skipped_internal` and `elevated: true`. |
-| [`04-finished-transfer.yaml`](scenarios/04-finished-transfer.yaml) | Edge case: when the transfer has finished, the destinations are still blocked but the host is not isolated, and a low-risk account stays enabled. |
-| [`05-insider-personal-cloud.yaml`](scenarios/05-insider-personal-cloud.yaml) | Insider: only the named actor is disabled; clean personal cloud storage is not blocked and a second user in the incident is untouched. |
-| [`06-spread-destinations-over-limit.yaml`](scenarios/06-spread-destinations-over-limit.yaml) | Blast radius and shared infrastructure: a CDN address used by 40 hosts is not blocked, three IP blocks over the limit stay planned with `elevated: true` and escalate, while isolation and disable stay planned. |
+| block domain | Umbrella destination lists (VERIFIED), Defender indicators, or the native action |
+| block IP | Meraki MX rules or Defender indicators (VERIFIED), or the native action; direct Umbrella IP blocking is UNVERIFIED and never called |
+| isolate endpoint | Secure Endpoint `PUT /v1/computers/{connector_guid}/isolation` (VERIFIED) or Defender `POST /api/machines/{id}/isolate` (VERIFIED), or the native action |
+| revoke sessions | Entra `POST /users/{id}/revokeSignInSessions` (VERIFIED; not in the native catalog) |
+| disable user | Entra `PATCH /users/{id}` with `accountEnabled: false` (VERIFIED), or the native action |
 
-## Related workflows
+An UNROUTED action is listed on the decision card and in the notes for manual handling; it is never
+dropped. Isolation keeps the endpoint powered on with the management channel open, so evidence is
+preserved. Isolation release codes stay in the Secure Endpoint console and are never copied into
+notes, notifications or reports.
 
-[`c2`](../c2/README.md), [`dns-tunneling`](../dns-tunneling/README.md), [`cloud-compromise`](../cloud-compromise/README.md)
+## Verification
 
-## Building it in XDR Automation
+Verification is automatic after execution and reads the target state back: Umbrella destination
+lists and Meraki rules are read back; Defender machine actions are VERIFIED or NOT_VERIFIED; Entra
+`accountEnabled` and `signInSessionsValidFromDateTime` are read back; Secure Endpoint isolation and
+Defender indicators are UNABLE_TO_VERIFY until their read endpoints are VERIFIED
+(docs/integrations.md section 3). The result table shows every action with its execution and
+verification status (SUCCESS, ALREADY_CONTAINED, FAILED, SKIPPED, REJECTED_BY_ANALYST).
 
-1. Import the Cisco-managed atomics this workflow needs from the Exchange, plus the custom atomics in [`atomic/`](../../atomic/README.md).
-2. Create the workflow from [`workflow.yaml`](workflow.yaml): variables from `inputs`, one group per `phase`, conditions from the `plan` rules, error handling from `on_error` and texts from `templates`.
-3. Test with `dry_run = true` against a test incident (see [docs/testing](../../docs/testing/README.md)).
-4. Export the workflow JSON and commit it here as `workflow.export.json`.
+## Rollback
+
+Every reversible action registers a temporary control: domain and IP blocks (unblock), isolation
+(release endpoint) and account disable (enable user). Session revocation is not reversible and
+registers no control. Restoration needs its own human release approval of a release package built
+from the registry; closing the incident never removes a control by itself. For an insider case the
+account is enabled again only when the owner, HR and legal agree.
+
+## Failure handling
+
+- A failed or degraded source (for example Entra unavailable) is listed as degraded, lowers confidence
+  once, and never blocks a recommendation that other evidence supports: the destination blocks are
+  still proposed. An action whose only backing came from the failed source (the account actions, and
+  an isolation that rested on the compromised account) is not proposed and is listed as considered
+  with its records.
+- A destination whose reputation failed stays unrated and is judged by the transfer itself; the failed
+  source is named in the rationale.
+- A step, rule or hook that fails is noted and skipped; the rest of the run still recommends.
+- A rule with no citable record proposes nothing (no invented evidence).
+- An approved action that fails at the vendor is reported FAILED and never retried silently; the
+  overall result is PARTIALLY_CONTAINED or CONTAINMENT_FAILED.
+
+## MITRE mapping
+
+| Tactic | Technique | Sub-technique | Why this workflow responds |
+|---|---|---|---|
+| TA0010 Exfiltration | T1041 Exfiltration Over C2 Channel | none | data sent to a destination that reputation or the source's own analytics rate malicious or suspicious: the workflow blocks it and isolates a source whose transfer still runs |
+| TA0010 Exfiltration | T1048 Exfiltration Over Alternative Protocol | none | large transfers over non-web protocols (for example SFTP) and data carried in abnormal DNS queries: the workflow blocks the receiving domain or IP and isolates the running source |
+| TA0010 Exfiltration | T1567 Exfiltration Over Web Service | T1567.002 Exfiltration to Cloud Storage | uploads to unsanctioned or unknown cloud or file storage: the workflow blocks the storage destination unless it is shared or allow-listed, and revokes and disables the account when it is compromised or an insider risk |
+
+No other technique is mapped. Archive staging before the transfer is used as correlation and evidence
+only; the account compromise and the DNS tunnel are handled by the related workflows.
+
+## Testing instructions
+
+- Simulation scenarios: `tests/fixtures/workflows/exfiltration/` (the minimum set of 14.5.3, three
+  edge cases: sanctioned cloud storage, a Defender-managed source over SFTP, an abnormal DNS channel;
+  and the six migrated legacy scenarios `legacy-01` to `legacy-06`). They run automatically, in dry run
+  and simulated live, in `tests/simulation/test_workflow_scenarios.py`.
+- Unit and lifecycle tests: `tests/workflows/exfiltration/`.
+- Commands (from the repository root):
+  - `python -m pytest -q -p no:cacheprovider tests/workflows/exfiltration tests/simulation/test_workflow_scenarios.py -k "exfiltration"`
+  - `python tools/validation/check_workflow_readmes.py --workflow exfiltration`
+  - `python tools/simulator/simulate.py --workflow exfiltration --scenario tp-approve-all --check` (add `--live` for the simulated live run)
+
+## Known limitations
+
+- The transfer facts (volume, destination, time) come from typed connection and DNS records. With the
+  real adapters, Secure Endpoint trajectory events, Defender timeline and hunting rows, Splunk rows and
+  Cisco XDR sightings have no documented field schema (docs/integrations.md), so they stay generic
+  records: citable, never scored, never a transfer. Until a schema is VERIFIED, blocks of unrated
+  destinations and isolations are recommended only where typed records exist; rated destinations are
+  still blocked from their reputation.
+- Secure Cloud Analytics (Secure Network Analytics) volume alerts have no VERIFIED API: they arrive as
+  Cisco XDR incidents and are used for routing, never as evidence on their own.
+- Whether a transfer is still running is judged from the last record time: at most 30 minutes before
+  the incident was created (or later). A source that reports no time, or reports late, makes a running
+  transfer look finished, so the isolation is listed as considered and the analyst decides.
+- A destination reached from more than 3 endpoints of the estate is treated as shared infrastructure
+  and never proposed for a block. Without an enterprise search source (Cisco XDR, Defender, Microsoft
+  Defender XDR hunting or Splunk) the reach is unknown and only the source endpoints count.
+- Sanctioned backup, file-transfer and partner services must be listed in `allowlists.never_block`:
+  hooks and rule expressions cannot read the allow-lists; the package builder excludes such blocks and
+  shows them.
+- The data that left is not classified: no VERIFIED read names the files or data types sent. The impact
+  assessment (legal and privacy) is a manual step with the cited volume and window.
+- An insider-risk flag is read only from an endpoint or platform detection that names insider risk and
+  the account; an incident field alone (for example a legacy context flag) is data, never evidence.
+- Abnormal DNS is judged from the distinct child labels and label length the source reports; a DNS
+  tunnel without those fields is handled by the dns-tunneling workflow, not detected here.
+- Revoking sessions does not affect external (guest) users and may take a few minutes (Microsoft
+  Graph); it registers no control and cannot be rolled back.
+- Secure Endpoint isolation verifies as UNABLE_TO_VERIFY (the isolation read is UNVERIFIED); direct
+  Umbrella IP blocking is UNVERIFIED and never called (IP blocks use Meraki, Defender indicators or the
+  native action).
+- IPv6 destinations are not enriched or blocked by this workflow (IPv4 only).
+- Third-party reputation is subject to the disclosure policy and to VirusTotal's public quota: a
+  withheld or failed source lowers confidence and is listed as degraded; an unrated destination stays
+  unrated.

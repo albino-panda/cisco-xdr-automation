@@ -1,0 +1,67 @@
+# Data exfiltration scenario; fake lab data only.
+schema: 1
+name: edge-defender-managed-source
+workflow: exfiltration
+description: >-
+  Edge case: a source endpoint managed by Defender for Endpoint only, and an alternative protocol. A
+  workstation is still sending 1.2 GiB over SFTP to a bare public IP. Defender raises a suspicious
+  exfiltration alert and reputation rates the IP malicious. Secure Endpoint does not know the
+  workstation, so the isolation is proposed through Defender (the Secure Endpoint rule does not
+  apply). The account shows no risk, so no account action is proposed. The analyst approves both
+  actions.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {secure_endpoint: [endpoint], defender_endpoint: [endpoint], umbrella: [network], meraki: [network],
+        virustotal: [intel], entra: [identity], microsoft_cloud: [network]}
+incident:
+  incident_id: XDR-EXF-0011
+  title: Unusual upload over SFTP from TH-LT-3301
+  severity: HIGH
+  workflow_id: exfiltration
+  observables:
+    - {type: hostname, value: TH-LT-3301}
+    - {type: ip, value: 198.51.100.88}
+  users: [akim@example.com]
+  trigger: {source: defender_endpoint, mitre_techniques: [T1048.002]}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.88, verdict: MALICIOUS, risk_score: 80, confidence: 75,
+       integrations: [umbrella], summary: "known data drop server"}
+  records:
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3301
+      record: {kind: endpoint, hostname: TH-LT-3301, mde_machine_id: 3301aa00bb11cc22dd33ee44ff5566778899aabb,
+               os: Windows 11, groups: [Sales Workstations], users: [akim@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3301
+      record: {kind: detection, detection_id: da-exf-3301-1, name: Suspicious data exfiltration over SFTP,
+               category: Exfiltration, verdict: SUSPICIOUS, severity: HIGH, endpoint: TH-LT-3301, user: akim@example.com,
+               mitre_techniques: [T1048.002], status: active, first_seen: "2026-01-15T11:31:00Z"}
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3301
+      record: {kind: network_connection, endpoint: TH-LT-3301, user: akim@example.com, remote_ip: 198.51.100.88,
+               remote_port: 22, protocol: tcp, direction: outbound, process_name: sftpclient.exe,
+               bytes_out: 1288490188, count: 1, action: allowed, first_seen: "2026-01-15T11:20:00Z",
+               last_seen: "2026-01-15T11:56:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: akim@example.com
+      record: {kind: user_profile, user: akim@example.com, department: Sales, groups: [Sales],
+               risk_level: none, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - block_ip:198.51.100.88
+    - isolate_endpoint:TH-LT-3301
+  elevated: []
+  degraded_sources: []
+  considered: []
+  manual_steps: [assess data exposure from TH-LT-3301]
+  handoffs: []
+  containment: CONTAINED
+  controls: 2

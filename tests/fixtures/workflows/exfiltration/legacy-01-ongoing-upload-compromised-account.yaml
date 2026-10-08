@@ -1,0 +1,87 @@
+# Data exfiltration scenario; fake lab data only. Migrated from the legacy plan-rule spec.
+schema: 1
+name: legacy-01-ongoing-upload-compromised-account
+workflow: exfiltration
+description: >-
+  Legacy 01, true positive. A finance laptop is still uploading archives to a domain and IP with no
+  reputation, and the signed-in account has identity risk high with an unfamiliar-location sign-in.
+  Every rule that applies fires: both destinations are blocked, the source laptop is isolated while the
+  transfer runs, and the account's sessions are revoked and the account is disabled (C1: session
+  revocation needs approval like everything else). The legacy context flags (transfer_ongoing,
+  actor_users) now come from records: the connection's last record time and the account named on it.
+  The destination IP moved from 203.0.113.45 to 203.0.113.145 because the lab's production_server
+  class covers 203.0.113.0/26.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/exfiltration/scenarios/01-ongoing-upload-compromised-account.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel], entra: [identity],
+        microsoft_cloud: [network]}
+incident:
+  incident_id: INC-TEST-EXF-0001
+  title: Large outbound transfer to unknown file drop from finance laptop
+  severity: CRITICAL
+  workflow_id: exfiltration
+  observables:
+    - {type: domain, value: files-drop.example}
+    - {type: ip, value: 203.0.113.145}
+    - {type: hostname, value: FIN-LT-07}
+    - {type: user, value: j.doe@example.com}
+  users: [j.doe@example.com]
+  trigger: {source: umbrella, mitre_techniques: [T1567.002]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: FIN-LT-07
+      record: {kind: endpoint, hostname: FIN-LT-07, connector_guid: 00000000-0000-4000-8000-00000000e701,
+               os: Windows 11, groups: [Finance], users: [j.doe@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: FIN-LT-07
+      record: {kind: process_event, event_id: evt-exf-e701-1, endpoint: FIN-LT-07, timestamp: "2026-01-15T10:05:00Z",
+               event_type: file_create, process_name: archiver.exe, file_path: "C:\\Users\\jdoe\\Documents\\export.7z",
+               user: j.doe@example.com}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: FIN-LT-07
+      record: {kind: network_connection, endpoint: FIN-LT-07, user: j.doe@example.com, domain: files-drop.example,
+               remote_ip: 203.0.113.145, remote_port: 443, protocol: tcp, direction: outbound, process_name: browser.exe,
+               bytes_out: 4831838208, count: 1260, action: allowed, first_seen: "2026-01-15T10:12:00Z",
+               last_seen: "2026-01-15T11:40:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: FIN-LT-07
+      record: {kind: dns_query, endpoint: FIN-LT-07, domain: files-drop.example, query_type: A, count: 1,
+               categories: [Newly Seen Domains], action: allowed, first_seen: "2026-01-15T10:11:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: j.doe@example.com
+      record: {kind: user_profile, user: j.doe@example.com, department: Finance, manager: m.ruiz@example.com,
+               groups: [Finance], risk_level: high, risk_state: at_risk, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: j.doe@example.com
+      record: {kind: sign_in, sign_in_id: si-exf-e701, user: j.doe@example.com, timestamp: "2026-01-15T09:55:00Z",
+               ip: 192.0.2.77, app: Office 365, result: success, risk_level: high}
+    - integration: entra
+      atomic: investigate_user
+      subject: j.doe@example.com
+      record: {kind: anomaly, anomaly_id: an-exf-e701, anomaly_type: unfamiliar_location, severity: MEDIUM,
+               user: j.doe@example.com, ip: 192.0.2.77, first_seen: "2026-01-15T09:55:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - block_domain:files-drop.example
+    - block_ip:203.0.113.145
+    - isolate_endpoint:FIN-LT-07
+    - revoke_sessions:j.doe@example.com
+    - disable_user:j.doe@example.com
+  elevated: []
+  excluded: []
+  considered: []
+  manual_steps: [assess data exposure from FIN-LT-07]
+  handoffs: ["account-takeover:j.doe@example.com"]
+  containment: CONTAINED
+  controls: 4

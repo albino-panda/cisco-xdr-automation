@@ -1,0 +1,80 @@
+# Data exfiltration scenario; fake lab data only.
+schema: 1
+name: benign-no-action
+workflow: exfiltration
+description: >-
+  Benign. An outbound volume anomaly fires while a file server copies its nightly backup to the
+  organisation's backup service. Reputation rates the destination domain and IP clean, enterprise
+  search shows five servers using the service, the server has no detection and the service account no
+  risk. Nothing is proposed; the clean destinations are listed as considered so the analyst can
+  confirm the service is sanctioned.
+tags: [benign]
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel], entra: [identity],
+        microsoft_cloud: [network]}
+incident:
+  incident_id: XDR-EXF-0004
+  title: Outbound volume anomaly from TH-SRV-0201
+  severity: HIGH
+  workflow_id: exfiltration
+  observables:
+    - {type: hostname, value: TH-SRV-0201}
+    - {type: domain, value: vault.backup-service.test}
+  users: [svc-backup@example.com]
+  trigger: {source: cisco_xdr}
+environment:
+  reputations:
+    - {type: domain, value: vault.backup-service.test, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [umbrella, virustotal], summary: "established online backup service"}
+    - {type: ip, value: 198.51.100.20, verdict: CLEAN, risk_score: 0, confidence: 70,
+       integrations: [umbrella], summary: "backup service front end"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-SRV-0201
+      record: {kind: endpoint, hostname: TH-SRV-0201, connector_guid: 00000000-0000-4000-8000-000000000201,
+               os: Windows Server 2022, groups: [File Servers], users: [svc-backup@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-SRV-0201
+      record: {kind: network_connection, endpoint: TH-SRV-0201, user: svc-backup@example.com,
+               domain: vault.backup-service.test, remote_ip: 198.51.100.20, remote_port: 443, protocol: tcp,
+               direction: outbound, process_name: backupagent.exe, bytes_out: 268435456000, count: 48211,
+               action: allowed, first_seen: "2026-01-15T09:00:00Z", last_seen: "2026-01-15T11:55:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_domain_enterprise
+      subject: vault.backup-service.test
+      record: {kind: dns_query, endpoint: TH-SRV-0202, domain: vault.backup-service.test, query_type: A, count: 12,
+               action: allowed, first_seen: "2026-01-15T01:00:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_domain_enterprise
+      subject: vault.backup-service.test
+      record: {kind: dns_query, endpoint: TH-SRV-0203, domain: vault.backup-service.test, query_type: A, count: 12,
+               action: allowed, first_seen: "2026-01-15T01:00:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_domain_enterprise
+      subject: vault.backup-service.test
+      record: {kind: dns_query, endpoint: TH-SRV-0204, domain: vault.backup-service.test, query_type: A, count: 12,
+               action: allowed, first_seen: "2026-01-15T01:00:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_domain_enterprise
+      subject: vault.backup-service.test
+      record: {kind: dns_query, endpoint: TH-SRV-0205, domain: vault.backup-service.test, query_type: A, count: 12,
+               action: allowed, first_seen: "2026-01-15T01:00:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: svc-backup@example.com
+      record: {kind: user_profile, user: svc-backup@example.com, department: IT, groups: [Backup Operators],
+               risk_level: none, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  unrouted: []
+  below_threshold: []
+  degraded_sources: []
+  considered: [block_domain:vault.backup-service.test, block_ip:198.51.100.20]
+  manual_steps: []
+  handoffs: []
+  notifications: [incident_note]
