@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 
 from xdr_response import guard
+from xdr_response.logs import redaction as _redaction
 
 
 @pytest.fixture(autouse=True)
@@ -17,3 +18,10 @@ def _reset_guard():
     guard._reset_for_test_harness()
     yield
     guard._reset_for_test_harness()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_default_redactor():
+    _redaction._DEFAULT = None  # the next get_redactor() builds a new, empty one
+    yield
+    _redaction._DEFAULT = None

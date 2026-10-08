@@ -7,8 +7,9 @@ audit record.
 Text redaction (:meth:`Redactor.redact_text`) applies, in order: registered secret values, JWTs,
 encoded approval tokens (``base64url(claims).key_id.signature`` for every legal key id),
 ``<scheme> <credential>`` with a case-insensitive scheme (Bearer, Basic, Splunk, ApiKey; RFC 7235),
-and every ``key=value`` / ``key: value`` pair whose key is sensitive by :data:`SENSITIVE_KEY_PATTERN`,
-with optional single or double quotes around the key and the value. The last rule covers JSON text
+every ``key=value`` / ``key: value`` pair whose key is sensitive by :data:`SENSITIVE_KEY_PATTERN`,
+and unlock codes or passcodes phrased in prose (``isolation unlock code: X``, ``unlock code X``,
+``unlock code for TH-LT-1047 is X``, ``the code to unlock TH-LT-1047 is X``), with optional single or double quotes around the key and the value. The last rule covers JSON text
 (``"access_token":"..."``), Python dict reprs (``'password': '...'``), headers echoed in vendor
 error bodies and URL query strings inside free text (``?key=...``, ``&sig=...``), so text and
 :meth:`Redactor.redact_url` agree on which query parameters are secret. Two more forms common in
@@ -41,20 +42,23 @@ REDACTED = "[REDACTED]"
 
 #: Matched (``fullmatch``, case-insensitive) against keys normalized by :func:`normalize_key`
 #: (camelCase -> snake_case). Exact-only terms: authorization, proxy-authorization, cookie,
-#: set-cookie, key, session, credential(s), signature, sig (Azure SAS URL signature). Suffix terms
-#: (also "<prefix>_<term>" or "<prefix>-<term>"): password, passwd, passphrase, secret,
+#: set-cookie, key, session, credential(s), sig (Azure SAS URL signature). Header-style credential
+#: parameters "x-<vendor>-credential(s)" (S3 pre-signed X-Amz-Credential, GCS X-Goog-Credential).
+#: Suffix terms (also "<prefix>_<term>" or "<prefix>-<term>"): signature (X-Amz-Signature,
+#: X-Goog-Signature), password, passwd, passphrase, secret,
 #: client_secret, secret_key, token, access_token, refresh_token, id_token, session_token,
 #: session_key / sessionKey (Splunk), session_id, signing_key (APPROVAL_SIGNING_KEY),
 #: recovery_key / recovery_password (BitLocker), secret_access_key, api_key / apikey / api-key
 #: (covers x-apikey, x-api-key, hibp-api-key, x-otx-api-key, x-cisco-meraki-api-key), private_key,
-#: approval_token, unlock_code. "idempotency_key", "control_key", "token_id", "params_hash" are NOT
+#: approval_token, unlock_code, passcode / pass_code. "idempotency_key", "control_key", "token_id", "params_hash" are NOT
 #: sensitive.
 SENSITIVE_KEY_PATTERN: re.Pattern[str] = re.compile(
     r"(?:authorization|proxy[-_]authorization|cookie|set[-_]cookie|key|session|credentials?|signature|sig"
-    r"|(?:.*[-_.])?(?:password|passwd|passphrase|secret|client[-_]secret|secret[-_]key|token"
+    r"|x[-_][a-z0-9]+[-_]credentials?"
+    r"|(?:.*[-_.])?(?:password|passwd|passphrase|secret|client[-_]secret|secret[-_]key|token|signature"
     r"|access[-_]token|refresh[-_]token|id[-_]token|session[-_]token|session[-_]?(?:key|id)"
     r"|signing[-_]key|recovery[-_](?:key|password)|secret[-_]access[-_]key|api[-_]?key|private[-_]key"
-    r"|approval[-_]token|unlock[-_]code))",
+    r"|approval[-_]token|unlock[-_]code|pass[-_]?code))",
     re.IGNORECASE,
 )
 
@@ -71,8 +75,10 @@ _APPROVAL_TOKEN = re.compile(r"[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{1,64}\.[0-9a-fA
 #: Python dict reprs, headers, query strings). The value is replaced only when the key is sensitive.
 #: Only the key and separator are consumed; the value is captured in a lookahead so that a value
 #: of a non-sensitive key (for example a URL after "https:") is still scanned for nested pairs.
+#: A command-line flag prefix (``-key=value``, ``--key=value``) is accepted before the key, so
+#: ``tool.exe --password=...`` in a recorded command line is redacted too.
 _KV = re.compile(
-    r"""(?<![A-Za-z0-9_.\-])(?P<kq>["']?)(?P<key>[A-Za-z][A-Za-z0-9_.\-]{0,63})(?P=kq)\s*[=:]\s*"""
+    r"""(?<![A-Za-z0-9_.\-])(?:-{1,2}(?=[A-Za-z]))?(?P<kq>["']?)(?P<key>[A-Za-z][A-Za-z0-9_.\-]{0,63})(?P=kq)\s*[=:]\s*"""
     r"""(?=(?P<value>"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s&,;"'}\])]+))"""
 )
 #: ``\"key\": \"value\"`` (a JSON document serialized into a JSON string value).
@@ -88,6 +94,21 @@ _XML_ELEMENT = re.compile(
 #: scheme is handled by ``_BEARER``).
 _AUTH_SCHEMES = frozenset({"bearer", "basic", "splunk", "apikey", "token", "digest", "negotiate"})
 _MIN_SECRET_LEN = 6
+#: An unlock code or passcode phrased in prose ("isolation unlock code: X", "unlock code X",
+#: "Device passcode X"): the key=value rule only sees the last word before the separator. The
+#: value must look like a code (a digit, or all upper case) so ordinary words are left alone.
+_CODE_PROSE = re.compile(
+    r"(?i)\b(?P<label>unlock[\s_-]*code|pass[\s_-]?code|isolation[\s_-]*code)(?P<sep>\s*(?:[:=]|\bis\b)?\s*)"
+    r"(?P<q>[\"']?)(?P<value>[A-Za-z0-9][A-Za-z0-9-]{3,63})(?P=q)(?![A-Za-z0-9])"
+)
+#: The same with words between the label and the value, which then needs an explicit separator
+#: (``:`` / ``=`` / ``is``): "unlock code for TH-LT-1047 is X", "unlock code (TH-LT-1047): X",
+#: "the code to unlock TH-LT-1047 is X". The words in between stay on one line (at most 80 chars).
+_CODE_PROSE_LOOSE = re.compile(
+    r"(?i)\b(?P<label>unlock[\s_-]*code|pass[\s_-]?code|isolation[\s_-]*code|code\s+to\s+unlock)"
+    r"(?P<sep>[^\r\n:=]{0,80}?(?:\s*[:=]\s*|\s+is\s+))"
+    r"(?P<q>[\"']?)(?P<value>[A-Za-z0-9][A-Za-z0-9-]{3,63})(?P=q)(?![A-Za-z0-9])"
+)
 
 
 def normalize_key(key: str) -> str:
@@ -182,7 +203,9 @@ class Redactor:
         text = _BEARER.sub(lambda m: f"{m.group(1)} {REDACTED}", text)
         text = _KV_ESCAPED.sub(self._escaped_pair, text)
         text = _XML_ELEMENT.sub(self._xml_element, text)
-        return self._redact_pairs(text)
+        text = self._redact_pairs(text)
+        text = _CODE_PROSE.sub(_code_prose, text)
+        return _CODE_PROSE_LOOSE.sub(_code_prose, text)
 
     def _escaped_pair(self, match: re.Match[str]) -> str:
         if not self.is_sensitive_key(match.group("key")) or match.group("value").startswith("[REDACTED"):
@@ -250,7 +273,11 @@ class Redactor:
         return "".join(out)
 
     def redact_url(self, url: str) -> str:
-        """Remove userinfo and replace values of sensitive query keys."""
+        """Remove userinfo and replace values of sensitive query and fragment keys.
+
+        The fragment is treated like a query (an OAuth implicit-flow redirect carries
+        ``#access_token=...``).
+        """
         try:
             parts = urlsplit(url)
         except ValueError:
@@ -258,26 +285,38 @@ class Redactor:
         netloc = parts.netloc
         if "@" in netloc:
             netloc = netloc.rsplit("@", 1)[1]
-        query = parts.query
-        if query:
-            pairs = []
-            for pair in query.split("&"):
-                if not pair:
-                    continue
-                k, sep, v = pair.partition("=")
-                if self.is_sensitive_key(unquote_plus(k)):
-                    pairs.append(f"{k}={REDACTED}")
-                else:
-                    pairs.append(f"{k}{sep}{v}")
-            query = "&".join(pairs)
-        rebuilt = urlunsplit((parts.scheme, netloc, parts.path, query, parts.fragment))
+        rebuilt = urlunsplit((parts.scheme, netloc, parts.path, self._redact_query(parts.query),
+                              self._redact_query(parts.fragment)))
         return self.redact_text(rebuilt)
+
+    def _redact_query(self, query: str) -> str:
+        """``k=v&k2=v2`` with the values of sensitive keys replaced (empty pairs dropped)."""
+        if not query:
+            return query
+        pairs = []
+        for pair in query.split("&"):
+            if not pair:
+                continue
+            k, sep, v = pair.partition("=")
+            if self.is_sensitive_key(unquote_plus(k)):
+                pairs.append(f"{k}={REDACTED}")
+            else:
+                pairs.append(f"{k}{sep}{v}")
+        return "&".join(pairs)
 
     def redact_headers(self, headers: Mapping[str, str]) -> dict[str, str]:
         return {
             str(k): (REDACTED if self.is_sensitive_key(str(k)) else self.redact_text(str(v)))
             for k, v in headers.items()
         }
+
+
+def _code_prose(match: re.Match[str]) -> str:
+    value = match.group("value")
+    if not (any(ch.isdigit() for ch in value) or (value.isupper() and value.isalpha())):
+        return match.group(0)
+    q = match.group("q")
+    return f"{match.group('label')}{match.group('sep')}{q}{REDACTED}{q}"
 
 
 def _decode_nested_json(value: Any, depth: int) -> Any:

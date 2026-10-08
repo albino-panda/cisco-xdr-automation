@@ -252,3 +252,18 @@ def test_redacting_filter_on_plain_record():
     assert RedactingFilter().filter(rec) is True
     assert FAKE not in rec.getMessage()
     assert FAKE not in JsonFormatter().format(rec)
+
+
+@pytest.mark.parametrize("text, kept", [
+    ("tool.exe --password=Hunter2x -v", "tool.exe --password=[REDACTED] -v"),
+    ("tool.exe -token=abcdef123 next", "tool.exe -token=[REDACTED] next"),
+    ("agent --api-key=XYZ12345 --verbose", "agent --api-key=[REDACTED] --verbose"),
+])
+def test_command_line_flags_with_sensitive_keys_are_redacted(text, kept):
+    """Command lines kept in process and persistence records must not keep ``--password=...`` values."""
+    assert Redactor().redact_text(text) == kept
+
+
+@pytest.mark.parametrize("text", ["run --mode=fast", "x --control-key=abc", "sync --idempotency-key=k1"])
+def test_command_line_flags_with_ordinary_keys_are_kept(text):
+    assert Redactor().redact_text(text) == text
