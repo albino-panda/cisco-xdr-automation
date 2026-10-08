@@ -1,0 +1,71 @@
+# Phishing workflow scenario; fake lab data only (example.com, *.example, documentation IPs, fake hashes).
+schema: 1
+name: edge-defender-managed-endpoint
+workflow: phishing
+description: >-
+  The recipient's endpoint is managed by Defender for Endpoint, not Secure Endpoint. After the click
+  Defender reports a malicious process on TH-LT-3301, so isolation is recommended through the
+  Defender-pinned rule (never silently switched to another product). No sign-in follows the click,
+  so no account action is proposed.
+tags: [edge_case, true_positive]
+mode: both
+suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel],
+        defender_endpoint: [endpoint], microsoft_cloud: [network]}
+incident:
+  incident_id: XDR-PH-0013
+  title: Credential phishing link clicked on a Defender-managed laptop
+  severity: HIGH
+  source: secure_email
+  workflow_id: phishing
+  observables:
+    - {type: email_message_id, value: "<20260115.0815.3301@benefits-portal.test>"}
+  users: [mlee@example.com]
+  trigger: {source: secure_email, mitre_techniques: [T1566.002]}
+environment:
+  reputations:
+    - {type: domain, value: benefits-portal.test, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [umbrella, virustotal], summary: "benefits look-alike phishing domain (lab)"}
+  records:
+    - integration: secure_email
+      atomic: investigate_email
+      subject: "<20260115.0815.3301@benefits-portal.test>"
+      record: {kind: email_message, message_id: "<20260115.0815.3301@benefits-portal.test>",
+               sender: enrol@benefits-portal.test, sender_domain: benefits-portal.test, recipients: [mlee@example.com],
+               recipient_count: 1, subject_line: Confirm your benefits enrolment, received_at: "2026-01-15T08:15:00Z",
+               direction: inbound, verdict: MALICIOUS, threat_types: [phish],
+               urls: ["https://benefits-portal.test/enrol"], domains: [benefits-portal.test], delivery_location: inbox}
+    - integration: microsoft_cloud
+      atomic: search_domain_enterprise
+      subject: benefits-portal.test
+      record: {kind: network_connection, endpoint: TH-LT-3301, user: mlee@example.com, remote_ip: 203.0.113.40,
+               remote_port: 443, protocol: tcp, direction: outbound, domain: benefits-portal.test,
+               url: "https://benefits-portal.test/enrol", action: allowed, first_seen: "2026-01-15T08:40:00Z"}
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3301
+      record: {kind: endpoint, hostname: TH-LT-3301, mde_machine_id: 0f0e0d0c0b0a09080706050403020100aabbccdd,
+               os: Windows 11, users: [mlee@example.com], groups: [HR Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3301
+      record: {kind: process_event, event_id: evt-3301-1, endpoint: TH-LT-3301, timestamp: "2026-01-15T08:42:00Z",
+               event_type: process_start, process_name: enrol-helper.exe, verdict: MALICIOUS,
+               sha256: 3c3c3c3c4d4d4d4d3c3c3c3c4d4d4d4d3c3c3c3c4d4d4d4d3c3c3c3c4d4d4d4d, user: mlee@example.com}
+    - integration: entra
+      atomic: investigate_user
+      subject: mlee@example.com
+      record: {kind: user_profile, user: mlee@example.com, department: HR, groups: [HR], account_enabled: true,
+               risk_level: none, risk_state: none}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - "quarantine_email:<20260115.0815.3301@benefits-portal.test>"
+    - block_domain:benefits-portal.test
+    - isolate_endpoint:TH-LT-3301
+  elevated: []
+  unrouted: []
+  containment: CONTAINED
+  results:
+    isolate_endpoint:TH-LT-3301: SUCCESS

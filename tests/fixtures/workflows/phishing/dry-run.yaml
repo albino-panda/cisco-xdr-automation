@@ -1,0 +1,57 @@
+# Phishing workflow scenario; fake lab data only (example.com, *.example, documentation IPs, fake hashes).
+schema: 1
+name: dry-run
+workflow: phishing
+description: >-
+  Dry run of a credential-link phish that nobody clicked: the package (quarantine the message,
+  block the look-alike domain) is proposed and simulated, nothing changes at any vendor and the
+  incident stays AWAITING_APPROVAL after the simulated approval.
+tags: [dry_run, true_positive]
+mode: dry_run
+suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
+        microsoft_cloud: [network]}
+incident:
+  incident_id: XDR-PH-0008
+  title: Payroll credential phishing delivered to one mailbox
+  severity: MEDIUM
+  source: secure_email
+  workflow_id: phishing
+  observables:
+    - {type: email_message_id, value: "<20260115.1005.7781@payroll-update.test>"}
+    - {type: url, value: "https://payroll-update.test/reset"}
+  users: [jsmith@example.com]
+  trigger: {source: secure_email, mitre_techniques: [T1566.002]}
+environment:
+  reputations:
+    - {type: domain, value: payroll-update.test, verdict: MALICIOUS, risk_score: 88, confidence: 85,
+       integrations: [umbrella, virustotal], summary: "credential phishing domain (lab)"}
+  records:
+    - integration: secure_email
+      atomic: investigate_email
+      subject: "<20260115.1005.7781@payroll-update.test>"
+      record: {kind: email_message, message_id: "<20260115.1005.7781@payroll-update.test>",
+               sender: hr-notice@payroll-update.test, sender_domain: payroll-update.test,
+               recipients: [jsmith@example.com], recipient_count: 1, subject_line: Payroll details update,
+               received_at: "2026-01-15T10:05:00Z", direction: inbound, verdict: MALICIOUS, threat_types: [phish],
+               urls: ["https://payroll-update.test/reset"], domains: [payroll-update.test],
+               delivery_location: inbox}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, department: Finance, groups: [Finance],
+               account_enabled: true, risk_level: none, risk_state: none}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - "quarantine_email:<20260115.1005.7781@payroll-update.test>"
+    - block_domain:payroll-update.test
+  elevated: []
+  below_threshold: []
+  dry_run_lines:
+    - DRY RUN
+    - "Would quarantine email: <20260115.1005.7781@payroll-update.test>"
+    - "Would block: payroll-update.test"
+    - No containment actions executed.
+  decision_state: null
+  notifications: [incident_note, soc_notification, analyst_summary]

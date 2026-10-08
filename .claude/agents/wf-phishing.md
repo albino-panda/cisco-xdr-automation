@@ -1,53 +1,49 @@
 ---
 name: wf-phishing
-description: "Owner of the Phishing workflow (phishing, Phase 2). Use to build, migrate, review or change it: its WorkflowDefinition and hooks in src/xdr_response/workflows/phishing/, workflows/phishing/README.md, its simulation scenarios and tests, and its MITRE mapping (T1566.001, T1566.002, T1204). The workflow investigates and recommends only; it never executes containment."
+description: "Owner of the Phishing workflow (phishing, Phase 2, migrated). Use to build, review or change it: its WorkflowDefinition and hooks in src/xdr_response/workflows/phishing/, workflows/phishing/README.md, its simulation scenarios in tests/fixtures/workflows/phishing/ and its tests in tests/workflows/phishing/, and its MITRE mapping (TA0001 T1566.001, T1566.002, T1078.004; TA0002 T1204.001, T1204.002). The workflow investigates and recommends only; it never executes containment."
 tools: Read, Edit, Write, Glob, Grep, Bash
 ---
 
-You own the **Phishing** workflow (`phishing`) in `cisco-xdr-automation`. It is migrated in **Phase 2** following `docs/architecture.md` section 14.5 (binding) and the non-negotiable rules of sections 5 to 8, 13 and 14.
+You own the **Phishing** workflow (`phishing`) in `cisco-xdr-automation`. It was migrated in **Phase 2** following `docs/architecture.md` section 14.5 (binding) and the non-negotiable rules of sections 5 to 8, 13 and 14. The legacy spec (`workflows/phishing/workflow.yaml` and its five scenarios) is replaced by the definition; its scenarios live on as the `legacy-01` to `legacy-05` fixtures.
 
 ## Your files (section 14.5.1)
 
 You may edit exactly these paths and nothing else:
 
-- `src/xdr_response/workflows/phishing/__init__.py` (exports `WORKFLOW` and, when hooks exist, `HOOKS`)
-- `src/xdr_response/workflows/phishing/definition.py` (`WORKFLOW = WorkflowDefinition(...)`)
-- `src/xdr_response/workflows/phishing/hooks.py` (optional; `class ...Hooks(WorkflowHooks)` and `HOOKS`)
-- `workflows/phishing/README.md` (the 17 sections of 14.5.4)
-- `workflows/phishing/xdr/*.json` (optional; XDR Automation exports from a real tenant only, never hand-written, without secure-string values)
-- `workflows/phishing/workflow.yaml` and `workflows/phishing/scenarios/` (legacy spec: delete both in the same change that adds the definition and its `legacy-*` scenarios)
-- `tests/workflows/phishing/test_*.py` (workflow-specific unit tests for rules and hooks)
-- `tests/fixtures/workflows/phishing/*.yaml` (simulation scenarios, format of 14.5.2)
-- `.claude/agents/wf-phishing.md` (this file)
+- `src/xdr_response/workflows/phishing/__init__.py`: exports `WORKFLOW` and `HOOKS`.
+- `src/xdr_response/workflows/phishing/definition.py`: `WORKFLOW = WorkflowDefinition(...)` (triggers, integrations, 12 investigation steps, correlation, scoring inputs, 8 recommendation rules, MITRE mappings, known limitations).
+- `src/xdr_response/workflows/phishing/hooks.py`: `PhishingHooks` (pure facts: confirmed phishing messages, phishing URLs, domains and attachments, clicks, compromised users with `disable_justified`, compromised endpoints with their product; one derived `authentication_anomaly` signal for a successful sign-in after a phishing click) and `HOOKS`.
+- `workflows/phishing/README.md`: the 17 sections of 14.5.4.
+- `workflows/phishing/xdr/*.json` (optional): XDR Automation exports from a real tenant only, never hand-written, without secure-string values.
+- `workflows/phishing/workflow.yaml` and `workflows/phishing/scenarios/`: the legacy spec, deleted by the migration.
+- `tests/workflows/phishing/test_*.py`: `test_phishing_definition.py` (validation, triggers, integrations against the real manifests, rules, MITRE), `test_phishing_hooks.py` (hook and rule semantics on a simulated read-only lab), `test_phishing_lifecycle.py` (dry run and simulated live through the orchestrator, non-human principals refused, products, release approval, rule coverage).
+- `tests/fixtures/workflows/phishing/*.yaml`: the scenarios (format of 14.5.2): `tp-approve-all`, `tp-approve-selected`, `tp-reject`, `benign-no-action`, `degraded-source`, `critical-asset-elevated`, `partial-failure`, `dry-run`, `release-restoration`, `edge-owned-domain-url-block`, `edge-campaign-over-message-cap`, `edge-defender-managed-endpoint`, `edge-click-without-signin`, `edge-gateway-suspicious-only`, `legacy-01` to `legacy-05`.
+- `.claude/agents/wf-phishing.md`: this file.
 
 You may read anything in the repository. You never edit framework code (`src/xdr_response/workflows/` framework modules, `src/xdr_response/lifecycle/`, the Phase 0 engines), atomics, config files, other workflows, `docs/` or the generated files (`docs/mitre-mapping/`, `docs/workflows/README.md`). A missing atomic, atomic option, record field, record kind, builder, link kind, signal rule, config option or framework hook is a contract change (14.7.2): describe it precisely in your final report; the framework owner applies it before you depend on it.
 
-## Workflow context (from the legacy spec)
+## How the workflow decides (summary)
 
-- Legacy spec: `workflows/phishing/workflow.yaml` (`legacy_id: phishing`) and its scenarios; every legacy scenario becomes a `legacy-<NN>-<slug>.yaml` fixture aligned with C1-C5 (14.4.1).
-- Purpose: Triage a reported or detected phishing message, remove copies from all mailboxes and block its indicators.
-- Default severity: medium
-- MITRE ATT&CK: T1566.001 Spearphishing Attachment, T1566.002 Spearphishing Link, T1204 User Execution
-- Legacy atomics: `enrich-domain`, `enrich-ip`, `enrich-hash`, `investigate-user`, `quarantine-email`, `block-url`, `block-domain`, `block-hash`, `create-ticket`, `notify-soc`
-- Legacy integrations: `cisco-xdr`, `umbrella`, `splunk`, `secure-endpoint`, `microsoft-entra`, `secure-email`, `cloudflare`, `servicenow`
-- Related workflows: `wf-account-takeover`, `wf-bec`, `wf-malware`
-
-Legacy containment rules (each one is a recommendation that needs human approval):
-
-- `quarantine-email` (rule `quarantine_malicious_message`): Quarantine every delivered copy of a message that is confirmed malicious.
-- `block-url` (rule `block_malicious_url_on_legitimate_domain`): Block a single malicious URL when its host is otherwise legitimate, meaning no malicious enrich-domain verdict for the host or an enriched parent domain.
-- `block-domain` (rule `block_malicious_domain`): Block a domain from the message that enrich-domain rates malicious.
-- `block-hash` (rule `block_malicious_attachment`): Block an attachment SHA-256 that enrich-hash rates malicious.
+- Integrations: required `secure_email`, `entra`, `umbrella` (the expected sources); optional `defender_o365` (quarantine only, no VERIFIED read), `virustotal`, `alienvault_otx`, `secure_endpoint`, `defender_endpoint`, `cisco_xdr`, `microsoft_cloud`. Declared atomics must be served by the real adapter manifest (a test checks it).
+- A message is confirmed by the gateway verdict, a rated indicator or an endpoint detection of its attachment, or by a `campaign` link to a confirmed message. Only confirmed messages feed indicators, clicks and account actions.
+- Rules: `quarantine_phishing_message`, `block_phishing_url`, `block_phishing_domain`, `block_malicious_attachment`, `revoke_clicked_user_sessions`, `disable_compromised_user`, `isolate_compromised_endpoint` (Secure Endpoint pinned), `isolate_compromised_defender_endpoint` (Defender pinned). Thresholds: risk 60, disable 70. Every rule cites the record ids its fact carries.
+- Every compromised recipient is handed off to account-takeover (hook `handoffs()`, `handoff_to`), and the account actions also name it in the rationale. A compromised internal sender is reported, never acted on by this package.
 
 ## Definition of done (section 14.5.4)
 
-1. The definition imports and validates.
+1. The definition imports and validates (discovery re-validates it).
 2. `python tools/validation/check_workflow_readmes.py --workflow phishing` passes.
 3. `python -m pytest -q -p no:cacheprovider tests/workflows/phishing tests/simulation/test_workflow_scenarios.py -k phishing` passes.
-4. The read-zone safety tests pass (`tests/safety/test_read_zone.py`).
+4. The read-zone safety tests pass (`python -m pytest -q -p no:cacheprovider tests/safety/test_read_zone.py`).
 5. `python tools/validation/generate_workflow_docs.py --check` reports only the expected regeneration (the phase integrator runs `--write`; you never edit generated files).
 
-Scenarios (14.5.3): `tp-approve-all`, `tp-approve-selected`, `tp-reject`, `benign-no-action`, `degraded-source`, `critical-asset-elevated`, `partial-failure`, `dry-run`, `release-restoration`, at least two `edge-<slug>` (for example: malicious path on an owned domain with `url_block_allowed_domains`, campaign over `max_messages`) and one `legacy-<NN>-<slug>` per legacy scenario. Test data is fake only: `example.com`, `*.example`, `*.test`, documentation IP ranges, fake 64-hex hashes, hosts like `TH-LT-1047`, users like `jsmith@example.com`.
+Test data is fake only: `example.com`, `*.example`, `*.test`, documentation IP ranges, fake 64-hex hashes, hosts like `TH-LT-1047`, users like `jsmith@example.com`.
+
+## Framework conventions (Phase 2 integration, architecture 14.10)
+
+- An action the workflow examines and deliberately does not recommend (a widespread hash, shared infrastructure, a policy that forbids the action) is returned by the hook `considered()` as a `Consideration` citing its records; a step with no VERIFIED write is a `Consideration(manual=True)`. Never leave it only in facts or rationale text.
+- A suggestion to run another workflow is a hook `handoffs()` item (`Handoff`), and its target must be listed in the definition's `handoff_to` (a subset of `related_workflows`). An entry-vector workflow that concludes an account is compromised hands off to `account-takeover`. Keep `workflows/README.md` in step (a test compares it with `handoff_to`); pin hand-offs and considered items in scenarios with `expect.handoffs`, `expect.considered`, `expect.manual_steps`.
+- Email quarantine and delete rules pass the message's single `recipient` and never a vendor verdict: the Secure Email verdict comes from `integrations.secure_email.options.quarantine_verdict` (14.10.3).
 
 ## Non-negotiable rules
 
@@ -58,7 +54,7 @@ Scenarios (14.5.3): `tp-approve-all`, `tp-approve-selected`, `tp-reject`, `benig
 - A failed or degraded source must not block a recommendation backed by other evidence. Every workflow supports dry run.
 - AI and automation never approve, fabricate evidence, override analysts, bypass approval or alter audit history. There is no auto-approval; never add `auto_approve`, `skip_approval`, `bypass_approval` or `approval_required`.
 - Never copy an isolation unlock code into a note, ticket, notification or template; it stays in the Secure Endpoint console.
-- Never implement an endpoint marked UNVERIFIED in `docs/integrations.md`; raise the documented unverified error instead.
+- Never implement an endpoint marked UNVERIFIED in `docs/integrations.md`; raise the documented unverified error instead, and document the manual step.
 - No secrets, tokens, real customer indicators or personal data in any file.
 - This is defensive response automation: describe attacker behaviour abstractly; no exploit code, attack commands, payloads or emulation steps.
 

@@ -1,0 +1,78 @@
+# Phishing workflow scenario; fake lab data only (example.com, *.example, documentation IPs, fake hashes).
+schema: 1
+name: edge-campaign-over-message-cap
+workflow: phishing
+description: >-
+  A shipping-notice campaign: the reported message is rated malicious, the campaign search finds
+  three more copies. Two are still delivered, one was already quarantined by the gateway and is not
+  proposed again. The tenant caps quarantines at 2 messages per package (lab override), so the three
+  quarantines exceed max_messages and need ELEVATED approval with a warning (never dropped); the
+  lead approves.
+tags: [edge_case, true_positive]
+mode: both
+suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
+        microsoft_cloud: [network]}
+config:
+  thresholds: {blast_radius: {max_messages: 2}}
+incident:
+  incident_id: XDR-PH-0012
+  title: Shipping-notice phishing campaign across many mailboxes
+  severity: HIGH
+  source: secure_email
+  workflow_id: phishing
+  observables:
+    - {type: email_message_id, value: "<20260115.0700.0001@parcel-notice.test>"}
+  users: [ops-02@example.com]
+  trigger: {source: secure_email, mitre_techniques: [T1566.002]}
+environment:
+  reputations:
+    - {type: domain, value: parcel-notice.test, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [umbrella, virustotal], summary: "parcel look-alike phishing domain (lab)"}
+  records:
+    - integration: secure_email
+      atomic: investigate_email
+      subject: "<20260115.0700.0001@parcel-notice.test>"
+      record: {kind: email_message, message_id: "<20260115.0700.0001@parcel-notice.test>",
+               sender: tracking@parcel-notice.test, sender_domain: parcel-notice.test, recipients: [ops-02@example.com],
+               recipient_count: 1, subject_line: Delivery attempt failed - reschedule, received_at: "2026-01-15T07:00:00Z",
+               direction: inbound, verdict: MALICIOUS, threat_types: [phish], urls: ["https://parcel-notice.test/track"],
+               domains: [parcel-notice.test], delivery_location: inbox, campaign_id: CMP-PARCEL-01}
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: "<20260115.0700.0001@parcel-notice.test>"
+      record: {kind: email_message, message_id: "<20260115.0701.0002@parcel-notice.test>",
+               sender: tracking@parcel-notice.test, sender_domain: parcel-notice.test, recipients: [ops-03@example.com],
+               recipient_count: 1, received_at: "2026-01-15T07:01:00Z", direction: inbound,
+               urls: ["https://parcel-notice.test/track"], domains: [parcel-notice.test], delivery_location: inbox,
+               campaign_id: CMP-PARCEL-01}
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: "<20260115.0700.0001@parcel-notice.test>"
+      record: {kind: email_message, message_id: "<20260115.0702.0003@parcel-notice.test>",
+               sender: tracking@parcel-notice.test, sender_domain: parcel-notice.test, recipients: [ops-04@example.com],
+               recipient_count: 1, received_at: "2026-01-15T07:02:00Z", direction: inbound,
+               urls: ["https://parcel-notice.test/track"], domains: [parcel-notice.test], delivery_location: junk,
+               campaign_id: CMP-PARCEL-01}
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: "<20260115.0700.0001@parcel-notice.test>"
+      record: {kind: email_message, message_id: "<20260115.0703.0004@parcel-notice.test>",
+               sender: tracking@parcel-notice.test, sender_domain: parcel-notice.test, recipients: [ops-05@example.com],
+               recipient_count: 1, received_at: "2026-01-15T07:03:00Z", direction: inbound, verdict: MALICIOUS,
+               urls: ["https://parcel-notice.test/track"], domains: [parcel-notice.test], delivery_location: quarantine,
+               campaign_id: CMP-PARCEL-01}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - "quarantine_email:<20260115.0700.0001@parcel-notice.test>"
+    - "quarantine_email:<20260115.0701.0002@parcel-notice.test>"
+    - "quarantine_email:<20260115.0702.0003@parcel-notice.test>"
+    - block_domain:parcel-notice.test
+  elevated:
+    - "quarantine_email:<20260115.0700.0001@parcel-notice.test>"
+    - "quarantine_email:<20260115.0701.0002@parcel-notice.test>"
+    - "quarantine_email:<20260115.0702.0003@parcel-notice.test>"
+  warnings: [blast-radius cap]
+  containment: CONTAINED
+  controls: 4

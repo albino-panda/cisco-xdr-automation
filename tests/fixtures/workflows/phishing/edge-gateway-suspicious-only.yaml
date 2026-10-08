@@ -1,0 +1,38 @@
+# Phishing workflow scenario; fake lab data only (example.com, *.example, documentation IPs, fake hashes).
+schema: 1
+name: edge-gateway-suspicious-only
+workflow: phishing
+description: >-
+  The gateway rates a message SUSPICIOUS but no reputation source rates its link or domain, nobody
+  clicked and no endpoint saw anything. The quarantine is considered and listed as below threshold
+  (never silently dropped); no package is proposed and the analyst decides from the notes.
+tags: [edge_case, benign]
+mode: both
+suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
+        microsoft_cloud: [network]}
+incident:
+  incident_id: XDR-PH-0015
+  title: Suspicious message reported by the gateway
+  severity: LOW
+  source: secure_email
+  workflow_id: phishing
+  observables:
+    - {type: email_message_id, value: "<20260115.0600.0777@survey-invite.test>"}
+  users: [rpatel@example.com]
+  trigger: {source: secure_email, rule: verdict-suspicious}
+environment:
+  records:
+    - integration: secure_email
+      atomic: investigate_email
+      subject: "<20260115.0600.0777@survey-invite.test>"
+      record: {kind: email_message, message_id: "<20260115.0600.0777@survey-invite.test>",
+               sender: invite@survey-invite.test, sender_domain: survey-invite.test, recipients: [rpatel@example.com],
+               recipient_count: 1, subject_line: Two-minute staff survey, received_at: "2026-01-15T06:00:00Z",
+               direction: inbound, verdict: SUSPICIOUS, threat_types: [spam],
+               urls: ["https://survey-invite.test/start"], domains: [survey-invite.test], delivery_location: inbox}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  below_threshold: ["quarantine_email:<20260115.0600.0777@survey-invite.test>"]
+  unrouted: []

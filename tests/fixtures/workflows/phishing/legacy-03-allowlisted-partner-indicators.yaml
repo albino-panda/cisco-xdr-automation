@@ -1,0 +1,61 @@
+# Phishing workflow scenario; fake lab data only (example.com, *.example, documentation IPs, fake hashes).
+# Migrated from the legacy spec scenario; expectations aligned with C1-C5 (every action needs human approval).
+schema: 1
+name: legacy-03-allowlisted-partner-indicators
+workflow: phishing
+description: >-
+  Legacy 03. A trusted partner's mail system is compromised and sends a malicious invoice. The
+  partner domain and its signed installer hash are on this tenant's allow-list (lab override), so the
+  domain and hash blocks are shown as excluded with their reason and never executed; the quarantine
+  of the message itself has no allow-list and is proposed.
+tags: [legacy, true_positive]
+legacy_source: workflows/phishing/scenarios/03-allowlisted-partner-indicators.yaml
+mode: both
+suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
+        microsoft_cloud: [network]}
+config:
+  allowlists:
+    never_block:
+      # Lists replace the base file's lists, so the defaults are repeated here.
+      domains: [example.com, microsoft.com, cisco.com, partner-portal.example]
+      hashes: ["9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a39281706f5e4d3c2b1a0"]
+incident:
+  incident_id: INC-TEST-PH-0003
+  title: Malicious invoice from compromised partner mailbox
+  severity: HIGH
+  source: Secure Email Threat Defense
+  workflow_id: phishing
+  observables:
+    - {type: email_message_id, value: "<20260115.0930.3003@partner-portal.example>"}
+    - {type: email_address, value: accounts@partner-portal.example}
+    - {type: domain, value: partner-portal.example}
+    - {type: sha256, value: 9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a39281706f5e4d3c2b1a0}
+  users: [ap-clerk-02@example.com]
+  trigger: {source: Secure Email Threat Defense, mitre_techniques: [T1566.001]}
+environment:
+  reputations:
+    - {type: domain, value: partner-portal.example, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [umbrella, virustotal], summary: "Phishing, Compromised Sites (legacy enrich-domain)"}
+    - {type: sha256, value: 9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a39281706f5e4d3c2b1a0, verdict: MALICIOUS,
+       risk_score: 85, confidence: 80, integrations: [secure_endpoint, virustotal], summary: "malicious installer"}
+  records:
+    - integration: secure_email
+      atomic: investigate_email
+      subject: "<20260115.0930.3003@partner-portal.example>"
+      record: {kind: email_message, message_id: "<20260115.0930.3003@partner-portal.example>",
+               sender: accounts@partner-portal.example, sender_domain: partner-portal.example,
+               recipients: [ap-clerk-02@example.com], recipient_count: 1, subject_line: Updated remittance details,
+               received_at: "2026-01-15T09:30:00Z", direction: inbound, verdict: MALICIOUS, threat_types: [malware],
+               domains: [partner-portal.example],
+               attachment_hashes: [9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a39281706f5e4d3c2b1a0],
+               delivery_location: inbox}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions: ["quarantine_email:<20260115.0930.3003@partner-portal.example>"]
+  excluded:
+    - block_domain:partner-portal.example
+    - block_hash:9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a39281706f5e4d3c2b1a0
+  elevated: []
+  containment: CONTAINED
+  controls: 1

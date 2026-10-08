@@ -1,0 +1,72 @@
+# Phishing workflow scenario; fake lab data only (example.com, *.example, documentation IPs, fake hashes).
+# Migrated from the legacy spec scenario; expectations aligned with C1-C5 (every action needs human approval).
+schema: 1
+name: legacy-04-campaign-over-indicator-cap
+workflow: phishing
+description: >-
+  Legacy 04. One campaign message links to several rotating look-alike domains and carries a
+  malicious attachment. The tenant caps indicator blocks at 3 per package (lab override; the default
+  is 50). Four indicator blocks exceed the cap, so every domain and hash block stays proposed with
+  ELEVATED approval and a warning (C5: never skipped); the quarantine is not an indicator and stays
+  STANDARD. The lead approves.
+tags: [legacy, true_positive]
+legacy_source: workflows/phishing/scenarios/04-campaign-over-indicator-cap.yaml
+mode: both
+suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
+        microsoft_cloud: [network]}
+config:
+  thresholds: {blast_radius: {max_indicators: 3}}
+incident:
+  incident_id: INC-TEST-PH-0004
+  title: Shipping-notice phishing campaign across many mailboxes
+  severity: HIGH
+  source: Secure Email Threat Defense
+  workflow_id: phishing
+  observables:
+    - {type: email_message_id, value: "<20260115.0645.4004@parcel-notice.test>"}
+    - {type: email_address, value: tracking@parcel-notice.test}
+    - {type: url, value: "https://parcel-notice.test/track"}
+    - {type: domain, value: parcel-notice.test}
+    - {type: domain, value: parcel-redelivery.test}
+    - {type: domain, value: parcel-status.test}
+    - {type: sha256, value: 5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a}
+  users: [ops-01@example.com]
+  trigger: {source: Secure Email Threat Defense, mitre_techniques: [T1566.002]}
+environment:
+  reputations:
+    - {type: domain, value: parcel-notice.test, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [umbrella, virustotal], summary: "Phishing (legacy enrich-domain)"}
+    - {type: domain, value: parcel-redelivery.test, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [umbrella, virustotal], summary: "Phishing (legacy enrich-domain)"}
+    - {type: domain, value: parcel-status.test, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [umbrella, virustotal], summary: "Phishing (legacy enrich-domain)"}
+    - {type: sha256, value: 5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a, verdict: MALICIOUS,
+       risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal], summary: "malicious attachment"}
+  records:
+    - integration: secure_email
+      atomic: investigate_email
+      subject: "<20260115.0645.4004@parcel-notice.test>"
+      record: {kind: email_message, message_id: "<20260115.0645.4004@parcel-notice.test>",
+               sender: tracking@parcel-notice.test, sender_domain: parcel-notice.test, recipients: [ops-01@example.com],
+               recipient_count: 1, subject_line: Delivery attempt failed - reschedule, received_at: "2026-01-15T06:45:00Z",
+               direction: inbound, verdict: MALICIOUS, threat_types: [phish], urls: ["https://parcel-notice.test/track"],
+               domains: [parcel-notice.test, parcel-redelivery.test, parcel-status.test],
+               attachment_hashes: [5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a],
+               delivery_location: inbox}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - "quarantine_email:<20260115.0645.4004@parcel-notice.test>"
+    - block_domain:parcel-notice.test
+    - block_domain:parcel-redelivery.test
+    - block_domain:parcel-status.test
+    - block_hash:5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a
+  elevated:
+    - block_domain:parcel-notice.test
+    - block_domain:parcel-redelivery.test
+    - block_domain:parcel-status.test
+    - block_hash:5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a
+  warnings: [blast-radius cap]
+  containment: CONTAINED
+  controls: 5

@@ -1,0 +1,53 @@
+# Phishing workflow scenario; fake lab data only (example.com, *.example, documentation IPs, fake hashes).
+# Migrated from the legacy spec scenario; expectations aligned with C1-C5 (every action needs human approval).
+schema: 1
+name: legacy-02-benign-user-report
+workflow: phishing
+description: >-
+  Legacy 02. A user reports a marketing newsletter as phishing. Secure Email rates it clean, the
+  link domain is clean and no URL is rated malicious. Nothing is quarantined or blocked; the run
+  only records the enrichment so the analyst can close the report.
+tags: [legacy, benign]
+legacy_source: workflows/phishing/scenarios/02-benign-user-report.yaml
+mode: both
+suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
+        microsoft_cloud: [network]}
+incident:
+  incident_id: INC-TEST-PH-0002
+  title: User-reported suspicious newsletter
+  severity: LOW
+  source: User-reported phish
+  workflow_id: phishing
+  observables:
+    - {type: email_message_id, value: "<20260115.0715.2002@vendor-updates.test>"}
+    - {type: email_address, value: news@vendor-updates.test}
+    - {type: url, value: "https://vendor-updates.test/newsletter/october"}
+    - {type: domain, value: vendor-updates.test}
+    - {type: user, value: sales-rep-04@example.com}
+  users: [sales-rep-04@example.com]
+  trigger: {source: User-reported phish}
+environment:
+  reputations:
+    - {type: domain, value: vendor-updates.test, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [umbrella, virustotal], summary: "Business (legacy enrich-domain clean)"}
+  records:
+    - integration: secure_email
+      atomic: investigate_email
+      subject: "<20260115.0715.2002@vendor-updates.test>"
+      record: {kind: email_message, message_id: "<20260115.0715.2002@vendor-updates.test>",
+               sender: news@vendor-updates.test, sender_domain: vendor-updates.test,
+               recipients: [sales-rep-04@example.com], recipient_count: 1, subject_line: October product update,
+               received_at: "2026-01-15T07:15:00Z", direction: inbound, verdict: CLEAN,
+               urls: ["https://vendor-updates.test/newsletter/october"], domains: [vendor-updates.test],
+               delivery_location: inbox}
+    - integration: entra
+      atomic: investigate_user
+      subject: sales-rep-04@example.com
+      record: {kind: user_profile, user: sales-rep-04@example.com, department: Sales, groups: [Sales],
+               account_enabled: true, risk_level: none, risk_state: none}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  below_threshold: []
+  unrouted: []

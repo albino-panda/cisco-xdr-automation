@@ -1,0 +1,73 @@
+# Phishing workflow scenario; fake lab data only (example.com, *.example, documentation IPs, fake hashes).
+schema: 1
+name: benign-no-action
+workflow: phishing
+description: >-
+  A user reports a vendor newsletter as phishing. The gateway rates the message clean, the link
+  and its domain are clean, and the recipient's visit to the newsletter page is ordinary browsing.
+  Nothing is confirmed as phishing, so nothing is proposed; the run only records the investigation
+  for the analyst to close the report.
+tags: [benign]
+mode: both
+suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
+        microsoft_cloud: [network]}
+incident:
+  incident_id: XDR-PH-0004
+  title: User-reported suspicious newsletter
+  severity: LOW
+  source: secure_email
+  workflow_id: phishing
+  observables:
+    - {type: email_message_id, value: "<20260115.0800.1010@vendor-updates.test>"}
+    - {type: email_address, value: news@vendor-updates.test}
+    - {type: url, value: "https://vendor-updates.test/newsletter/january"}
+    - {type: domain, value: vendor-updates.test}
+    - {type: user, value: sales-rep-04@example.com}
+  users: [sales-rep-04@example.com]
+  trigger: {source: secure_email, rule: user-reported-phish}
+environment:
+  reputations:
+    - {type: domain, value: vendor-updates.test, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [umbrella, virustotal], summary: "business newsletter domain (lab)"}
+    - {type: url, value: "https://vendor-updates.test/newsletter/january", verdict: CLEAN, risk_score: 0,
+       confidence: 80, integrations: [umbrella, virustotal], summary: "newsletter page (lab)"}
+  records:
+    - integration: secure_email
+      atomic: investigate_email
+      subject: "<20260115.0800.1010@vendor-updates.test>"
+      record: {kind: email_message, message_id: "<20260115.0800.1010@vendor-updates.test>",
+               sender: news@vendor-updates.test, sender_domain: vendor-updates.test,
+               recipients: [sales-rep-04@example.com], recipient_count: 1, subject_line: January product update,
+               received_at: "2026-01-15T08:00:00Z", direction: inbound, verdict: CLEAN,
+               urls: ["https://vendor-updates.test/newsletter/january"], domains: [vendor-updates.test],
+               delivery_location: inbox, spf: pass, dkim: pass, dmarc: pass}
+    - integration: microsoft_cloud
+      atomic: search_domain_enterprise
+      subject: vendor-updates.test
+      record: {kind: dns_query, endpoint: TH-LT-2210, domain: vendor-updates.test, query_type: A, count: 1,
+               action: allowed, first_seen: "2026-01-15T08:15:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: endpoint, hostname: TH-LT-2210, connector_guid: 00000000-0000-4000-8000-000000002210,
+               os: Windows 11, users: [sales-rep-04@example.com], groups: [Sales Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: entra
+      atomic: investigate_user
+      subject: sales-rep-04@example.com
+      record: {kind: user_profile, user: sales-rep-04@example.com, department: Sales, groups: [Sales],
+               account_enabled: true, risk_level: none, risk_state: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: sales-rep-04@example.com
+      record: {kind: sign_in, sign_in_id: si-ph-0004, user: sales-rep-04@example.com,
+               timestamp: "2026-01-15T08:20:00Z", ip: 192.0.2.80, country: DE, app: Office 365 Exchange Online,
+               result: success, mfa_result: satisfied, risk_level: none}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  unrouted: []
+  below_threshold: []
+  degraded_sources: []
+  risk: {min: 0, max: 0}

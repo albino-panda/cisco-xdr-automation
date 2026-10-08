@@ -1,0 +1,51 @@
+# Phishing workflow scenario; fake lab data only (example.com, *.example, documentation IPs, fake hashes).
+schema: 1
+name: edge-owned-domain-url-block
+workflow: phishing
+description: >-
+  A lure points at a malicious path on the organisation's own share site (share.example.com). The
+  owned domain is never blocked (allow-list), but URL-level blocks are allowed on it
+  (url_block_allowed_domains), so only the exact URL is proposed and the domain stays reachable.
+  VirusTotal is never asked about the internal URL (disclosure policy); Umbrella alone rates it.
+tags: [edge_case, true_positive]
+mode: both
+suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
+        microsoft_cloud: [network]}
+incident:
+  incident_id: XDR-PH-0011
+  title: Shared-document lure hosted on the company share site
+  severity: MEDIUM
+  source: secure_email
+  workflow_id: phishing
+  observables:
+    - {type: email_message_id, value: "<20260115.0930.5120@docs-notify.test>"}
+    - {type: url, value: "https://share.example.com/s/r8kd2/remittance.html"}
+  users: [ap-clerk-05@example.com]
+  trigger: {source: secure_email, mitre_techniques: [T1566.002]}
+environment:
+  reputations:
+    - {type: url, value: "https://share.example.com/s/r8kd2/remittance.html", verdict: MALICIOUS, risk_score: 85,
+       confidence: 80, integrations: [umbrella], summary: "credential phishing page on a shared folder (lab)"}
+    - {type: domain, value: share.example.com, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [umbrella], summary: "company share site (lab)"}
+  records:
+    - integration: secure_email
+      atomic: investigate_email
+      subject: "<20260115.0930.5120@docs-notify.test>"
+      record: {kind: email_message, message_id: "<20260115.0930.5120@docs-notify.test>",
+               sender: share-notice@docs-notify.test, sender_domain: docs-notify.test,
+               recipients: [ap-clerk-05@example.com], recipient_count: 1, subject_line: Remittance advice shared with you,
+               received_at: "2026-01-15T09:30:00Z", direction: inbound, verdict: MALICIOUS, threat_types: [phish],
+               urls: ["https://share.example.com/s/r8kd2/remittance.html"], domains: [share.example.com],
+               delivery_location: inbox}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - "quarantine_email:<20260115.0930.5120@docs-notify.test>"
+    - "block_url:https://share.example.com/s/r8kd2/remittance.html"
+  excluded: []
+  elevated: []
+  unrouted: []
+  containment: CONTAINED
+  controls: 2

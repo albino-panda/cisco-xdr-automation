@@ -1,0 +1,116 @@
+# Phishing workflow scenario; fake lab data only (example.com, *.example, documentation IPs, fake hashes).
+schema: 1
+name: partial-failure
+workflow: phishing
+description: >-
+  Same credential phishing campaign as tp-approve-all; everything is approved but the Umbrella
+  destination-list write for the domain block fails. Containment is partial, the failed action is
+  reported FAILED and the other actions still execute and verify.
+tags: [partial_failure, true_positive]
+mode: live
+suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
+        microsoft_cloud: [network]}
+incident:
+  incident_id: XDR-PH-0007
+  title: Credential phishing link and attachment delivered to finance
+  severity: HIGH
+  source: secure_email
+  workflow_id: phishing
+  observables:
+    - {type: email_message_id, value: "<20260115.0900.4471@invoice-portal.example>"}
+    - {type: email_address, value: billing@invoice-portal.example}
+    - {type: url, value: "https://invoice-portal.example/login/verify"}
+    - {type: domain, value: invoice-portal.example}
+    - {type: ip, value: 203.0.113.25}
+    - {type: sha256, value: 1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b}
+    - {type: user, value: ap-clerk-01@example.com}
+  users: [ap-clerk-01@example.com]
+  trigger: {source: secure_email, mitre_techniques: [T1566.002]}
+environment:
+  reputations:
+    - {type: domain, value: invoice-portal.example, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [umbrella, virustotal], summary: "credential phishing domain (lab)"}
+    - {type: url, value: "https://invoice-portal.example/login/verify", verdict: MALICIOUS, risk_score: 90,
+       confidence: 85, integrations: [umbrella, virustotal], summary: "credential phishing page (lab)"}
+    - {type: sha256, value: 1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b, verdict: MALICIOUS,
+       risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal], summary: "malicious attachment (lab)"}
+    - {type: ip, value: 203.0.113.25, verdict: SUSPICIOUS, risk_score: 55, confidence: 60,
+       integrations: [virustotal], summary: "bulk sending infrastructure (lab)"}
+  records:
+    - integration: secure_email
+      atomic: investigate_email
+      subject: "<20260115.0900.4471@invoice-portal.example>"
+      record: {kind: email_message, message_id: "<20260115.0900.4471@invoice-portal.example>",
+               sender: billing@invoice-portal.example, sender_domain: invoice-portal.example,
+               recipients: [ap-clerk-01@example.com], recipient_count: 1,
+               subject_line: "Overdue invoice 4471 - action required", received_at: "2026-01-15T09:00:00Z",
+               direction: inbound, verdict: MALICIOUS, threat_types: [phish],
+               urls: ["https://invoice-portal.example/login/verify"], domains: [invoice-portal.example],
+               attachment_hashes: [1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b],
+               attachment_names: [invoice-4471.html], delivery_location: inbox, campaign_id: CMP-4471,
+               spf: fail, dkim: none, dmarc: fail}
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: "<20260115.0900.4471@invoice-portal.example>"
+      record: {kind: email_message, message_id: "<20260115.0902.4472@invoice-portal.example>",
+               sender: billing@invoice-portal.example, sender_domain: invoice-portal.example,
+               recipients: [ap-clerk-02@example.com], recipient_count: 1,
+               subject_line: "Overdue invoice 4471 - action required", received_at: "2026-01-15T09:02:00Z",
+               direction: inbound, urls: ["https://invoice-portal.example/login/verify"],
+               domains: [invoice-portal.example],
+               attachment_hashes: [1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b],
+               delivery_location: inbox, campaign_id: CMP-4471}
+    - integration: microsoft_cloud
+      atomic: search_domain_enterprise
+      subject: invoice-portal.example
+      record: {kind: dns_query, endpoint: TH-LT-1047, domain: invoice-portal.example, query_type: A, count: 3,
+               action: allowed, verdict: MALICIOUS, first_seen: "2026-01-15T09:20:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, users: [ap-clerk-01@example.com], groups: [Finance Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-1047-ph1, name: Trojan.Downloader.Generic, verdict: MALICIOUS,
+               severity: HIGH, endpoint: TH-LT-1047, user: ap-clerk-01@example.com,
+               sha256: 1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b,
+               first_seen: "2026-01-15T09:25:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: ap-clerk-01@example.com
+      record: {kind: user_profile, user: ap-clerk-01@example.com, display_name: AP Clerk 01, department: Finance,
+               groups: [Finance], roles: [], account_enabled: true, risk_level: medium, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: ap-clerk-01@example.com
+      record: {kind: sign_in, sign_in_id: si-ph-0001, user: ap-clerk-01@example.com,
+               timestamp: "2026-01-15T09:31:00Z", ip: 198.51.100.77, country: NL, app: Office 365 Exchange Online,
+               result: success, mfa_result: satisfied, risk_level: high}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: ap-clerk-01@example.com
+      record: {kind: anomaly, anomaly_id: an-ph-0001, anomaly_type: unfamiliar_location, severity: HIGH,
+               user: ap-clerk-01@example.com, ip: 198.51.100.77, first_seen: "2026-01-15T09:31:00Z"}
+  faults:
+    - {kind: FAIL, integration: umbrella, operation: block_domain, times: 10}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  handoffs: ["account-takeover:ap-clerk-01@example.com"]
+  package: true
+  actions:
+    - "quarantine_email:<20260115.0900.4471@invoice-portal.example>"
+    - "quarantine_email:<20260115.0902.4472@invoice-portal.example>"
+    - block_domain:invoice-portal.example
+    - block_hash:1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b
+    - revoke_sessions:ap-clerk-01@example.com
+    - disable_user:ap-clerk-01@example.com
+    - isolate_endpoint:TH-LT-1047
+  containment: PARTIALLY_CONTAINED
+  results:
+    block_domain:invoice-portal.example: FAILED
+    quarantine_email:<20260115.0900.4471@invoice-portal.example>: SUCCESS
+    isolate_endpoint:TH-LT-1047: SUCCESS
+  controls: 5

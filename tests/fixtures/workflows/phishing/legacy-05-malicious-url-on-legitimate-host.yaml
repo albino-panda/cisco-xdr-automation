@@ -1,0 +1,81 @@
+# Phishing workflow scenario; fake lab data only (example.com, *.example, documentation IPs, fake hashes).
+# Migrated from the legacy spec scenario; expectations aligned with C1-C5 (every action needs human approval).
+schema: 1
+name: legacy-05-malicious-url-on-legitimate-host
+workflow: phishing
+description: >-
+  Legacy 05. A compromised internal mailbox sends a lure with two malicious URLs on otherwise
+  legitimate hosts: a public file-sharing site (clean domain, not allow-listed) and the organisation's
+  own share site. This tenant does not allow URL blocks on its own domain (lab override of
+  url_block_allowed_domains), as the legacy guardrails did, so that URL block is shown as excluded.
+  The help link in the same message is not rated and is not touched. The internal sender's risky
+  account is investigated and reported for the account-takeover hand-off; it is not a recipient who
+  clicked, so this package proposes no account action.
+tags: [legacy, true_positive]
+legacy_source: workflows/phishing/scenarios/05-malicious-url-on-legitimate-host.yaml
+mode: both
+suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
+        microsoft_cloud: [network]}
+config:
+  allowlists:
+    url_block_allowed_domains: []
+incident:
+  incident_id: INC-TEST-PH-0005
+  title: Internal mailbox sends shared-document lure
+  severity: MEDIUM
+  source: Secure Email Threat Defense
+  workflow_id: phishing
+  observables:
+    - {type: email_message_id, value: "<20260115.1015.5005@example.com>"}
+    - {type: email_address, value: ap-clerk-07@example.com}
+    - {type: url, value: "https://files.docs-share.test/s/qx2pa/remittance.html"}
+    - {type: url, value: "https://share.example.com/s/r8kd2/remittance.html"}
+    - {type: url, value: "https://docs-share.test/help"}
+    - {type: domain, value: files.docs-share.test}
+    - {type: domain, value: docs-share.test}
+    - {type: domain, value: share.example.com}
+  users: [ap-clerk-07@example.com]
+  trigger: {source: Secure Email Threat Defense, mitre_techniques: [T1566.002]}
+environment:
+  reputations:
+    - {type: url, value: "https://files.docs-share.test/s/qx2pa/remittance.html", verdict: MALICIOUS, risk_score: 85,
+       confidence: 80, integrations: [umbrella, virustotal], summary: "credential phishing page (lab)"}
+    - {type: url, value: "https://share.example.com/s/r8kd2/remittance.html", verdict: MALICIOUS, risk_score: 85,
+       confidence: 80, integrations: [umbrella], summary: "credential phishing page (lab)"}
+    - {type: domain, value: files.docs-share.test, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [umbrella, virustotal], summary: "File Storage (legacy enrich-domain clean)"}
+    - {type: domain, value: docs-share.test, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [umbrella, virustotal], summary: "File Storage (legacy enrich-domain clean)"}
+    - {type: domain, value: share.example.com, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [umbrella], summary: "Business (legacy enrich-domain clean)"}
+  records:
+    - integration: secure_email
+      atomic: investigate_email
+      subject: "<20260115.1015.5005@example.com>"
+      record: {kind: email_message, message_id: "<20260115.1015.5005@example.com>",
+               sender: ap-clerk-07@example.com, sender_domain: example.com, recipients: [ap-clerk-08@example.com],
+               recipient_count: 1, subject_line: Remittance advice shared with you, received_at: "2026-01-15T10:15:00Z",
+               direction: internal, verdict: MALICIOUS, threat_types: [phish],
+               urls: ["https://files.docs-share.test/s/qx2pa/remittance.html",
+                      "https://share.example.com/s/r8kd2/remittance.html", "https://docs-share.test/help"],
+               domains: [files.docs-share.test, docs-share.test, share.example.com], delivery_location: inbox}
+    - integration: entra
+      atomic: investigate_user
+      subject: ap-clerk-07@example.com
+      record: {kind: user_profile, user: ap-clerk-07@example.com, department: Finance, groups: [Finance],
+               account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: ap-clerk-07@example.com
+      record: {kind: anomaly, anomaly_id: an-ph-0505, anomaly_type: unfamiliar_location, severity: MEDIUM,
+               user: ap-clerk-07@example.com, ip: 198.51.100.90, first_seen: "2026-01-15T09:50:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - "quarantine_email:<20260115.1015.5005@example.com>"
+    - "block_url:https://files.docs-share.test/s/qx2pa/remittance.html"
+  excluded: ["block_url:https://share.example.com/s/r8kd2/remittance.html"]
+  elevated: []
+  containment: CONTAINED
+  controls: 2

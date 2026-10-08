@@ -1,0 +1,80 @@
+# Phishing workflow scenario; fake lab data only (example.com, *.example, documentation IPs, fake hashes).
+schema: 1
+name: edge-click-without-signin
+workflow: phishing
+description: >-
+  A recipient resolved the phishing domain after delivery, but her only successful sign-in happened
+  before the click and Entra reports no risk; another endpoint queried the domain before the message
+  arrived (not a click). Message and domain are contained; no session revocation or account action
+  is proposed without post-click authentication evidence.
+tags: [edge_case, true_positive]
+mode: both
+suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
+        microsoft_cloud: [network]}
+incident:
+  incident_id: XDR-PH-0014
+  title: Credential phishing link clicked without follow-up sign-in
+  severity: MEDIUM
+  source: secure_email
+  workflow_id: phishing
+  observables:
+    - {type: email_message_id, value: "<20260115.1100.0042@mailbox-quota.test>"}
+  users: [kchan@example.com]
+  trigger: {source: secure_email, mitre_techniques: [T1566.002]}
+environment:
+  reputations:
+    - {type: domain, value: mailbox-quota.test, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [umbrella, virustotal], summary: "mailbox-quota phishing domain (lab)"}
+  records:
+    - integration: secure_email
+      atomic: investigate_email
+      subject: "<20260115.1100.0042@mailbox-quota.test>"
+      record: {kind: email_message, message_id: "<20260115.1100.0042@mailbox-quota.test>",
+               sender: it-desk@mailbox-quota.test, sender_domain: mailbox-quota.test, recipients: [kchan@example.com],
+               recipient_count: 1, subject_line: Your mailbox is almost full, received_at: "2026-01-15T11:00:00Z",
+               direction: inbound, verdict: MALICIOUS, threat_types: [phish],
+               urls: ["https://mailbox-quota.test/upgrade"], domains: [mailbox-quota.test], delivery_location: inbox}
+    - integration: microsoft_cloud
+      atomic: search_domain_enterprise
+      subject: mailbox-quota.test
+      record: {kind: dns_query, endpoint: TH-LT-4402, domain: mailbox-quota.test, query_type: A, count: 1,
+               action: allowed, first_seen: "2026-01-15T11:10:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_domain_enterprise
+      subject: mailbox-quota.test
+      record: {kind: dns_query, endpoint: TH-LT-4403, domain: mailbox-quota.test, query_type: A, count: 1,
+               action: allowed, first_seen: "2026-01-15T06:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-4402
+      record: {kind: endpoint, hostname: TH-LT-4402, connector_guid: 00000000-0000-4000-8000-000000004402,
+               os: Windows 11, users: [kchan@example.com], groups: [Legal Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-4403
+      record: {kind: endpoint, hostname: TH-LT-4403, connector_guid: 00000000-0000-4000-8000-000000004403,
+               os: Windows 11, users: [kchan@example.com], groups: [Legal Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: entra
+      atomic: investigate_user
+      subject: kchan@example.com
+      record: {kind: user_profile, user: kchan@example.com, department: Legal, groups: [Legal], account_enabled: true,
+               risk_level: none, risk_state: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: kchan@example.com
+      record: {kind: sign_in, sign_in_id: si-ph-0014, user: kchan@example.com, timestamp: "2026-01-15T08:00:00Z",
+               ip: 192.0.2.81, country: DE, app: Office 365 Exchange Online, result: success, mfa_result: satisfied,
+               risk_level: none}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  handoffs: []
+  package: true
+  actions:
+    - "quarantine_email:<20260115.1100.0042@mailbox-quota.test>"
+    - block_domain:mailbox-quota.test
+  elevated: []
+  below_threshold: []
+  containment: CONTAINED
+  controls: 2
