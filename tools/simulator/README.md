@@ -39,7 +39,8 @@ Scenario files live in `tests/fixtures/incidents/` and are shared with `tests/si
 | `account_takeover` | disable user and revoke sessions; the attacker IP is already blocked (ALREADY_CONTAINED, no control) |
 | `ransomware_domain_controller` | TH-DC-02 needs ELEVATED approval (lead); TH-DC-01 is allow-listed and excluded |
 
-A scenario has `incident`, `environment` (`reputations` with optional `integrations`, `findings`,
+A scenario has `incident`, `environment` (`reputations` with optional `integrations`, `categories`
+and `first_seen` (ISO 8601 with offset; both reported in the enrichment evidence), `findings`,
 `preexisting` controls, `faults`, `health`, `invalid_targets`), `analyst` and `release` decisions
 (`decision`, `approvers`, `select`, `comment`) and an `expect` block checked by `--check`.
 

@@ -226,6 +226,10 @@ class Reputation:
     summary: str = ""
     #: Integrations that "know" this reputation; ``None`` means every enriching adapter does.
     integrations: frozenset[str] | None = None
+    #: Vendor categories (Umbrella security / content categories) and the vendor's first-seen time
+    #: (ISO 8601 with offset), reported in the evidence data like a real enricher (14.12.3).
+    categories: tuple[str, ...] = ()
+    first_seen: str | None = None
 
     def known_by(self, integration: str) -> bool:
         return self.integrations is None or integration in self.integrations
@@ -303,11 +307,17 @@ class SimulatedEnvironment:
     # ---------------------------------------------------- scenario data --
     def set_reputation(self, observable_type: ObservableType, value: str, verdict: Verdict, *,
                        risk_score: int = 0, confidence: int = 0, summary: str = "",
-                       integrations: Sequence[str] | None = None) -> None:
-        """Reputation of one observable; ``integrations`` limits which adapters report it."""
+                       integrations: Sequence[str] | None = None, categories: Sequence[str] = (),
+                       first_seen: str | None = None) -> None:
+        """Reputation of one observable; ``integrations`` limits which adapters report it.
+
+        ``categories`` and ``first_seen`` are reported in the evidence data (keys ``categories`` and
+        ``first_seen``), so the enrichment record carries them as a real vendor answer would.
+        """
         self.reputations[(ObservableType(observable_type), value.strip().lower())] = Reputation(
             verdict=Verdict(verdict), risk_score=risk_score, confidence=confidence, summary=summary,
-            integrations=frozenset(integrations) if integrations is not None else None)
+            integrations=frozenset(integrations) if integrations is not None else None,
+            categories=tuple(str(c) for c in categories), first_seen=str(first_seen) if first_seen else None)
 
     def reputation(self, observable: Observable) -> Reputation | None:
         return self.reputations.get((observable.type, observable.value.strip().lower()))
@@ -533,7 +543,9 @@ class SimulatedAdapter(IntegrationAdapter):
         evidence = EvidenceDraft(
             source=self.name, observed_at=self.clock.now(), reference=f"sim:{self.name}:{observable.value}",
             summary=rep.summary or f"{self.name} rates {observable.value} {rep.verdict.value}",
-            data={"verdict": rep.verdict.value, "risk_score": rep.risk_score, "confidence": rep.confidence},
+            data={"verdict": rep.verdict.value, "risk_score": rep.risk_score, "confidence": rep.confidence,
+                  **({"categories": list(rep.categories)} if rep.categories else {}),
+                  **({"first_seen": rep.first_seen} if rep.first_seen else {})},
         )
         return EnrichmentResult(type=observable.type, value=observable.value, risk_score=rep.risk_score,
                                 confidence=rep.confidence, sources=(self.name,), verdict=rep.verdict,

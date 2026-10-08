@@ -192,7 +192,8 @@ class ScenarioRun:
             self.environment.set_reputation(
                 ObservableType(rep["type"]), str(rep["value"]), Verdict(rep["verdict"]),
                 risk_score=int(rep.get("risk_score", 0)), confidence=int(rep.get("confidence", 0)),
-                summary=str(rep.get("summary", "")), integrations=rep.get("integrations"))
+                summary=str(rep.get("summary", "")), integrations=rep.get("integrations"),
+                categories=tuple(rep.get("categories") or ()), first_seen=rep.get("first_seen"))
         for item in env.get("findings") or ():
             self.environment.add_findings(ActionType(item["action_type"]), str(item["subject"]),
                                           *(item.get("items") or ()))

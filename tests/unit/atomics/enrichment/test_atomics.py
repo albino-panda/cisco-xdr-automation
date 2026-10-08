@@ -176,6 +176,20 @@ def test_unknown_verdict_without_evidence_is_empty_not_a_record():
     assert report.records == () and not report.degraded
 
 
+def test_lab_reputation_categories_and_first_seen_reach_the_enrichment_record():
+    """Phase 4 (14.12.3): the lab reports vendor categories and first-seen like a real enricher."""
+    the_lab, env = _lab()
+    env.set_reputation(_O.DOMAIN, DOMAIN, Verdict.SUSPICIOUS, risk_score=55, confidence=60,
+                       summary="newly seen file sharing", integrations=["umbrella"],
+                       categories=["File Storage", "Newly Seen Domains"], first_seen="2026-01-14T09:00:00+00:00")
+    (record,) = enrich_domain(the_lab.context(), DOMAIN).records
+    assert record.categories == ("File Storage", "Newly Seen Domains")
+    assert record.first_seen is not None and record.first_seen.isoformat() == "2026-01-14T09:00:00+00:00"
+    env.set_reputation(_O.DOMAIN, DOMAIN, Verdict.SUSPICIOUS, risk_score=55, confidence=60, integrations=["umbrella"])
+    (plain,) = enrich_domain(the_lab.context(), DOMAIN).records
+    assert plain.categories == () and plain.first_seen is None and plain.record_id == record.record_id
+
+
 @pytest.mark.parametrize(("kind", "health", "code"), [
     (FaultKind.FAIL, HealthStatus.DEGRADED, ErrorCode.API_ERROR),
     (FaultKind.TIMEOUT, HealthStatus.DEGRADED, ErrorCode.TIMEOUT),
