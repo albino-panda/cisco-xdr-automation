@@ -1,0 +1,59 @@
+# Ransomware workflow scenario; fake lab data only.
+schema: 1
+name: degraded-source
+workflow: ransomware
+description: >-
+  Entra (an expected source) is unavailable while the user is investigated. The run notes the
+  degraded source and lowers confidence, and still recommends the isolation, the hash block and
+  the session revocation from the Secure Endpoint evidence that places the account on the
+  encrypting host. No account disable is proposed: nothing confirms the account compromised.
+tags: [degraded_source, true_positive]
+mode: both
+incident:
+  incident_id: XDR-RW-0005
+  title: Ransomware detected on TH-LT-1047
+  severity: CRITICAL
+  workflow_id: ransomware
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+    - {type: sha256, value: 5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f}
+  users: [jsmith@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1486]}
+environment:
+  reputations:
+    - {type: sha256, value: 5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f, verdict: MALICIOUS, risk_score: 95, confidence: 90,
+       integrations: [secure_endpoint, virustotal], summary: ransomware payload}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, ip_addresses: [198.51.100.47], users: [jsmith@example.com], groups: [Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-rw-1047-1, name: Ransomware.Generic, category: Ransomware,
+               verdict: MALICIOUS, severity: CRITICAL, endpoint: TH-LT-1047, user: jsmith@example.com, sha256: 5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f,
+               first_seen: "2026-01-15T11:40:00Z"}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f
+      record: {kind: hash_prevalence, sha256: 5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f, file_name: invoice_viewer.exe,
+               verdict: MALICIOUS, prevalence: 1, endpoints: [TH-LT-1047]}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, department: Finance, groups: [Finance Users],
+               risk_level: low, risk_state: none, account_enabled: true}
+  faults:
+    - {kind: UNAVAILABLE, integration: entra, operation: investigate, times: 2}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f
+    - revoke_sessions:jsmith@example.com
+  degraded_sources: [entra]
+  containment: CONTAINED

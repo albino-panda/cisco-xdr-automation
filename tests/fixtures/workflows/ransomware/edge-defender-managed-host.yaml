@@ -1,0 +1,55 @@
+# Ransomware workflow scenario; fake lab data only.
+schema: 1
+name: edge-defender-managed-host
+workflow: ransomware
+description: >-
+  The affected laptop is managed by Microsoft Defender for Endpoint only (Secure Endpoint does not
+  know it). The Secure Endpoint isolation rule does not apply; the Defender isolation rule
+  recommends isolating it through Defender, and the payload hash is blocked. The approved
+  isolation executes and verifies through the Defender route.
+tags: [edge_case, true_positive]
+mode: both
+suite:
+  secure_endpoint: [endpoint]
+  defender_endpoint: [endpoint]
+  entra: [identity]
+  virustotal: [intel]
+incident:
+  incident_id: XDR-RW-0012
+  title: Ransomware detected on TH-LT-2210
+  severity: CRITICAL
+  workflow_id: ransomware
+  observables:
+    - {type: hostname, value: TH-LT-2210}
+  trigger: {source: defender_endpoint, mitre_techniques: [T1486]}
+environment:
+  reputations:
+    - {type: sha256, value: 4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a, verdict: MALICIOUS,
+       risk_score: 95, confidence: 90, integrations: [defender_endpoint, virustotal], summary: ransomware payload}
+  records:
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: endpoint, hostname: TH-LT-2210, mde_machine_id: 1e5c0a9b8f7d6e5c4b3a2918e7d6c5b4a3f2e1d0,
+               os: Windows 11, ip_addresses: [198.51.100.210], groups: [Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: detection, detection_id: da-rw-2210-1, name: Ransomware behavior detected, category: Ransomware,
+               verdict: MALICIOUS, severity: HIGH, endpoint: TH-LT-2210,
+               sha256: 4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a, mitre_techniques: [T1486]}
+    - integration: defender_endpoint
+      atomic: search_hash_enterprise
+      subject: 4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a
+      record: {kind: hash_prevalence, sha256: 4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a,
+               verdict: MALICIOUS, prevalence: 1, endpoints: [TH-LT-2210]}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:TH-LT-2210
+    - block_hash:4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a
+  unrouted: []
+  containment: CONTAINED
+  controls: 2

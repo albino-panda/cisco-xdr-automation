@@ -1,0 +1,61 @@
+# Ransomware workflow scenario; fake lab data only.
+schema: 1
+name: benign-no-action
+workflow: ransomware
+description: >-
+  An analyst compresses a project folder with a sanctioned archive tool and trips the mass file
+  modification alert. The vendor rates the activity suspicious only, there is no recovery
+  inhibition, the archive tool's hash is clean and widespread and the account shows no risk.
+  Nothing is proposed and the incident stays NOT_STARTED.
+tags: [benign]
+mode: both
+incident:
+  incident_id: XDR-RW-0004
+  title: Mass file modification on TH-LT-1120
+  severity: MEDIUM
+  workflow_id: ransomware
+  observables:
+    - {type: hostname, value: TH-LT-1120}
+    - {type: sha256, value: 0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b}
+  users: [tlee@example.com]
+  trigger: {source: secure_endpoint}
+environment:
+  reputations:
+    - {type: sha256, value: 0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b, verdict: CLEAN,
+       risk_score: 0, confidence: 90, integrations: [secure_endpoint, virustotal], summary: signed archive tool}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1120
+      record: {kind: endpoint, hostname: TH-LT-1120, connector_guid: 00000000-0000-4000-8000-000000001120,
+               os: Windows 11, ip_addresses: [198.51.100.120], users: [tlee@example.com], groups: [Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1120
+      record: {kind: detection, detection_id: det-rw-1120-1, name: Mass file modification, verdict: SUSPICIOUS,
+               severity: MEDIUM, endpoint: TH-LT-1120, user: tlee@example.com,
+               sha256: 0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1120
+      record: {kind: process_event, event_id: evt-1120-mass, endpoint: TH-LT-1120, timestamp: "2026-01-15T11:20:00Z",
+               event_type: file_create, process_name: archiver.exe, user: tlee@example.com,
+               sha256: 0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b, verdict: SUSPICIOUS,
+               count: 2400}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b
+      record: {kind: hash_prevalence, sha256: 0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b0b7d2e4f6a8c1e3b,
+               file_name: archiver.exe, verdict: CLEAN, prevalence: 950, endpoints: [TH-LT-1120], truncated: true,
+               signer: Example Archive Software Ltd.}
+    - integration: entra
+      atomic: investigate_user
+      subject: tlee@example.com
+      record: {kind: user_profile, user: tlee@example.com, department: Engineering, groups: [Engineering Users],
+               risk_level: none, risk_state: none, account_enabled: true}
+expect:
+  package: false
+  actions: []
+  below_threshold: []
+  unrouted: []

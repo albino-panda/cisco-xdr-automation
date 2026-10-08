@@ -1,0 +1,129 @@
+# Ransomware workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-03-protected-hypervisor-and-admins
+workflow: ransomware
+description: >-
+  Legacy 03, converted to typed records (C3: protected becomes ELEVATED). Encryption is detected on
+  HV-ESX-02, DC-01, an OT controller named by its address in the production range and one ordinary
+  workstation. The investigation does not mark the infrastructure hosts as protected, so the
+  critical-asset policy's own host patterns and address ranges must catch them. The accounts on
+  those hosts are a break-glass account and a Domain Admins member; both are high risk with risk
+  detections. Every action on the three infrastructure hosts and the two privileged accounts stays
+  proposed with ELEVATED approval and a warning; the workstation isolation and the payload block
+  need standard approval. A lead approves.
+tags: [legacy, true_positive, critical_asset]
+legacy_source: workflows/ransomware/scenarios/03-protected-hypervisor-and-admins.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-RW-0003
+  title: Ransomware on virtualisation and identity infrastructure
+  severity: CRITICAL
+  workflow_id: ransomware
+  observables:
+    - {type: sha256, value: 6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f}
+    - {type: hostname, value: HV-ESX-02}
+    - {type: hostname, value: DC-01}
+    - {type: hostname, value: WS-ENG-031}
+  users: [breakglass-01@example.com, infra.admin@example.com]
+  trigger: {source: cisco_xdr, mitre_techniques: [T1486]}
+environment:
+  reputations:
+    - {type: sha256, value: 6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f, verdict: MALICIOUS,
+       risk_score: 95, confidence: 90, integrations: [secure_endpoint, virustotal], summary: ransomware payload}
+  records:
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f
+      record: {kind: hash_prevalence, sha256: 6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f,
+               verdict: MALICIOUS, prevalence: 4, endpoints: [HV-ESX-02, DC-01, 203.0.113.25, WS-ENG-031]}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: HV-ESX-02
+      record: {kind: endpoint, hostname: HV-ESX-02, connector_guid: 00000000-0000-4000-8000-0000000e5002,
+               os: VMware ESXi, ip_addresses: [198.51.100.32], users: [breakglass-01@example.com],
+               groups: [Virtualisation], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: HV-ESX-02
+      record: {kind: detection, detection_id: det-esx-02-1, name: Ransomware.Generic, verdict: MALICIOUS,
+               severity: CRITICAL, endpoint: HV-ESX-02,
+               sha256: 6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-01
+      record: {kind: endpoint, hostname: DC-01, connector_guid: 00000000-0000-4000-8000-00000000dc01,
+               os: Windows Server 2022, ip_addresses: [198.51.100.33], users: [infra.admin@example.com],
+               groups: [Domain Controllers], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-01
+      record: {kind: detection, detection_id: det-dc-01-1, name: Ransomware.Generic, verdict: MALICIOUS,
+               severity: CRITICAL, endpoint: DC-01,
+               sha256: 6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: 203.0.113.25
+      record: {kind: endpoint, hostname: 203.0.113.25, connector_guid: 00000000-0000-4000-8000-00000000a025,
+               os: Windows 10 IoT, ip_addresses: [203.0.113.25], groups: [OT Controllers],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: 203.0.113.25
+      record: {kind: detection, detection_id: det-ot-025-1, name: Ransomware.Generic, verdict: MALICIOUS,
+               severity: CRITICAL, endpoint: 203.0.113.25,
+               sha256: 6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-ENG-031
+      record: {kind: endpoint, hostname: WS-ENG-031, connector_guid: 00000000-0000-4000-8000-00000000e031,
+               os: Windows 11, ip_addresses: [198.51.100.31], groups: [Engineering Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-ENG-031
+      record: {kind: detection, detection_id: det-eng-031-1, name: Ransomware.Generic, verdict: MALICIOUS,
+               severity: CRITICAL, endpoint: WS-ENG-031,
+               sha256: 6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f}
+    - integration: entra
+      atomic: investigate_user
+      subject: breakglass-01@example.com
+      record: {kind: user_profile, user: breakglass-01@example.com, department: IT Security,
+               groups: [Emergency Access], risk_level: high, risk_state: at_risk, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: breakglass-01@example.com
+      record: {kind: anomaly, anomaly_id: risk-bg-01, anomaly_type: unfamiliar_location, severity: HIGH,
+               user: breakglass-01@example.com, ip: 198.51.100.23}
+    - integration: entra
+      atomic: investigate_user
+      subject: infra.admin@example.com
+      record: {kind: user_profile, user: infra.admin@example.com, department: IT Operations,
+               groups: [Domain Admins], risk_level: high, risk_state: at_risk, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: infra.admin@example.com
+      record: {kind: anomaly, anomaly_id: risk-ia-01, anomaly_type: impossible_travel, severity: HIGH,
+               user: infra.admin@example.com, ip: 198.51.100.23}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:HV-ESX-02
+    - isolate_endpoint:DC-01
+    - isolate_endpoint:203.0.113.25
+    - isolate_endpoint:WS-ENG-031
+    - block_hash:6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f
+    - revoke_sessions:breakglass-01@example.com
+    - revoke_sessions:infra.admin@example.com
+    - disable_user:breakglass-01@example.com
+    - disable_user:infra.admin@example.com
+  elevated:
+    - isolate_endpoint:HV-ESX-02
+    - isolate_endpoint:DC-01
+    - isolate_endpoint:203.0.113.25
+    - revoke_sessions:breakglass-01@example.com
+    - revoke_sessions:infra.admin@example.com
+    - disable_user:breakglass-01@example.com
+    - disable_user:infra.admin@example.com
+  warnings: [ELEVATED APPROVAL REQUIRED, Hypervisor, Domain controller, Production server, Privileged account]
+  containment: CONTAINED

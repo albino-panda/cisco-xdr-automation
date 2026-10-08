@@ -1,0 +1,33 @@
+# Ransomware workflow scenario; fake lab data only.
+schema: 1
+name: edge-reputation-only-destination
+workflow: ransomware
+description: >-
+  A ransomware-titled incident lists a domain that one reputation source rates suspicious, but no
+  endpoint shows ransomware activity and no host contacted the domain. The domain block is
+  considered and stays below the rule threshold (listed, never hidden); nothing is proposed.
+tags: [edge_case, benign]
+mode: both
+incident:
+  incident_id: XDR-RW-0015
+  title: Possible ransomware infrastructure contacted from TH-LT-1047
+  severity: MEDIUM
+  workflow_id: ransomware
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+    - {type: domain, value: files-sync.test}
+  trigger: {source: cisco_xdr}
+environment:
+  reputations:
+    - {type: domain, value: files-sync.test, verdict: SUSPICIOUS, risk_score: 45, confidence: 50,
+       integrations: [virustotal], summary: newly seen domain}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, ip_addresses: [198.51.100.47], groups: [Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+expect:
+  package: false
+  below_threshold: [block_domain:files-sync.test]

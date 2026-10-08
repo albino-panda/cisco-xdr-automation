@@ -1,0 +1,49 @@
+# Ransomware workflow scenario; fake lab data only.
+schema: 1
+name: critical-asset-elevated
+workflow: ransomware
+description: >-
+  Ransomware encrypts a domain controller. Its isolation needs ELEVATED approval with a visible
+  warning (never skipped): an analyst alone cannot approve the package and the lead approves.
+  The payload block needs standard approval.
+tags: [critical_asset, true_positive]
+mode: both
+incident:
+  incident_id: XDR-RW-0006
+  title: Ransomware detected on domain controller DC-02
+  severity: CRITICAL
+  workflow_id: ransomware
+  observables:
+    - {type: hostname, value: DC-02}
+    - {type: sha256, value: 5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f}
+  trigger: {source: secure_endpoint, mitre_techniques: [T1486]}
+environment:
+  reputations:
+    - {type: sha256, value: 5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f, verdict: MALICIOUS, risk_score: 95, confidence: 90,
+       integrations: [secure_endpoint, virustotal], summary: ransomware payload}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-02
+      record: {kind: endpoint, hostname: DC-02, connector_guid: 00000000-0000-4000-8000-0000000000d2,
+               os: Windows 11, ip_addresses: [198.51.100.12], groups: [Domain Controllers], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-02
+      record: {kind: detection, detection_id: det-rw-dc02-1, name: Ransomware.Generic, category: Ransomware,
+               verdict: MALICIOUS, severity: CRITICAL, endpoint: DC-02, sha256: 5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f,
+               first_seen: "2026-01-15T11:40:00Z"}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f
+      record: {kind: hash_prevalence, sha256: 5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f, file_name: invoice_viewer.exe,
+               verdict: MALICIOUS, prevalence: 1, endpoints: [DC-02]}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - isolate_endpoint:DC-02
+    - block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f
+  elevated: [isolate_endpoint:DC-02]
+  warnings: [ELEVATED APPROVAL REQUIRED, Domain controller]
+  containment: CONTAINED

@@ -1,0 +1,137 @@
+# Ransomware workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-04-outbreak-blast-radius
+workflow: ransomware
+description: >-
+  Legacy 04, converted to typed records (C5: over-limit becomes ELEVATED). The same payload
+  encrypts seven operations workstations. Seven isolations exceed the endpoint blast-radius cap
+  (5), so every isolation stays proposed with ELEVATED approval and a blast-radius warning, and a
+  lead weighs segment-level containment. The hash block and the session revocation are outside
+  that cap and need standard approval, so spread can still be slowed quickly.
+tags: [legacy, true_positive]
+legacy_source: workflows/ransomware/scenarios/04-outbreak-blast-radius.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-RW-0004
+  title: Ransomware outbreak in operations
+  severity: CRITICAL
+  source: secure_endpoint
+  workflow_id: ransomware
+  observables:
+    - {type: sha256, value: b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0}
+    - {type: hostname, value: WS-OPS-001}
+  users: [ops.lead@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1486]}
+environment:
+  reputations:
+    - {type: sha256, value: b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0, verdict: MALICIOUS,
+       risk_score: 95, confidence: 90, integrations: [secure_endpoint, virustotal], summary: ransomware payload}
+  records:
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0
+      record: {kind: hash_prevalence, sha256: b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0,
+               verdict: MALICIOUS, prevalence: 7, endpoints: [WS-OPS-001, WS-OPS-002, WS-OPS-003, WS-OPS-004, WS-OPS-005, WS-OPS-006, WS-OPS-007]}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-001
+      record: {kind: endpoint, hostname: WS-OPS-001, connector_guid: 00000000-0000-4000-8000-000000000001,
+               os: Windows 11, ip_addresses: [198.51.100.61], users: [ops.lead@example.com], groups: [Operations Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-001
+      record: {kind: detection, detection_id: det-ops-001, name: Ransomware.Generic, verdict: MALICIOUS,
+               severity: CRITICAL, endpoint: WS-OPS-001, sha256: b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-002
+      record: {kind: endpoint, hostname: WS-OPS-002, connector_guid: 00000000-0000-4000-8000-000000000002,
+               os: Windows 11, ip_addresses: [198.51.100.62], groups: [Operations Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-002
+      record: {kind: detection, detection_id: det-ops-002, name: Ransomware.Generic, verdict: MALICIOUS,
+               severity: CRITICAL, endpoint: WS-OPS-002, sha256: b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-003
+      record: {kind: endpoint, hostname: WS-OPS-003, connector_guid: 00000000-0000-4000-8000-000000000003,
+               os: Windows 11, ip_addresses: [198.51.100.63], groups: [Operations Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-003
+      record: {kind: detection, detection_id: det-ops-003, name: Ransomware.Generic, verdict: MALICIOUS,
+               severity: CRITICAL, endpoint: WS-OPS-003, sha256: b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-004
+      record: {kind: endpoint, hostname: WS-OPS-004, connector_guid: 00000000-0000-4000-8000-000000000004,
+               os: Windows 11, ip_addresses: [198.51.100.64], groups: [Operations Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-004
+      record: {kind: detection, detection_id: det-ops-004, name: Ransomware.Generic, verdict: MALICIOUS,
+               severity: CRITICAL, endpoint: WS-OPS-004, sha256: b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-005
+      record: {kind: endpoint, hostname: WS-OPS-005, connector_guid: 00000000-0000-4000-8000-000000000005,
+               os: Windows 11, ip_addresses: [198.51.100.65], groups: [Operations Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-005
+      record: {kind: detection, detection_id: det-ops-005, name: Ransomware.Generic, verdict: MALICIOUS,
+               severity: CRITICAL, endpoint: WS-OPS-005, sha256: b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-006
+      record: {kind: endpoint, hostname: WS-OPS-006, connector_guid: 00000000-0000-4000-8000-000000000006,
+               os: Windows 11, ip_addresses: [198.51.100.66], groups: [Operations Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-006
+      record: {kind: detection, detection_id: det-ops-006, name: Ransomware.Generic, verdict: MALICIOUS,
+               severity: CRITICAL, endpoint: WS-OPS-006, sha256: b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-007
+      record: {kind: endpoint, hostname: WS-OPS-007, connector_guid: 00000000-0000-4000-8000-000000000007,
+               os: Windows 11, ip_addresses: [198.51.100.67], groups: [Operations Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-007
+      record: {kind: detection, detection_id: det-ops-007, name: Ransomware.Generic, verdict: MALICIOUS,
+               severity: CRITICAL, endpoint: WS-OPS-007, sha256: b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0}
+    - integration: entra
+      atomic: investigate_user
+      subject: ops.lead@example.com
+      record: {kind: user_profile, user: ops.lead@example.com, department: Operations, groups: [Operations Users],
+               risk_level: medium, risk_state: none, account_enabled: true}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:WS-OPS-001
+    - isolate_endpoint:WS-OPS-002
+    - isolate_endpoint:WS-OPS-003
+    - isolate_endpoint:WS-OPS-004
+    - isolate_endpoint:WS-OPS-005
+    - isolate_endpoint:WS-OPS-006
+    - isolate_endpoint:WS-OPS-007
+    - block_hash:b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0
+    - revoke_sessions:ops.lead@example.com
+  elevated:
+    - isolate_endpoint:WS-OPS-001
+    - isolate_endpoint:WS-OPS-002
+    - isolate_endpoint:WS-OPS-003
+    - isolate_endpoint:WS-OPS-004
+    - isolate_endpoint:WS-OPS-005
+    - isolate_endpoint:WS-OPS-006
+    - isolate_endpoint:WS-OPS-007
+  warnings: [ELEVATED APPROVAL REQUIRED, blast-radius cap]

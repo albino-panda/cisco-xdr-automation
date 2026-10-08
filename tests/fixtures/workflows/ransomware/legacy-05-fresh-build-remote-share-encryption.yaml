@@ -1,0 +1,79 @@
+# Ransomware workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-05-fresh-build-remote-share-encryption
+workflow: ransomware
+description: >-
+  Legacy 05, converted to typed records. The payload is a fresh per-victim build, so reputation has
+  no verdict yet and the hash is not recommended for blocking. Behavioural detections on the source
+  workstation WS-HR-007 (malicious activity protection, shadow copy deletion) are enough to isolate
+  it. The file server SRV-FILE-03 only sees its shares rewritten over the network and has a
+  suspicious mass-modification alert, not a malicious detection, so it is scoped but not isolated:
+  cutting off the victim share would not stop the encryption, isolating the source does. The
+  account on the source workstation loses its sessions but is not disabled (risk medium, no risk
+  detection).
+tags: [legacy, true_positive]
+legacy_source: workflows/ransomware/scenarios/05-fresh-build-remote-share-encryption.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-RW-0005
+  title: File share encrypted from HR workstation
+  severity: CRITICAL
+  workflow_id: ransomware
+  observables:
+    - {type: sha256, value: e0c2a4b6d8f1e3c5a7b9d0f2e4c6a8b1e0c2a4b6d8f1e3c5a7b9d0f2e4c6a8b1}
+    - {type: hostname, value: WS-HR-007}
+    - {type: hostname, value: SRV-FILE-03}
+  users: [hr.coordinator@example.com]
+  trigger: {source: cisco_xdr, mitre_techniques: [T1486, T1490]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-HR-007
+      record: {kind: endpoint, hostname: WS-HR-007, connector_guid: 00000000-0000-4000-8000-00000000b007,
+               os: Windows 11, ip_addresses: [198.51.100.107], users: [hr.coordinator@example.com],
+               groups: [HR Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-HR-007
+      record: {kind: detection, detection_id: det-hr-007-1, name: Malicious activity protection,
+               category: Ransomware, verdict: MALICIOUS, severity: CRITICAL, endpoint: WS-HR-007,
+               user: hr.coordinator@example.com}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-HR-007
+      record: {kind: detection, detection_id: det-hr-007-2, name: Shadow copy deletion, verdict: MALICIOUS,
+               severity: HIGH, endpoint: WS-HR-007, user: hr.coordinator@example.com}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: SRV-FILE-03
+      record: {kind: endpoint, hostname: SRV-FILE-03, connector_guid: 00000000-0000-4000-8000-00000000f003,
+               os: Windows Server 2022, ip_addresses: [198.51.100.103], groups: [File Servers],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: SRV-FILE-03
+      record: {kind: detection, detection_id: det-file-03-1, name: Mass file modification over SMB,
+               verdict: SUSPICIOUS, severity: MEDIUM, endpoint: SRV-FILE-03}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: e0c2a4b6d8f1e3c5a7b9d0f2e4c6a8b1e0c2a4b6d8f1e3c5a7b9d0f2e4c6a8b1
+      record: {kind: hash_prevalence, sha256: e0c2a4b6d8f1e3c5a7b9d0f2e4c6a8b1e0c2a4b6d8f1e3c5a7b9d0f2e4c6a8b1,
+               verdict: UNKNOWN, prevalence: 1, endpoints: [WS-HR-007]}
+    - integration: entra
+      atomic: investigate_user
+      subject: hr.coordinator@example.com
+      record: {kind: user_profile, user: hr.coordinator@example.com, department: Human Resources,
+               groups: [HR Users], risk_level: medium, risk_state: none, account_enabled: true}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: hr.coordinator@example.com
+      record: {kind: sign_in, sign_in_id: si-hr-01, user: hr.coordinator@example.com,
+               timestamp: "2026-01-15T08:30:00Z", ip: 198.51.100.17, app: Office 365, result: success}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:WS-HR-007
+    - revoke_sessions:hr.coordinator@example.com
+  elevated: []
+  below_threshold: []

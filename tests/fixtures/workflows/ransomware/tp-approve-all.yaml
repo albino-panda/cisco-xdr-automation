@@ -1,0 +1,108 @@
+# Ransomware workflow scenario; fake lab data only.
+schema: 1
+name: tp-approve-all
+workflow: ransomware
+description: >-
+  True positive on a finance workstation. Secure Endpoint reports a critical ransomware detection,
+  mass file modification and flagged recovery inhibition on TH-LT-1047; the payload (prevalence 2)
+  is also staged on TH-LT-1052, which has no detection yet. The workstation contacted a domain and
+  an IP rated malicious, and Entra rates the logged-on account high risk with a risk detection.
+  The analyst approves everything: both isolations, the hash, domain and IP blocks, the session
+  revocation and the account disable execute and verify.
+tags: [true_positive, approve_all]
+mode: both
+incident:
+  incident_id: XDR-RW-0001
+  title: Ransomware detected on finance workstation
+  severity: CRITICAL
+  workflow_id: ransomware
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+    - {type: sha256, value: 3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c}
+  users: [jsmith@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1486]}
+environment:
+  reputations:
+    - {type: sha256, value: 3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c, verdict: MALICIOUS,
+       risk_score: 95, confidence: 90, integrations: [secure_endpoint, virustotal], summary: ransomware payload}
+    - {type: domain, value: cdn-update.test, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [umbrella, virustotal], summary: ransomware infrastructure}
+    - {type: ip, value: 203.0.113.80, verdict: MALICIOUS, risk_score: 80, confidence: 75,
+       integrations: [meraki, virustotal], summary: ransomware infrastructure}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, ip_addresses: [198.51.100.47], users: [jsmith@example.com],
+               groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-rw-1047-1, name: Ransomware.Generic, category: Ransomware,
+               verdict: MALICIOUS, severity: CRITICAL, endpoint: TH-LT-1047, user: jsmith@example.com,
+               sha256: 3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c,
+               first_seen: "2026-01-15T11:40:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: process_event, event_id: evt-1047-mass, endpoint: TH-LT-1047, timestamp: "2026-01-15T11:38:00Z",
+               event_type: file_modify, process_name: invoice_viewer.exe,
+               sha256: 3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c,
+               user: jsmith@example.com, verdict: SUSPICIOUS, count: 1204}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: process_event, event_id: evt-1047-vss, endpoint: TH-LT-1047, timestamp: "2026-01-15T11:37:00Z",
+               event_type: process_start, process_name: vssadmin.exe, parent_process_name: invoice_viewer.exe,
+               user: jsmith@example.com, verdict: SUSPICIOUS}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: network_connection, endpoint: TH-LT-1047, remote_ip: 203.0.113.80, remote_port: 443,
+               protocol: tcp, direction: outbound, domain: cdn-update.test, process_name: invoice_viewer.exe,
+               first_seen: "2026-01-15T11:35:00Z"}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c
+      record: {kind: hash_prevalence, sha256: 3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c,
+               file_name: invoice_viewer.exe, verdict: MALICIOUS, prevalence: 2, endpoints: [TH-LT-1047, TH-LT-1052]}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1052
+      record: {kind: endpoint, hostname: TH-LT-1052, connector_guid: 00000000-0000-4000-8000-000000001052,
+               os: Windows 11, ip_addresses: [198.51.100.52], groups: [Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, display_name: J Smith, department: Finance,
+               groups: [Finance Users], risk_level: high, risk_state: at_risk, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: anomaly, anomaly_id: risk-1047-1, anomaly_type: unfamiliar_location, severity: HIGH,
+               user: jsmith@example.com, ip: 198.51.100.201, first_seen: "2026-01-15T10:55:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  considered: []
+  package: true
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - isolate_endpoint:TH-LT-1052
+    - block_hash:3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c
+    - block_domain:cdn-update.test
+    - block_ip:203.0.113.80
+    - revoke_sessions:jsmith@example.com
+    - disable_user:jsmith@example.com
+  elevated: []
+  excluded: []
+  unrouted: []
+  below_threshold: []
+  risk: {min: 80, max: 100}
+  confidence: {min: 50, max: 100}
+  degraded_sources: []
+  evidence_min: 1
+  containment: CONTAINED
+  controls: 6
+  notifications: [incident_note, soc_notification, analyst_summary]

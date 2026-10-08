@@ -1,124 +1,241 @@
-# Workflow: Ransomware
+# Ransomware
 
-Contain suspected ransomware quickly to limit encryption spread, then scope affected hosts and accounts.
+Phase 2 workflow `ransomware` (version 2.0.0, default severity CRITICAL). Definition:
+[`src/xdr_response/workflows/ransomware/definition.py`](../../src/xdr_response/workflows/ransomware/definition.py),
+hooks: [`hooks.py`](../../src/xdr_response/workflows/ransomware/hooks.py). It replaces the legacy
+specification of this directory (`legacy_id: ransomware`); the six legacy scenarios now live as
+`legacy-*` fixtures under `tests/fixtures/workflows/ransomware/`.
 
-|  |  |
-|---|---|
-| Default severity | critical |
-| Status | Specification. Not yet built in XDR Automation. |
-| Machine-readable spec | [`workflow.yaml`](workflow.yaml) |
-| Integrations | [Cisco XDR](../../integrations/cisco-xdr/README.md), [Cisco Secure Endpoint](../../integrations/secure-endpoint/README.md), [Cisco Umbrella / Secure Access](../../integrations/umbrella/README.md), [Splunk](../../integrations/splunk/README.md), [Cisco Meraki](../../integrations/meraki/README.md), [Microsoft Entra ID (via Microsoft Graph)](../../integrations/microsoft-entra/README.md), [ServiceNow](../../integrations/servicenow/README.md) |
+## Purpose
 
-## Triggers
+Contain suspected ransomware quickly to limit encryption spread, then scope the affected hosts,
+accounts, destinations and lateral targets. The workflow looks for mass file modification,
+suspicious encryption, shadow-copy deletion (recovery inhibition), known ransomware executables and
+simultaneous endpoint and network indicators.
 
-- **Incident rule** in XDR Automation matching the techniques below or the detection titles your sources produce.
-- **Pivot menu** on an incident or observable for manual runs.
-- **Playbook task** in the matching XDR incident response playbook.
+Investigation and recommendation are automatic. The workflow only **recommends**: it never calls a
+state-changing adapter method, never builds approval tokens and never enters a guard context. Every
+recommended action waits for a human decision in the lifecycle orchestrator.
 
-## Detection signals
+## Trigger
 
-Typical alerts that should route to this workflow:
+- **XDR incident rule** (priority 200): the incident reports ATT&CK technique T1486 or T1490 (or one
+  of their sub-techniques) in `trigger.mitre_techniques`.
+- **XDR incident rule** (priority 150): the incident title matches `*ransom*`,
+  `*mass file modification*`, `*shadow cop*` or `*encrypted*` (case-insensitive).
+- **Manual**: an analyst starts the workflow for an incident (`incident.workflow_id: ransomware`).
 
-- Secure Endpoint ransomware or malicious-activity-protection detection
-- Mass file modification or shadow copy deletion alerts
-- XDR incident tagged with an impact technique
+The XDR trigger sends only the incident id; the incident is re-read through the VERIFIED APIs
+(`tools/deployment/xdr-trigger-workflow.md`).
 
-## MITRE ATT&CK
+## Required integrations
 
-| Technique | Name |
-|---|---|
-| [T1486](https://attack.mitre.org/techniques/T1486/) | Data Encrypted for Impact |
-| [T1490](https://attack.mitre.org/techniques/T1490/) | Inhibit System Recovery |
-| [T1489](https://attack.mitre.org/techniques/T1489/) | Service Stop |
+These are the expected sources. When one is disabled or failing the run notes it and confidence
+drops; it never blocks a recommendation that other evidence supports.
 
-## Response flow
+- `secure_endpoint`: endpoint context, detections and device trajectory of the affected hosts
+  (`investigate_endpoint`); preferred isolation route.
+- `entra`: user profile, risk state, sign-ins and risk detections (`investigate_user`,
+  `investigate_authentication`); session revocation and account disable route.
 
-1. **Intake.** Load the incident summary, observables and the guardrails file.
-2. **Enrich.** [`enrich-hash`](../../atomic/enrich-hash/README.md), [`enrich-domain`](../../atomic/enrich-domain/README.md), [`enrich-ip`](../../atomic/enrich-ip/README.md).
-3. **Investigate.** [`investigate-host`](../../atomic/investigate-host/README.md) for the incident hosts plus the hosts `enrich-hash` lists for a malicious payload, and [`investigate-user`](../../atomic/investigate-user/README.md) for the users of the incident and its targets.
-4. **Decide.** Build a containment plan from the rules below and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
-5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
-6. **Record.** Add an incident note with the rollback for every action, and [`create-ticket`](../../atomic/create-ticket/README.md).
-7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
+## Optional integrations
 
-### Containment actions
+- `defender_endpoint`: context of Defender-managed devices; Defender isolation route when the host is
+  managed there; indicator route for hashes, domains, URLs and IPs.
+- `cisco_xdr`: enterprise hash and domain search, enrichment and native response actions (native
+  routes need operator-configured action ids).
+- `microsoft_cloud`: Microsoft Defender XDR alerts (typed detections) and hunting searches for payload
+  prevalence, related endpoints and DNS activity.
+- `splunk`: enterprise searches for payload prevalence, related endpoints, DNS and authentication.
+- `umbrella`: domain reputation; domain and URL block route.
+- `meraki`: IP block route at the network edge.
+- `secure_email`: originating message and campaign search; quarantine route.
+- `defender_o365`: quarantine route for Microsoft 365 mailboxes.
+- `virustotal`: second opinion on hash, domain, URL and IP reputation (the disclosure policy decides
+  what may be sent).
+- `alienvault_otx`: additional reputation for hashes, domains, URLs and IPs (disclosure policy applies).
+- `secure_malware_analytics`: sandbox-backed domain reputation.
 
-| Action | When | Approval |
-|---|---|---|
-| [`isolate-endpoint`](../../atomic/isolate-endpoint/README.md) | Isolation-capable host that has a malicious detection, or that has seen a malicious payload hash with a prevalence of 50 or less. Protected hosts need ELEVATED approval. | yes |
-| [`block-hash`](../../atomic/block-hash/README.md) | Payload hash with malicious disposition and a prevalence of 50 or less. Unknown-disposition or more widespread hashes are left to the approver. | yes |
-| [`revoke-session`](../../atomic/revoke-session/README.md) | Account listed in the same incident target as a host that has a malicious detection. | yes |
-| [`disable-user`](../../atomic/disable-user/README.md) | Account with Entra risk level high and at least one sign-in anomaly. | yes |
+## Input data
 
-### Containment rules
+Incident observables of these types: hostname, endpoint id, SHA-256, user, domain, URL, IPv4 address
+and email message id; plus `incident.users`, the title, the source and the reported ATT&CK
+techniques. Everything else is learned by the investigation: values found by one step feed the
+next (for example the endpoints a payload search lists become payload hosts to investigate).
 
-The `plan` list in [`workflow.yaml`](workflow.yaml) holds the exact expressions. Guardrails (protected hosts and users, allow-listed hashes, blast-radius caps) run after every rule and are not repeated in it.
+## Investigation steps
 
-| Rule id | Atomic | Condition in plain English |
-|---|---|---|
-| `isolate_detected_hosts` | `isolate-endpoint` | An investigated host has at least one detection with disposition `malicious` and its connector policy allows isolation. Target: connector GUID. |
-| `isolate_payload_hosts` | `isolate-endpoint` | An investigated host, isolation-capable, appears (by connector GUID or hostname) in the `hosts` list of a payload hash that is `malicious` with prevalence 50 or less, even without its own detection. |
-| `block_payload_hash` | `block-hash` | A hash is `malicious` and seen on 50 endpoints or fewer. Above 50 the `hosts` list is truncated and a mis-scored common binary becomes likely, so the approver decides. |
-| `revoke_sessions_on_affected_hosts` | `revoke-session` | An investigated user shares an incident target with a hostname whose investigation shows a `malicious` detection. |
-| `disable_compromised_users` | `disable-user` | An investigated user has Entra `risk_level` high and at least one entry in `anomalies`. |
+All steps are read-only atomics; a failing step or source is noted and the run continues.
 
-A host whose policy does not allow isolation is never planned; it shows up in the findings for manual containment.
+1. `affected_endpoints`: `investigate_endpoint` for every incident hostname and endpoint id
+   (endpoint record, detections, trajectory, network connections, DNS).
+2. `hash_reputation`: `enrich_hash` for incident hashes and hashes the endpoint records name.
+3. `payload_prevalence`: `search_hash_enterprise` (72 hour lookback) for hashes rated malicious or
+   suspicious, incident hashes and hashes a malicious detection or process event names.
+4. `payload_hosts`: `investigate_endpoint` for the endpoints that hold a flagged hash seen on at
+   most 50 endpoints (or with unknown prevalence).
+5. `lateral_scope`: `search_related_endpoints` for every endpoint with a malicious detection or
+   process event.
+6. `lateral_targets`: `investigate_endpoint` for the related endpoints.
+7. `users`: `investigate_user` for incident users and the accounts the endpoint records name (UPNs
+   only).
+8. `authentication`: `investigate_authentication` for those users.
+9. `email_origin`: `investigate_email` for incident message ids.
+10. `email_campaign`: `search_email_campaign` for those messages.
+11. `domain_reputation`: `enrich_domain` for incident domains and domains in DNS, connection and
+    message records.
+12. `url_reputation`: `enrich_url` for incident URLs and URLs in connection and message records.
+13. `ip_reputation`: `enrich_ip` for incident IPv4 addresses and outbound remote addresses.
+14. `domain_scope`: `search_domain_enterprise` for domains rated malicious or suspicious (other
+    endpoints that resolved them).
 
-### Error handling
+## Correlation logic
 
-| Phase | `on_error` | Why |
-|---|---|---|
-| Intake (`load_incident`, `load_guardrails`) | `stop` | Without the incident or the guardrails no safe plan can be built. |
-| Enrich, investigate | `continue` | A missing lookup only removes candidates from the plan; it never adds one. |
-| Decide (`build_plan`, `approval`) | `escalate` | A plan that cannot be built or approved goes to a human instead of silently doing nothing. |
-| Contain (all four actions) | `escalate` | A failed isolation, block or account action leaves encryption able to spread, so a human must pick it up. |
-| `incident_note`, `notify_soc` | `escalate` | The note carries the rollback, and the SOC must hear about a critical incident. |
-| `create_ticket` | `continue` | The incident note and notification still carry the record. |
+The framework link rules run over every record of the run within 60 minutes: the same hash, domain,
+IP or URL on two or more endpoints or users (payload spread, simultaneous network indicators), the
+same user on several endpoints, process lineage on one endpoint, a delivered message followed by a
+click, and campaign messages. The blast radius covers the incident clusters.
 
-### Message templates
+The workflow hooks (pure, no adapter access) derive these facts, each mapped to the record ids it
+was computed from:
 
-`templates` in [`workflow.yaml`](workflow.yaml) defines the approval text, incident note, ticket title and body, and the SOC notification. Placeholders use only `incident.`, `plan.`, `ticket.`, `workflow.` and `approver.` values. Templates never contain secrets or the isolation unlock code; the unlock code stays in the Secure Endpoint console.
+- **affected hosts**: a malicious detection, a malicious process event, execution of an
+  intel-confirmed payload, or vendor-flagged mass file modification (100 or more file events of one
+  process) together with vendor-flagged recovery inhibition (a recovery tool event or a detection
+  naming shadow copies, recovery or the backup catalog) on the same host;
+- **payload hosts**: endpoints holding a spreading payload (intel-confirmed, or named by a malicious
+  detection) seen on at most 50 endpoints;
+- **affected users** (accounts the records place on an affected host) and **compromised users**
+  (confirmed compromised, or high risk with at least one risk detection);
+- **blockable destinations**: domains, URLs and IPs rated malicious or suspicious that an affected
+  or payload host contacted, a malicious delivered message carried, or the incident lists;
+- **lateral targets**: related endpoints without ransomware activity of their own (scoped, not
+  isolated); **widespread hashes** (more than 50 endpoints) left to the approver.
 
-## Scenarios
+## Risk calculation
 
-Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them with `PYTHONPATH=engine python -m xdr_plan check ransomware`.
+Each recommended target is scored from the records its rule cites (separate `risk_score` and
+`confidence_score`, 0-100). Endpoint detections and vendor-flagged process events dominate. The
+hooks add three record-backed signals: encryption with recovery inhibition (endpoint detection,
+MALICIOUS, severity 90), payload spread to two or more hosts (lateral movement, SUSPICIOUS,
+severity 70) and a flagged destination contacted by an affected host (network behaviour, SUSPICIOUS,
+severity 60). The engine caps reputation at 50, caps a single source below CRITICAL unless it is a
+MALICIOUS behavioural detection, adds the corroboration and critical-asset bonuses and lowers
+confidence for failed expected sources. Default category weights. The package shows the highest
+risk and the mean confidence; every rationale ends with the score explanation and settings hash.
 
-| File | What it proves |
-|---|---|
-| [`01-workstation-encryption.yaml`](scenarios/01-workstation-encryption.yaml) | True positive: the detected host and a second host holding the payload are isolated, the hash is blocked, the account loses its sessions and is disabled. |
-| [`02-benign-backup-reencryption.yaml`](scenarios/02-benign-backup-reencryption.yaml) | A backup agent's mass file modification (clean, widespread hash, no malicious detection) produces no actions. |
-| [`03-protected-hypervisor-and-admins.yaml`](scenarios/03-protected-hypervisor-and-admins.yaml) | Guardrails: hypervisor, domain controller and OT-range hosts, a break-glass account and a Domain Admins member are planned with `elevated: true`; the workstation and the hash are planned behind normal approval. |
-| [`04-outbreak-blast-radius.yaml`](scenarios/04-outbreak-blast-radius.yaml) | Seven isolations exceed `max_hosts_isolated`, so all stay planned with `elevated: true` and the plan escalates; the hash block and session revocation stay planned. |
-| [`05-fresh-build-remote-share-encryption.yaml`](scenarios/05-fresh-build-remote-share-encryption.yaml) | Per-victim payload with unknown disposition: the source host is isolated on behaviour alone, the hash is not blocked, and the file server whose shares are encrypted remotely is not isolated. |
-| [`06-widespread-hash-not-blocked.yaml`](scenarios/06-widespread-hash-not-blocked.yaml) | Prevalence gate: a malicious-scored hash on 1800 endpoints is neither blocked nor used to isolate hosts; the low-prevalence payload is. |
+## Containment recommendations
 
-## Inputs
-
-| Variable | Type | Required | Description |
+| Rule | Action (builder) | When | Min risk |
 |---|---|---|---|
-| `incident_id` | string | no | Cisco XDR incident ID, used for notes and audit. |
-| `dry_run` | boolean | no | When true, report the planned change without making it. Default true for containment. |
-| `observables` | list | no | Overrides the incident observables. |
+| `isolate_affected_hosts` | `isolate_endpoint` (`isolate_secure_endpoint`) | affected host, isolation not forbidden, known to Secure Endpoint (or not to Defender) | 60 |
+| `isolate_payload_hosts` | `isolate_endpoint` (`isolate_secure_endpoint`) | payload host, same route conditions | 60 |
+| `isolate_defender_hosts` | `isolate_endpoint` (`isolate_defender_endpoint`) | affected or payload host managed by Defender for Endpoint | 60 |
+| `block_payload_hash` | `block_hash` (`block_hash`) | payload hash confirmed by reputation, not widespread | 60 |
+| `block_destination_domains` | `block_domain` (`block_domain_umbrella`) | blockable domain | 50 |
+| `block_destination_urls` | `block_url` (`block_url`) | blockable URL | 50 |
+| `block_destination_ips` | `block_ip` (`block_ip`) | blockable IP | 50 |
+| `revoke_affected_user_sessions` | `revoke_sessions` (`revoke_entra_sessions`) | affected or compromised account | 60 |
+| `disable_compromised_users` | `disable_user` (`disable_entra_user`) | compromised account | 60 |
+| `quarantine_originating_campaign` | `quarantine_email` (`quarantine_email`) | originating or campaign message rated malicious or suspicious, still delivered | 60 |
 
-## Guardrails
+A second rule for the same action and target merges its evidence into the first (one action per
+target). Below its minimum risk an action is listed as "considered, not proposed", never hidden.
+Every action carries numbered evidence that cites records of the run. Allow-listed targets are shown
+as excluded with the reason, never silently dropped.
 
-- `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
-- Blast-radius limits cap how many hosts, users or indicators a single run may touch.
-- Every containment action is reversible except session revocation, and the rollback is written into the incident note.
+### Hand-offs and items not proposed
 
-## Notes
+- Not proposed, and listed as considered: a host whose endpoint policy does not allow isolation (contain it by hand), a payload hash seen on more than 50 endpoints (a human decides on a fleet-wide block), and a hash named by a detection that no source rates.
+- Hand-offs: none.
 
-- Speed matters more than completeness here. Keep enrichment lookbacks short and keep an approver on call: isolation always needs a human approval, and after approval it executes automatically. There is no auto-approval.
-- The hosts that `enrich-hash` lists for a malicious payload are looped through `investigate-host`, and `isolate_payload_hosts` isolates them even before they raise their own detection.
+They appear in the run notes and in the analyst summary ("Considered, deliberately not proposed", "Manual steps", "Suggested hand-offs"), each with the record ids that show it. A hand-off is a suggestion only: it starts nothing and never changes the package (architecture 14.10.1).
 
-## Related workflows
+## Approval requirements
 
-[`malware`](../malware/README.md), [`lateral-movement`](../lateral-movement/README.md), [`exfiltration`](../exfiltration/README.md)
+Every action needs human approval before it runs, including session revocation; there is no
+automatic approval and no score can skip it. AI and automation principals can never approve.
+ELEVATED approval (a lead with the elevated approver role) applies when a target is a critical
+asset (for example a domain controller, hypervisor, production server or privileged account, by
+host pattern, group, tag, role or address range), when an action type is always elevated, or when
+a blast-radius cap is exceeded (for example more than five isolations in one package). The
+decision card shows the ELEVATED warning with the asset, role and potential impact; a critical
+asset is never skipped silently. The analyst may approve all, approve a selection or reject.
 
-## Building it in XDR Automation
+## Containment execution
 
-1. Import the Cisco-managed atomics this workflow needs from the Exchange, plus the custom atomics in [`atomic/`](../../atomic/README.md).
-2. Create the workflow from [`workflow.yaml`](workflow.yaml): variables from `inputs`, one group per `phase`, conditions from `when`.
-3. Test with `dry_run = true` against a test incident (see [docs/testing](../../docs/testing/README.md)).
-4. Export the workflow JSON and commit it here as `workflow.export.json`.
+After approval the lifecycle orchestrator executes the approved actions automatically through the
+execution guard, on the routes chosen at recommendation time (native Cisco XDR response first when
+configured, else the product adapter). Rejected or unselected actions are recorded as rejected by
+the analyst and never run. Dry run (the default) simulates the package and changes nothing.
+
+## Verification
+
+Every executed action is verified automatically by reading the target state back. Defender
+isolation, Umbrella destination lists, Meraki firewall rules, Entra account state and Secure Email
+moves are verifiable. Secure Endpoint isolation reports `UNABLE_TO_VERIFY` until its isolation-state
+read is verified (docs/integrations.md), and Microsoft 365 email remediation cannot be read back
+either; the result says so and the analyst checks the console.
+
+## Rollback
+
+Isolation, hash, domain, URL and IP blocks, account disable and quarantine are temporary controls in
+the restoration registry. Removing them needs a separate human release approval (release endpoint,
+unblock, enable user, release email); nothing expires on its own. Session revocation is not
+reversible: the user signs in again. Isolation release codes are never copied into notes or
+notifications; they stay in the vendor console.
+
+## Failure handling
+
+- A failed or disabled source becomes a degraded source in the notes and lowers confidence; the
+  recommendation stands on the remaining evidence (for example sessions are still revoked from the
+  Secure Endpoint records when Entra is unavailable).
+- A step whose expression or atomic fails is noted and skipped; partial results stay.
+- An action without an executable route is reported as unrouted for manual handling.
+- A failed execution is reported as FAILED (partial containment), never retried silently; the other
+  approved actions still run.
+
+## MITRE mapping
+
+| Tactic | Technique | Sub-technique | Rules | Why |
+|---|---|---|---|---|
+| TA0040 Impact | T1486 Data Encrypted for Impact | none | isolation, hash block | flagged mass file modification and encryption |
+| TA0040 Impact | T1490 Inhibit System Recovery | none | isolation | flagged shadow-copy, backup-catalog or boot-recovery tampering |
+| TA0008 Lateral Movement | T1570 Lateral Tool Transfer | none | payload host isolation | the same low-prevalence payload staged on further endpoints |
+| TA0011 Command and Control | T1071 Application Layer Protocol | none | destination blocks | affected hosts contacted destinations rated malicious |
+| TA0001 Initial Access | T1078 Valid Accounts | none | session revocation, account disable | accounts on affected hosts or confirmed compromised |
+| TA0001 Initial Access | T1566 Phishing | none | campaign quarantine | the originating message and its campaign |
+
+No sub-technique is mapped: the records do not distinguish them (protocol, account type, delivery
+form), so none is forced.
+
+## Testing instructions
+
+- Scenarios (format of architecture 14.5.2): `tests/fixtures/workflows/ransomware/`, the minimum set
+  of 14.5.3, six edge cases and the six migrated `legacy-*` scenarios. They run automatically in
+  dry run and simulated live through the orchestrator:
+  `python -m pytest -q -p no:cacheprovider tests/simulation/test_workflow_scenarios.py -k ransomware`.
+- Unit tests of the definition, rules and hooks: `tests/workflows/ransomware/`
+  (`python -m pytest -q -p no:cacheprovider tests/workflows/ransomware`).
+- One scenario by hand: `python tools/simulator/simulate.py --workflow ransomware --scenario tp-approve-all --check`
+  (add `--live` for the simulated live run).
+- README check: `python tools/validation/check_workflow_readmes.py --workflow ransomware`.
+
+## Known limitations
+
+- Real Secure Endpoint trajectory events stay generic records (no event field schema is verified),
+  so behavioural evidence (mass file modification, recovery inhibition) comes from typed detections,
+  for example Microsoft Defender XDR alerts, until the event schema is verified.
+- A host whose connector policy forbids isolation, a malicious hash seen on more than 50 endpoints
+  and a hash without a reputation verdict are not recommended; they are listed as considered (run
+  notes and analyst summary, with their records), and the analyst contains them by hand if needed.
+- Email origin is investigated only when the incident or a record carries a message id; mailboxes
+  are not searched by payload hash.
+- Lateral targets are scoped but isolated only with ransomware activity or the payload of their own;
+  a file server encrypted remotely over a share is not isolated.
+- Service Stop from the legacy specification is not mapped: no record kind carries service-stop
+  evidence.
+- Secure Endpoint hash blocking is UNVERIFIED, so a hash block routes through Defender for Endpoint
+  indicators or a configured Cisco XDR native action; a tenant whose only executor is Cisco XDR
+  native response needs product-pinned builders, and such actions are reported as unrouted for
+  manual handling.

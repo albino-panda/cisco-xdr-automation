@@ -1,0 +1,78 @@
+# Ransomware workflow scenario; fake lab data only.
+schema: 1
+name: edge-email-origin-campaign
+workflow: ransomware
+description: >-
+  The incident carries the id of the message that delivered the payload link. Secure Email shows
+  the message (malicious, still in the inbox) and its campaign: a second delivered copy to another
+  mailbox and a third already quarantined. Both delivered copies are recommended for quarantine
+  (the quarantined one is not), the link rated malicious is blocked, and the encrypting
+  workstation is isolated with the recipient's sessions revoked.
+tags: [edge_case, true_positive]
+mode: both
+incident:
+  incident_id: XDR-RW-0013
+  title: Ransomware detected on TH-LT-1047 after an invoice email
+  severity: CRITICAL
+  workflow_id: ransomware
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+    - {type: email_message_id, value: msg-rw-0013-a}
+  users: [jsmith@example.com]
+  trigger: {source: cisco_xdr, mitre_techniques: [T1486, T1566]}
+environment:
+  reputations:
+    - {type: url, value: "https://invoice-portal.test/view/2231", verdict: MALICIOUS, risk_score: 85,
+       confidence: 80, integrations: [umbrella, virustotal], summary: payload download page}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, ip_addresses: [198.51.100.47], users: [jsmith@example.com], groups: [Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-rw-1047-mail, name: Ransomware.Generic, category: Ransomware,
+               verdict: MALICIOUS, severity: CRITICAL, endpoint: TH-LT-1047, user: jsmith@example.com}
+    - integration: secure_email
+      atomic: investigate_email
+      subject: msg-rw-0013-a
+      record: {kind: email_message, message_id: msg-rw-0013-a, sender: billing@invoice-portal.test,
+               sender_domain: invoice-portal.test, recipients: [jsmith@example.com], recipient_count: 1,
+               subject_line: Invoice 2231 overdue, received_at: "2026-01-15T10:05:00Z", direction: inbound,
+               verdict: MALICIOUS, threat_types: [malware], urls: ["https://invoice-portal.test/view/2231"],
+               delivery_location: inbox, campaign_id: camp-rw-2231}
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: msg-rw-0013-a
+      record: {kind: email_message, message_id: msg-rw-0013-b, sender: billing@invoice-portal.test,
+               sender_domain: invoice-portal.test, recipients: [tlee@example.com], recipient_count: 1,
+               subject_line: Invoice 2231 overdue, received_at: "2026-01-15T10:06:00Z", direction: inbound,
+               verdict: MALICIOUS, threat_types: [malware], urls: ["https://invoice-portal.test/view/2231"],
+               delivery_location: inbox, campaign_id: camp-rw-2231}
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: msg-rw-0013-a
+      record: {kind: email_message, message_id: msg-rw-0013-c, sender: billing@invoice-portal.test,
+               sender_domain: invoice-portal.test, recipients: [akim@example.com], recipient_count: 1,
+               subject_line: Invoice 2231 overdue, received_at: "2026-01-15T10:06:30Z", direction: inbound,
+               verdict: MALICIOUS, threat_types: [malware], urls: ["https://invoice-portal.test/view/2231"],
+               delivery_location: quarantine, campaign_id: camp-rw-2231}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, department: Finance, groups: [Finance Users],
+               risk_level: low, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - quarantine_email:msg-rw-0013-a
+    - quarantine_email:msg-rw-0013-b
+    - block_url:https://invoice-portal.test/view/2231
+    - revoke_sessions:jsmith@example.com
+  elevated: []
+  containment: CONTAINED

@@ -1,0 +1,94 @@
+# Ransomware workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-01-workstation-encryption
+workflow: ransomware
+description: >-
+  Legacy 01, converted to typed records. Secure Endpoint flags the encrypting process and a shadow
+  copy deletion on WS-FIN-014; the payload hash is malicious with prevalence 2 and was also dropped
+  on WS-FIN-022, which has no detection yet. Both hosts are isolated (the second through the
+  payload rule), the hash is blocked, the account on the affected host loses its sessions and,
+  because Entra rates it high risk with a risk detection, is disabled. New in the migrated
+  workflow: the incident domain rated malicious, which WS-FIN-014 queried, is blocked too. Every
+  action needs human approval (C1); nothing is ELEVATED.
+tags: [legacy, true_positive]
+legacy_source: workflows/ransomware/scenarios/01-workstation-encryption.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-RW-0001
+  title: Ransomware detected on finance workstation
+  severity: CRITICAL
+  source: secure_endpoint
+  workflow_id: ransomware
+  observables:
+    - {type: sha256, value: 3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d}
+    - {type: hostname, value: WS-FIN-014}
+    - {type: domain, value: cdn-update.test}
+    - {type: user, value: fin.analyst01@example.com}
+  users: [fin.analyst01@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1486, T1490]}
+environment:
+  reputations:
+    - {type: sha256, value: 3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d, verdict: MALICIOUS,
+       risk_score: 95, confidence: 90, integrations: [secure_endpoint, virustotal], summary: ransomware payload}
+    - {type: domain, value: cdn-update.test, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [umbrella, virustotal], summary: malware category}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-014
+      record: {kind: endpoint, hostname: WS-FIN-014, connector_guid: 00000000-0000-4000-8000-00000000f014,
+               os: Windows 11, ip_addresses: [198.51.100.14], users: [fin.analyst01@example.com],
+               groups: [Finance Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-014
+      record: {kind: detection, detection_id: det-fin-014-1, name: Ransomware.Generic, category: Ransomware,
+               verdict: MALICIOUS, severity: CRITICAL, endpoint: WS-FIN-014, user: fin.analyst01@example.com,
+               sha256: 3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-014
+      record: {kind: detection, detection_id: det-fin-014-2, name: Shadow copy deletion, verdict: MALICIOUS,
+               severity: HIGH, endpoint: WS-FIN-014, user: fin.analyst01@example.com}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-014
+      record: {kind: dns_query, endpoint: WS-FIN-014, domain: cdn-update.test, query_type: A, count: 4}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d
+      record: {kind: hash_prevalence, sha256: 3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d,
+               verdict: MALICIOUS, prevalence: 2, endpoints: [WS-FIN-014, WS-FIN-022]}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-022
+      record: {kind: endpoint, hostname: WS-FIN-022, connector_guid: 00000000-0000-4000-8000-00000000f022,
+               os: Windows 11, ip_addresses: [198.51.100.22], groups: [Finance Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: entra
+      atomic: investigate_user
+      subject: fin.analyst01@example.com
+      record: {kind: user_profile, user: fin.analyst01@example.com, department: Finance, groups: [Finance Users],
+               risk_level: high, risk_state: at_risk, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: fin.analyst01@example.com
+      record: {kind: anomaly, anomaly_id: risk-fin-01, anomaly_type: unfamiliar_location, severity: MEDIUM,
+               user: fin.analyst01@example.com, ip: 203.0.113.40}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: fin.analyst01@example.com
+      record: {kind: sign_in, sign_in_id: si-fin-01, user: fin.analyst01@example.com,
+               timestamp: "2026-01-15T09:10:00Z", ip: 203.0.113.40, app: VPN, result: success}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:WS-FIN-014
+    - isolate_endpoint:WS-FIN-022
+    - block_hash:3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d
+    - block_domain:cdn-update.test
+    - revoke_sessions:fin.analyst01@example.com
+    - disable_user:fin.analyst01@example.com
+  elevated: []
+  excluded: []
+  unrouted: []
