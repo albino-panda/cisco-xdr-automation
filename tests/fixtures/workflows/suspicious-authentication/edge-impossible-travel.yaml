@@ -1,0 +1,59 @@
+# suspicious-authentication workflow scenario; fake lab data only.
+schema: 1
+name: edge-impossible-travel
+workflow: suspicious-authentication
+description: >-
+  dokafor signs in from the London office at 09:00 UTC and, 40 minutes later, from Singapore through an IP
+  that only VirusTotal rates suspicious. Two countries 40 minutes apart is impossible travel (2 points), the
+  country is new (1) and the source is rated suspicious (1): the revocation is proposed and the account is
+  handed off to account-takeover. The IP is not blocked: no source rates it malicious.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], meraki: [network], hibp: [intel],
+        virustotal: [intel], intune: [endpoint]}
+incident:
+  incident_id: XDR-SA-0011
+  title: Suspicious sign-in for dokafor@example.com from two countries
+  severity: HIGH
+  workflow_id: suspicious-authentication
+  observables:
+    - {type: user, value: dokafor@example.com}
+  users: [dokafor@example.com]
+  trigger: {source: entra}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.210, verdict: SUSPICIOUS, risk_score: 45, confidence: 60,
+       integrations: [virustotal], summary: hosting range seen in credential abuse}
+    - {type: ip, value: 198.51.100.10, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [cisco_xdr], summary: corporate office egress}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: dokafor@example.com
+      record: {kind: user_profile, user: dokafor@example.com, display_name: D Okafor, department: Marketing,
+               groups: [Marketing], account_enabled: true, risk_level: low, risk_state: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: dokafor@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0011-1, user: dokafor@example.com, timestamp: "2026-01-13T09:05:00Z",
+               ip: 198.51.100.10, country: GB, app: Microsoft Teams, device_id: dev-sa-d001, device_compliant: true,
+               result: success, mfa_result: satisfied}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: dokafor@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0011-2, user: dokafor@example.com, timestamp: "2026-01-15T09:00:00Z",
+               ip: 198.51.100.10, country: GB, app: Microsoft Teams, device_id: dev-sa-d001, device_compliant: true,
+               result: success, mfa_result: satisfied}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: dokafor@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0011-3, user: dokafor@example.com, timestamp: "2026-01-15T09:40:00Z",
+               ip: 203.0.113.210, country: SG, app: Office 365 Exchange Online, device_id: dev-sa-d001,
+               device_compliant: true, result: success, mfa_result: satisfied, risk_level: low}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions: [revoke_sessions:dokafor@example.com]
+  handoffs: ["account-takeover:dokafor@example.com"]
+  containment: CONTAINED
+  controls: 0

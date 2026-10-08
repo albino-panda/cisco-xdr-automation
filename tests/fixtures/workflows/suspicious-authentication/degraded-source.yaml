@@ -1,0 +1,61 @@
+# suspicious-authentication workflow scenario; fake lab data only.
+schema: 1
+name: degraded-source
+workflow: suspicious-authentication
+description: >-
+  Cisco XDR enrichment is unavailable, so the sign-in IP has no verdict and no block can be justified.
+  Entra still reports an anonymous-IP detection for the successful sign-in of akim from a country the
+  baseline never shows: the session revocation is recommended from that evidence alone, the run lists
+  cisco_xdr as a degraded source and confidence drops. The failed source never blocks the recommendation.
+tags: [degraded_source, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], meraki: [network], hibp: [intel],
+        virustotal: [intel], intune: [endpoint]}
+incident:
+  incident_id: XDR-SA-0005
+  title: Suspicious sign-in for akim@example.com from anonymous IP
+  severity: HIGH
+  workflow_id: suspicious-authentication
+  observables:
+    - {type: user, value: akim@example.com}
+    - {type: ip, value: 203.0.113.201}
+  users: [akim@example.com]
+  trigger: {source: entra}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.201, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: never returned because the source is down}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: akim@example.com
+      record: {kind: user_profile, user: akim@example.com, display_name: A Kim, department: Legal,
+               groups: [Legal Users], account_enabled: true, risk_level: medium, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: akim@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0005-1, user: akim@example.com, timestamp: "2026-01-13T09:30:00Z",
+               ip: 198.51.100.31, country: US, app: Office 365 Exchange Online, device_id: dev-sa-k001,
+               device_compliant: true, result: success, mfa_result: satisfied}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: akim@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0005-2, user: akim@example.com, timestamp: "2026-01-15T11:30:00Z",
+               ip: 203.0.113.201, country: RO, app: Office 365 Exchange Online, device_id: dev-sa-k001,
+               device_compliant: true, result: success, mfa_result: satisfied, risk_level: low}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: akim@example.com
+      record: {kind: anomaly, anomaly_id: rd-sa-0005-1, anomaly_type: anonymous_ip, severity: MEDIUM,
+               user: akim@example.com, ip: 203.0.113.201, detail: sign-in through an anonymising proxy,
+               first_seen: "2026-01-15T11:30:00Z"}
+  faults:
+    - {kind: UNAVAILABLE, integration: cisco_xdr, operation: enrich, times: 20}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions: [revoke_sessions:akim@example.com]
+  degraded_sources: [cisco_xdr]
+  confidence: {min: 1, max: 90}
+  containment: CONTAINED
+  controls: 0

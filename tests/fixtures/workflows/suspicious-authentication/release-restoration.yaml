@@ -1,0 +1,57 @@
+# suspicious-authentication workflow scenario; fake lab data only.
+schema: 1
+name: release-restoration
+workflow: suspicious-authentication
+description: >-
+  The sessions of bdiaz were revoked at 08:00 UTC, and at 10:15 a successful sign-in comes again from a
+  malicious IP in a country the baseline never shows: the analyst approves revoke, disable (used again
+  after revocation) and block; all execute and verify. After the help desk reset the password and
+  re-registered MFA, a separate human release decision re-enables the account and removes the IP block.
+  Session revocation is not reversible and has no control to release.
+tags: [release, true_positive, approve_all]
+mode: live
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], meraki: [network], hibp: [intel],
+        virustotal: [intel], intune: [endpoint]}
+incident:
+  incident_id: XDR-SA-0009
+  title: Suspicious sign-in for bdiaz@example.com after session revocation
+  severity: HIGH
+  workflow_id: suspicious-authentication
+  observables:
+    - {type: user, value: bdiaz@example.com}
+  users: [bdiaz@example.com]
+  trigger: {source: entra}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.199, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: credential-abuse infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: bdiaz@example.com
+      record: {kind: user_profile, user: bdiaz@example.com, display_name: B Diaz, department: Procurement,
+               groups: [Procurement], account_enabled: true, risk_level: medium, risk_state: at_risk,
+               sessions_valid_from: "2026-01-15T08:00:00Z"}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: bdiaz@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0009-1, user: bdiaz@example.com, timestamp: "2026-01-13T09:00:00Z",
+               ip: 198.51.100.33, country: ES, app: Office 365 Exchange Online, device_id: dev-sa-b001,
+               device_compliant: true, result: success, mfa_result: satisfied}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: bdiaz@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0009-2, user: bdiaz@example.com, timestamp: "2026-01-15T10:15:00Z",
+               ip: 198.51.100.199, country: NG, app: Office 365 Exchange Online, device_id: dev-sa-b001,
+               device_compliant: true, result: success, mfa_result: satisfied, risk_level: medium}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+release: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions:
+    - revoke_sessions:bdiaz@example.com
+    - disable_user:bdiaz@example.com
+    - block_ip:198.51.100.199
+  containment: CONTAINED
+  controls: 2
+  restoration: RESTORED
+  final_state: RESTORED

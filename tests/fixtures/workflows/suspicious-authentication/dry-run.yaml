@@ -1,0 +1,54 @@
+# suspicious-authentication workflow scenario; fake lab data only.
+schema: 1
+name: dry-run
+workflow: suspicious-authentication
+description: >-
+  Dry run of a likely compromise: jsmith signs in at night from a malicious IP in a new country on an
+  unregistered device. The package (revoke, block) is proposed and simulated; nothing changes at any
+  vendor and the incident stays AWAITING_APPROVAL after the simulated approval.
+tags: [dry_run, true_positive]
+mode: dry_run
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], meraki: [network], hibp: [intel],
+        virustotal: [intel], intune: [endpoint]}
+incident:
+  incident_id: XDR-SA-0008
+  title: Suspicious sign-in for jsmith@example.com from an unfamiliar country
+  severity: HIGH
+  workflow_id: suspicious-authentication
+  observables:
+    - {type: user, value: jsmith@example.com}
+  users: [jsmith@example.com]
+  trigger: {source: entra}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.145, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: known credential-abuse infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, display_name: J Smith, department: Finance,
+               groups: [Finance Users], account_enabled: true, risk_level: medium, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0008-1, user: jsmith@example.com, timestamp: "2026-01-13T09:15:00Z",
+               ip: 198.51.100.10, country: GB, app: Office 365 Exchange Online, device_id: dev-sa-a001,
+               device_compliant: true, result: success, mfa_result: satisfied}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0008-2, user: jsmith@example.com, timestamp: "2026-01-15T02:40:00Z",
+               ip: 203.0.113.145, country: NL, app: Office 365 Exchange Online, result: success,
+               mfa_result: satisfied, risk_level: medium}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions:
+    - revoke_sessions:jsmith@example.com
+    - block_ip:203.0.113.145
+  dry_run_lines:
+    - DRY RUN
+    - "Would revoke sessions: jsmith@example.com"
+    - "Would block: 203.0.113.145"
+    - No containment actions executed.
+  notifications: [incident_note, soc_notification, analyst_summary]

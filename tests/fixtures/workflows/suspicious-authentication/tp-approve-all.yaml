@@ -1,0 +1,94 @@
+# suspicious-authentication workflow scenario; fake lab data only.
+schema: 1
+name: tp-approve-all
+workflow: suspicious-authentication
+description: >-
+  True positive: jsmith normally signs in from the London office on a registered, compliant laptop during
+  office hours. At 02:40 UTC a successful sign-in comes from an IP that Cisco XDR rates malicious, in a
+  country the 14-day baseline never shows, from an unregistered non-compliant device, and HIBP lists the
+  address in breach data. Fifteen minutes later an external forwarding rule appears. The package revokes
+  the sessions, disables the account (post-sign-in persistence) and blocks the source IP; the analyst
+  approves everything and every action executes and verifies.
+tags: [true_positive, approve_all]
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], meraki: [network], hibp: [intel],
+        virustotal: [intel], intune: [endpoint]}
+incident:
+  incident_id: XDR-SA-0001
+  title: Suspicious sign-in for jsmith@example.com from an unfamiliar country
+  severity: HIGH
+  workflow_id: suspicious-authentication
+  observables:
+    - {type: user, value: jsmith@example.com}
+    - {type: ip, value: 203.0.113.145}
+  users: [jsmith@example.com]
+  trigger: {source: entra}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.145, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: known credential-abuse infrastructure}
+    - {type: ip, value: 198.51.100.10, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [cisco_xdr], summary: corporate office egress}
+    - {type: email_address, value: jsmith@example.com, verdict: SUSPICIOUS, risk_score: 40, confidence: 90,
+       integrations: [hibp], summary: address appears in 2 known breaches}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, object_id: 00000000-0000-4000-8000-00000000a001,
+               display_name: J Smith, department: Finance, groups: [Finance Users], roles: [], privileged: false,
+               account_enabled: true, risk_level: medium, risk_state: at_risk, mfa_registered: true}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0001-1, user: jsmith@example.com, timestamp: "2026-01-12T08:30:00Z",
+               ip: 198.51.100.10, country: GB, city: London, app: Microsoft Teams, device_id: dev-sa-a001,
+               device_compliant: true, result: success, mfa_result: satisfied, risk_level: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0001-2, user: jsmith@example.com, timestamp: "2026-01-13T09:15:00Z",
+               ip: 198.51.100.10, country: GB, city: London, app: Office 365 Exchange Online, device_id: dev-sa-a001,
+               device_compliant: true, result: success, mfa_result: satisfied, risk_level: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0001-3, user: jsmith@example.com, timestamp: "2026-01-14T10:05:00Z",
+               ip: 198.51.100.10, country: GB, city: London, app: Office 365 Exchange Online, device_id: dev-sa-a001,
+               device_compliant: true, result: success, mfa_result: satisfied, risk_level: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0001-4, user: jsmith@example.com, timestamp: "2026-01-15T02:40:00Z",
+               ip: 203.0.113.145, country: NL, city: Amsterdam, app: Office 365 Exchange Online,
+               device_compliant: false, result: success, mfa_result: satisfied, risk_level: medium}
+    - integration: entra
+      atomic: search_user_activity
+      subject: jsmith@example.com
+      record: {kind: mailbox_rule, mailbox: jsmith@example.com, rule_id: rule-sa-0001, name: Archive copy,
+               enabled: true, forward_to: [archive-box@mailbox.test], external_forwarding: true,
+               created_at: "2026-01-15T02:55:00Z", created_by: jsmith@example.com}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - revoke_sessions:jsmith@example.com
+    - disable_user:jsmith@example.com
+    - block_ip:203.0.113.145
+  elevated: []
+  excluded: []
+  unrouted: []
+  below_threshold: []
+  risk: {min: 60, max: 100}
+  confidence: {min: 50, max: 100}
+  degraded_sources: []
+  handoffs: ["account-takeover:jsmith@example.com"]
+  manual_steps: ["password-reset:jsmith@example.com"]
+  evidence_min: 2
+  containment: CONTAINED
+  results:
+    revoke_sessions:jsmith@example.com: SUCCESS
+    disable_user:jsmith@example.com: SUCCESS
+    block_ip:203.0.113.145: SUCCESS
+  controls: 2
+  notifications: [incident_note, soc_notification, analyst_summary]

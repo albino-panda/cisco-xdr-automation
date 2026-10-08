@@ -1,0 +1,58 @@
+# suspicious-authentication workflow scenario; fake lab data only.
+schema: 1
+name: critical-asset-elevated
+workflow: suspicious-authentication
+description: >-
+  The administrator account adm-tgreen (Security Administrator) signs in successfully through a Tor exit
+  that Cisco XDR rates malicious and Entra flags with a HIGH anonymous-IP detection. Revoking its sessions
+  and disabling it (privileged) need ELEVATED approval with a visible privileged-account warning: an
+  analyst alone is refused, the lead approves. The IP block is a standard action in the same package.
+tags: [critical_asset, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], meraki: [network], hibp: [intel],
+        virustotal: [intel], intune: [endpoint]}
+incident:
+  incident_id: XDR-SA-0006
+  title: Suspicious sign-in for administrator adm-tgreen@example.com from Tor
+  severity: CRITICAL
+  workflow_id: suspicious-authentication
+  observables:
+    - {type: user, value: adm-tgreen@example.com}
+    - {type: ip, value: 198.51.100.188}
+  users: [adm-tgreen@example.com]
+  trigger: {source: entra}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.188, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [cisco_xdr], summary: Tor exit node used for credential abuse}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: adm-tgreen@example.com
+      record: {kind: user_profile, user: adm-tgreen@example.com, display_name: T Green (admin), department: IT,
+               groups: [IT Admins], roles: [Security Administrator], privileged: true, account_enabled: true,
+               risk_level: medium, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: adm-tgreen@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0006-1, user: adm-tgreen@example.com,
+               timestamp: "2026-01-15T10:05:00Z", ip: 198.51.100.188, country: CH, app: Azure Portal,
+               result: success, mfa_result: satisfied, risk_level: medium}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: adm-tgreen@example.com
+      record: {kind: anomaly, anomaly_id: rd-sa-0006-1, anomaly_type: anonymous_ip, severity: HIGH,
+               user: adm-tgreen@example.com, ip: 198.51.100.188, detail: sign-in from a Tor exit node,
+               first_seen: "2026-01-15T10:05:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - revoke_sessions:adm-tgreen@example.com
+    - disable_user:adm-tgreen@example.com
+    - block_ip:198.51.100.188
+  elevated:
+    - revoke_sessions:adm-tgreen@example.com
+    - disable_user:adm-tgreen@example.com
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  containment: CONTAINED
+  controls: 2

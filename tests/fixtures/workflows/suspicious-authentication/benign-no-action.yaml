@@ -1,0 +1,64 @@
+# suspicious-authentication workflow scenario; fake lab data only.
+schema: 1
+name: benign-no-action
+workflow: suspicious-authentication
+description: >-
+  Business travel: tnguyen signs in from a hotel network in France on the usual registered, compliant
+  laptop during normal hours, and Entra raises a LOW unfamiliar-location detection. The unusual country is
+  the only indicator (1 point, threshold 3) and Cisco XDR rates the hotel IP clean, so nothing is proposed;
+  the account is shown as considered and the incident stays NOT_STARTED for the analyst to close.
+tags: [benign]
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], meraki: [network], hibp: [intel],
+        virustotal: [intel], intune: [endpoint]}
+incident:
+  incident_id: XDR-SA-0004
+  title: Unusual sign-in location for tnguyen@example.com
+  severity: MEDIUM
+  workflow_id: suspicious-authentication
+  observables:
+    - {type: user, value: tnguyen@example.com}
+  users: [tnguyen@example.com]
+  trigger: {source: entra}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.90, verdict: CLEAN, risk_score: 0, confidence: 70,
+       integrations: [cisco_xdr], summary: hotel guest network}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: tnguyen@example.com
+      record: {kind: user_profile, user: tnguyen@example.com, display_name: T Nguyen, department: Finance,
+               groups: [Finance Users], account_enabled: true, risk_level: low, risk_state: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: tnguyen@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0004-1, user: tnguyen@example.com, timestamp: "2026-01-12T13:05:00Z",
+               ip: 198.51.100.10, country: GB, app: Microsoft Teams, device_id: dev-sa-t001, device_compliant: true,
+               result: success, mfa_result: satisfied, risk_level: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: tnguyen@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0004-2, user: tnguyen@example.com, timestamp: "2026-01-13T14:40:00Z",
+               ip: 198.51.100.10, country: GB, app: Office 365 Exchange Online, device_id: dev-sa-t001,
+               device_compliant: true, result: success, mfa_result: satisfied, risk_level: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: tnguyen@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0004-3, user: tnguyen@example.com, timestamp: "2026-01-15T11:20:00Z",
+               ip: 198.51.100.90, country: FR, city: Lyon, app: Office 365 Exchange Online, device_id: dev-sa-t001,
+               device_compliant: true, result: success, mfa_result: satisfied, risk_level: low}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: tnguyen@example.com
+      record: {kind: anomaly, anomaly_id: rd-sa-0004-1, anomaly_type: unfamiliar_location, severity: LOW,
+               user: tnguyen@example.com, ip: 198.51.100.90, first_seen: "2026-01-15T11:20:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  below_threshold: []
+  unrouted: []
+  degraded_sources: []
+  considered: ["revoke_sessions:tnguyen@example.com"]
+  handoffs: []

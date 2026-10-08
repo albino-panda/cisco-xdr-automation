@@ -1,0 +1,72 @@
+# suspicious-authentication workflow scenario; fake lab data only.
+schema: 1
+name: edge-tor-failed-attempts
+workflow: suspicious-authentication
+description: >-
+  Three sign-in attempts against sbrown come from a Tor exit that Cisco XDR rates malicious and Entra flags
+  with a HIGH anonymous-IP detection, but every attempt failed; the only success is from the usual office.
+  The account shows no successful suspicious sign-in, so its sessions are not revoked; the attacker source
+  is still blocked (pending human approval), backed by the failed attempts, the detection and the rating.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], meraki: [network], hibp: [intel],
+        virustotal: [intel], intune: [endpoint]}
+incident:
+  incident_id: XDR-SA-0013
+  title: Sign-in attempts from Tor exit node for sbrown@example.com
+  severity: MEDIUM
+  workflow_id: suspicious-authentication
+  observables:
+    - {type: user, value: sbrown@example.com}
+    - {type: ip, value: 203.0.113.230}
+  users: [sbrown@example.com]
+  trigger: {source: entra}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.230, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [cisco_xdr], summary: Tor exit node used for credential abuse}
+    - {type: ip, value: 198.51.100.10, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [cisco_xdr], summary: corporate office egress}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: sbrown@example.com
+      record: {kind: user_profile, user: sbrown@example.com, display_name: S Brown, department: Legal,
+               groups: [Legal Users], account_enabled: true, risk_level: low, risk_state: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: sbrown@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0013-1, user: sbrown@example.com, timestamp: "2026-01-15T06:10:00Z",
+               ip: 203.0.113.230, country: NL, app: Office 365 Exchange Online, result: failure,
+               failure_reason: invalid username or password}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: sbrown@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0013-2, user: sbrown@example.com, timestamp: "2026-01-15T06:12:00Z",
+               ip: 203.0.113.230, country: NL, app: Office 365 Exchange Online, result: failure,
+               failure_reason: invalid username or password}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: sbrown@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0013-3, user: sbrown@example.com, timestamp: "2026-01-15T06:15:00Z",
+               ip: 203.0.113.230, country: NL, app: Office 365 Exchange Online, result: failure,
+               failure_reason: invalid username or password}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: sbrown@example.com
+      record: {kind: sign_in, sign_in_id: si-sa-0013-4, user: sbrown@example.com, timestamp: "2026-01-15T09:05:00Z",
+               ip: 198.51.100.10, country: GB, app: Microsoft Teams, device_id: dev-sa-s001, device_compliant: true,
+               result: success, mfa_result: satisfied}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: sbrown@example.com
+      record: {kind: anomaly, anomaly_id: rd-sa-0013-1, anomaly_type: anonymous_ip, severity: HIGH,
+               user: sbrown@example.com, ip: 203.0.113.230, detail: sign-in attempts from a Tor exit node,
+               first_seen: "2026-01-15T06:10:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions: [block_ip:203.0.113.230]
+  handoffs: []
+  containment: CONTAINED
+  controls: 1
