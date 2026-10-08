@@ -1,126 +1,262 @@
-# Workflow: Account takeover
+# Account takeover
 
-Respond to a sign-in by an attacker using valid credentials or a stolen session.
+Workflow id `account-takeover`, version 2.0.0, Phase 2. Definition:
+[`definition.py`](../../src/xdr_response/workflows/account_takeover/definition.py), hooks:
+[`hooks.py`](../../src/xdr_response/workflows/account_takeover/hooks.py). Binding design:
+[`docs/architecture.md`](../../docs/architecture.md) sections 13 and 14.
 
-|  |  |
-|---|---|
-| Default severity | high |
-| Status | Specification. Not yet built in XDR Automation. |
-| Machine-readable spec | [`workflow.yaml`](workflow.yaml) |
-| Integrations | [Cisco XDR](../../integrations/cisco-xdr/README.md), [Cisco Umbrella / Secure Access](../../integrations/umbrella/README.md), [Splunk](../../integrations/splunk/README.md), [Microsoft Entra ID (via Microsoft Graph)](../../integrations/microsoft-entra/README.md), [Cisco Meraki](../../integrations/meraki/README.md), [Cloudflare](../../integrations/cloudflare/README.md), [ServiceNow](../../integrations/servicenow/README.md) |
+## Purpose
 
-## Triggers
+Respond to a sign-in by an attacker who uses valid credentials or a stolen session. The workflow
+investigates the account (identity profile and session state, sign-ins, MFA activity, identity-provider
+risk detections, post-sign-in cloud activity), the sign-in source IPs (reputation and enterprise
+prevalence) and the user's endpoints named by the incident, and then **recommends** a containment
+package: revoke the account's sessions, disable the account, isolate a linked infected endpoint and
+block the attacker IP.
 
-- **Incident rule** in XDR Automation matching the techniques below or the detection titles your sources produce.
-- **Pivot menu** on an incident or observable for manual runs.
-- **Playbook task** in the matching XDR incident response playbook.
+Investigation and recommendation are automatic. The workflow never changes anything itself: every
+action waits for a human approval, approved actions are executed and verified by the lifecycle, and
+undoing a reversible action needs a separate human release approval.
 
-## Detection signals
+## Trigger
 
-Typical alerts that should route to this workflow:
+- **XDR incident rule** (priority 100): the incident's detections report `T1078.004` or `T1539` and the
+  incident carries a user observable.
+- **XDR incident rule** (priority 90): the incident title looks like a risky, high-risk, unfamiliar,
+  impossible-travel or atypical-travel sign-in, an account takeover or a token replay, and the incident
+  carries a user observable.
+- **Manual**: an analyst starts the workflow from an incident or a user pivot.
 
-- Entra risky sign-in or impossible travel
-- MFA fatigue pattern
-- Sign-in from anonymising infrastructure
+MFA prompt floods (`T1621` reported on its own) route to the `mfa-fatigue` workflow (priority 200);
+password-spray and BEC incidents route to their own workflows. The XDR trigger only sends the incident
+id; the incident is re-read through the VERIFIED APIs (`tools/deployment/xdr-trigger-workflow.md`).
 
-## MITRE ATT&CK
+## Required integrations
 
-| Technique | Name |
-|---|---|
-| [T1078.004](https://attack.mitre.org/techniques/T1078/004/) | Valid Accounts: Cloud Accounts |
-| [T1621](https://attack.mitre.org/techniques/T1621/) | Multi-Factor Authentication Request Generation |
-| [T1539](https://attack.mitre.org/techniques/T1539/) | Steal Web Session Cookie |
+The expected sources. When one is disabled or failing the run notes it and confidence drops; a
+recommendation backed by other evidence is still made.
 
-## Response flow
-
-1. **Intake.** Load the incident summary, observables and the guardrails file.
-2. **Enrich.** [`enrich-ip`](../../atomic/enrich-ip/README.md).
-3. **Investigate.** [`investigate-user`](../../atomic/investigate-user/README.md).
-4. **Decide.** Build a containment plan and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
-5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
-6. **Record.** Add an incident note and [`create-ticket`](../../atomic/create-ticket/README.md).
-7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
-
-### Containment actions
-
-| Action | When | Approval |
+| Integration | Purpose | Read atomics |
 |---|---|---|
-| [`revoke-session`](../../atomic/revoke-session/README.md) | The investigated user has Entra risk level high, a successful sign-in from an IP enriched as malicious or suspicious, or an MFA fatigue anomaly followed by a successful sign-in. | yes |
-| [`disable-user`](../../atomic/disable-user/README.md) | The user meets the `revoke-session` condition and holds a privileged role, or the user's sessions were already revoked earlier for this incident and a successful sign-in from a malicious or suspicious IP is still present. | yes |
-| [`block-ip`](../../atomic/block-ip/README.md) | An enriched IP that is not shared infrastructure (no internal sightings) and either has verdict malicious and appears in an investigated user's sign-ins, or is not clean and sent 3 or more denied MFA prompts to a user with an MFA fatigue anomaly. | yes |
+| `entra` | User profile and session state, sign-in logs, MFA and risk context; executes the approved session revocation and account disable | `investigate_user`, `investigate_authentication`, `search_user_activity` |
+| `cisco_xdr` | Verdicts for the sign-in source IPs and enterprise sightings of those IPs | `enrich_ip`, `search_ip_enterprise` |
 
-### Error handling
+## Optional integrations
 
-| Phase | `on_error` | Why |
+| Integration | Purpose | Read atomics |
 |---|---|---|
-| Intake (`load_incident`, `load_guardrails`) | `stop` | Without the incident or the guardrails nothing may be contained. |
-| Enrich, investigate | `continue` | Missing data only means fewer rules match; the gap is recorded in the note. |
-| Decide (`build_plan`, `approval`) | `escalate` | No containment runs without a plan and an approval; a human takes over. |
-| Contain (all three actions) | `escalate` | A failed identity or perimeter action leaves the attacker in place and needs a human. |
-| Record, notify | `continue` | The note, ticket and notification are independent; one failing must not hide the others. |
+| `microsoft_cloud` | Defender XDR alerts and advanced hunting for sign-ins, user activity and IP prevalence | `investigate_authentication`, `search_user_activity`, `search_ip_enterprise` |
+| `secure_endpoint` | Detections and isolation state of the user's endpoints; executes the approved isolation | `investigate_endpoint` |
+| `defender_endpoint` | Detections of the user's endpoints and IP prevalence; executes an approved isolation or IP indicator | `investigate_endpoint`, `search_ip_enterprise` |
+| `virustotal` | Second opinion on public sign-in source IPs (never non-public addresses) | `enrich_ip` |
+| `alienvault_otx` | Second opinion on public sign-in source IPs (never non-public addresses) | `enrich_ip` |
+| `meraki` | Executes the approved attacker IP block as an MX layer 3 firewall rule (no reads) | none |
+| `splunk` | Optional SIEM search for sign-ins, user activity and IP prevalence | `investigate_authentication`, `search_user_activity`, `search_ip_enterprise` |
 
-## Containment rules
+## Input data
 
-The `plan` list in [`workflow.yaml`](workflow.yaml) turns the conditions above into rules the
-[plan engine](../../engine/README.md) evaluates. "Compromised" below means: Entra risk level high, or a
-successful sign-in from an IP enriched as malicious or suspicious, or an `mfa_fatigue` anomaly together
-with a successful sign-in. Guardrails (protected users and groups, internal and allow-listed IPs,
-blast-radius caps) are applied by the engine after each rule and are not repeated in the rules.
+- The Cisco XDR incident: id, title, severity, source, trigger (reported techniques), `users`, assets and
+  observables.
+- Observable types used: `user` (the investigated accounts), `ip` / `ipv6` (sign-in sources), `hostname`
+  (the user's endpoints). Incident trigger context (for example a travel request or a "previously
+  revoked" list) is data shown to the analyst, never evidence.
+- Policy from `config/`: critical assets (privileged and break-glass account patterns, directory roles,
+  production and network CIDRs), allow-lists (`never_block` users, IPs and CIDRs such as VPN pools),
+  disclosure exclusions and scoring thresholds.
 
-| Rule id | Atomic | Condition in plain English |
-|---|---|---|
-| `revoke_compromised_sessions` | `revoke-session` | The investigated user is compromised. |
-| `disable_privileged_compromised_user` | `disable-user` | The user is compromised and `profile.privileged_roles` is not empty. |
-| `disable_user_active_after_revocation` | `disable-user` | The user is listed in `incident.context.previously_revoked_users` and still has a successful sign-in from a malicious or suspicious IP. |
-| `block_malicious_signin_ips` | `block-ip` | The IP's verdict is malicious, no internal hosts talk to it (`internal_sightings` is 0), and it appears in an investigated user's sign-ins. |
-| `block_mfa_fatigue_sources` | `block-ip` | The IP's verdict is not clean, `internal_sightings` is 0, and it sent 3 or more `mfa_denied` sign-ins to a user with an `mfa_fatigue` anomaly. This catches fresh attacker infrastructure with no reputation yet. |
+## Investigation steps
 
-Fields used inside `profile` (`privileged_roles`, `groups`) and `signins` (`ip`, `result`) follow the
-descriptions in the [`investigate-user`](../../atomic/investigate-user/atomic.yaml) outputs. Expected
-`anomalies` values include `impossible_travel`, `unfamiliar_location`, `new_device` and `mfa_fatigue`.
+All steps are read-only atomics (`ReadOnlyAdapters`); a failing source becomes a degraded source, never
+an error that stops the run.
 
-## Scenarios
+| Step | Atomic | Subjects | Lookback | What it learns |
+|---|---|---|---|---|
+| `user_profile` | `investigate_user` | incident `users` and user observables | 24 h | profile, account state, `signInSessionsValidFromDateTime`, risk state, roles and groups when the source reports them |
+| `authentication` | `investigate_authentication` | same accounts | 72 h | sign-ins (IP, location, app, result, MFA, risk), MFA events, identity-provider risk detections |
+| `user_activity` | `search_user_activity` | same accounts | 72 h | mailbox rules, role changes, app consents after the sign-in |
+| `ip_reputation` | `enrich_ip` | incident IPs and every IP found by the steps above | n/a | per-source verdicts and the aggregate verdict (third parties never receive non-public IPs) |
+| `ip_prevalence` | `search_ip_enterprise` | the same IPs | 7 days | internal endpoints and other accounts that use the IP (shared infrastructure) |
+| `user_endpoints` | `investigate_endpoint` | hostnames the incident names (observables and endpoint assets) | 24 h | endpoint, detections (verdict, status, user), isolation state |
 
-Each file in [`scenarios/`](scenarios/) pins the exact plan for one case. Run them with
-`PYTHONPATH=engine python -m xdr_plan check account-takeover` from the repository root.
+## Correlation logic
 
-| File | What it proves |
-|---|---|
-| [`01-confirmed-takeover.yaml`](scenarios/01-confirmed-takeover.yaml) | True positive: sessions revoked without an approval wait, attacker IP blocked with approval, a suspicious shared VPN exit is not blocked, and a non-privileged user is not disabled. |
-| [`02-business-travel-benign.yaml`](scenarios/02-business-travel-benign.yaml) | Impossible travel explained by a business trip (clean IP, medium risk, no MFA fatigue) produces no actions. |
-| [`03-breakglass-protected.yaml`](scenarios/03-breakglass-protected.yaml) | A compromised break-glass Global Administrator meets the revoke and disable rules; both stay planned with `elevated: true` (ELEVATED approval) and the attacker IP block is planned. |
-| [`04-internal-vpn-source.yaml`](scenarios/04-internal-vpn-source.yaml) | A malicious sign-in from an internal VPN pool address revokes sessions, and `block-ip` is `skipped_internal`. |
-| [`05-mfa-fatigue-approved.yaml`](scenarios/05-mfa-fatigue-approved.yaml) | MFA fatigue (T1621) followed by an approved push from an IP with no reputation still revokes sessions and blocks the prompt source; an unrelated unknown IP is not blocked. |
-| [`06-attacker-returns-after-revocation.yaml`](scenarios/06-attacker-returns-after-revocation.yaml) | An attacker sign-in after an earlier revocation leads to revoke again, disable with approval and an IP block. |
+- Records are grouped per account: profile, sign-ins, MFA events, risk detections and cloud activity.
+- Framework links: `sign_in_to_activity` ties a successful sign-in to the account's mailbox-rule, role or
+  app-consent activity within 240 minutes; `same_ip`, `same_user` and `same_endpoint` cluster accounts,
+  IPs and endpoints that share records (blast radius).
+- The hooks decide, from records only, which account shows a **compromise indicator**:
+  1. the identity provider rates the user high risk or confirmed compromised;
+  2. a successful sign-in from an IP that enrichment rates malicious or suspicious, or that a vendor
+     anonymous-IP or malicious-IP detection names;
+  3. a successful sign-in that the identity provider rates high risk;
+  4. a HIGH or CRITICAL risk detection (impossible travel, unfamiliar location, new device, anonymous or
+     malicious IP, token replay, leaked credentials and similar) together with a successful sign-in;
+  5. a session token replay detection (stolen session);
+  6. an MFA approval after at least three denied or fraud-reported prompts, or an MFA fatigue detection
+     followed by a successful sign-in.
+- **Disable** applies to a compromised account that holds a privileged directory role (from the profile
+  or a privileged role assignment it just received), or whose attacker sign-in is later than its
+  `signInSessionsValidFromDateTime` (the attacker came back after an earlier revocation).
+- **Attacker IP**: a sign-in or MFA source of an investigated account that at least one source rates
+  malicious (or that a HIGH vendor malicious-IP detection names) and that is **not shared**: no internal
+  endpoint reaches it and no other account signs in from it. A shared IP (VPN exit, proxy) is never
+  proposed for a block; its sign-in stays in the revocation evidence.
+- **Endpoint**: an incident endpoint linked to a compromised account (logged-on user or detection user)
+  with an active MALICIOUS detection.
 
-## Inputs
+## Risk calculation
 
-| Variable | Type | Required | Description |
+Each target is scored by the scoring engine from exactly the records its rule cites (separate
+`risk_score` and `confidence_score`, both integers 0-100, with the explanation and settings hash in the
+rationale):
+
+- identity-provider risk detections and a high user risk are `authentication_anomaly` signals;
+- privileged role assignments, external-forwarding or deleting mailbox rules and flagged app consents are
+  `persistence` signals;
+- endpoint detections are `endpoint_detection` signals;
+- IP enrichment is `reputation` (capped at 50; one vendor's MALICIOUS is never an aggregate MALICIOUS);
+- the hooks add `authentication_anomaly` signals computed from cited records: a successful sign-in from an
+  IP rated malicious (severity 80) or suspicious (70), an attacker sign-in after the sessions were revoked
+  (85), an MFA approval after repeated denials (70), and a sign-in source IP used against an investigated
+  account (60 to 80). Each is attributed to the source of the sign-in or MFA records it cites.
+
+A failed expected source (`entra`, `cisco_xdr`) costs confidence and is listed; it never blocks a
+recommendation that other evidence supports. Critical assets add the critical-asset bonus to risk; they
+never change confidence. Minimum risk per rule: revoke 50, disable 60, isolate 60, block 50 (below the
+minimum an action is listed as "considered, not proposed", never hidden). Dry run and live score
+identically.
+
+## Containment recommendations
+
+| Rule | Action (builder) | Target | Evidence (numbered in the package) |
 |---|---|---|---|
-| `incident_id` | string | no | Cisco XDR incident ID, used for notes and audit. |
-| `dry_run` | boolean | no | When true, report the planned change without making it. Default true for containment. |
-| `observables` | list | no | Overrides the incident observables. |
+| `revoke_compromised_sessions` | `revoke_sessions` (`revoke_entra_sessions`) | every compromised account | the indicator records: profile, attacker sign-ins, risk detections, MFA events, IP enrichment that rated the source, post-sign-in cloud activity |
+| `disable_compromised_account` | `disable_user` (`disable_entra_user`) | a compromised account that is privileged or was used again after a revocation | the same records plus the profile with the session timestamp |
+| `isolate_compromised_user_endpoint` | `isolate_endpoint` (catalog order, native Cisco XDR first) | an incident endpoint of a compromised account with an active malicious detection; also, when the account's identity reads failed (unassessed), an incident endpoint with an active malicious detection, on the detection alone with a rationale that says so | the detection and endpoint records plus the records that prove the account's compromise (only the detection and endpoint records when the account is unassessed) |
+| `block_attacker_ip` | `block_ip` (`block_ip`) | a non-shared sign-in source IP that a source rates malicious | the sign-in, MFA and detection records from that IP and the MALICIOUS or SUSPICIOUS enrichment answers |
 
-## Guardrails
+Every recommendation carries numbered evidence that cites investigation or enrichment records of the run
+(the lifecycle refuses anything else) and a rationale with the score explanation. Password reset and MFA
+re-registration are not recommended actions: the help desk does them after out-of-band identity
+verification, before any release.
 
-- `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
-- Blast-radius limits cap how many hosts, users or indicators a single run may touch.
-- Every containment action is reversible except session revocation, and the rollback is written into the incident note.
-- `revoke-session` needs a human approval like every other containment action, even though it only forces a new sign-in. There is no auto-approval, and the plan engine refuses an `auto_approve` key.
+### Hand-offs and items not proposed
 
-## Notes
+- Not proposed, and listed as considered: a sign-in IP rated malicious or suspicious that is shared infrastructure (seen from internal endpoints or used by other accounts).
+- Hand-offs: none; this workflow is the hand-off target of phishing, password-spray, mfa-fatigue, mail-bombing and bec.
 
-- Require a password reset and MFA re-registration through the help desk with identity verification out of band. This step is in the incident note, ticket and notification templates. Re-enable a disabled account only after both are done.
-- A protected account (for example break-glass) that meets the rules stays in the plan with ELEVATED approval and a warning, so a lead decides; it is never dropped silently.
+They appear in the run notes and in the analyst summary ("Considered, deliberately not proposed", "Manual steps", "Suggested hand-offs"), each with the record ids that show it. A hand-off is a suggestion only: it starts nothing and never changes the package (architecture 14.10.1).
 
-## Related workflows
+## Approval requirements
 
-[`bec`](../bec/README.md), [`cloud-compromise`](../cloud-compromise/README.md), [`password-spray`](../password-spray/README.md)
+- Every action, including session revocation and every later release or restoration, needs an explicit
+  human approval by an authenticated HUMAN principal holding the approver role. AI and automation
+  principals can never approve, and there is no auto-approval switch.
+- ELEVATED approval (a principal with the elevated role, and a visible warning on the decision card)
+  applies when a target matches a critical-asset class (for example a privileged or break-glass account
+  by user pattern, group or directory role such as Global Administrator or Security Administrator, an
+  executive endpoint, or an IP in a production or network-infrastructure CIDR), when the catalog always
+  elevates the action, or when a blast-radius cap is exceeded. `PackageBuilder` decides this; the
+  workflow only passes the investigated asset context (groups, roles, tags, IP) and can never lower it.
+- Allow-listed targets (for example `breakglass@example.com` or a VPN pool CIDR) are shown as excluded
+  with the reason and never executed; nothing is dropped silently.
 
-## Building it in XDR Automation
+## Containment execution
 
-1. Import the Cisco-managed atomics this workflow needs from the Exchange, plus the custom atomics in [`atomic/`](../../atomic/README.md).
-2. Create the workflow from [`workflow.yaml`](workflow.yaml): variables from `inputs`, one group per `phase`, conditions from `when`.
-3. Test with `dry_run = true` against a test incident (see [docs/testing](../../docs/testing/README.md)).
-4. Export the workflow JSON and commit it here as `workflow.export.json`.
+After the approval the lifecycle executes exactly the approved actions through the execution guard with
+the HMAC approval token; the workflow is not involved:
+
+- `revoke_sessions`: Entra `POST /users/{id}/revokeSignInSessions` (VERIFIED, not reversible, effective
+  within minutes, no effect on external users);
+- `disable_user`: Entra `PATCH /users/{id}` with `accountEnabled: false` (VERIFIED), or the native Cisco
+  XDR disable action when configured;
+- `isolate_endpoint`: the native Cisco XDR action when configured, else Defender for Endpoint isolate or
+  Secure Endpoint isolation;
+- `block_ip`: the native Cisco XDR action when configured, else a Meraki MX layer 3 rule or a Defender for
+  Endpoint IP indicator. Direct Umbrella IP blocking is UNVERIFIED and never used.
+
+A target already in the desired state reports `ALREADY_CONTAINED`. In dry run the lifecycle prints the
+DRY RUN block (`Would revoke sessions: ...`, `Would disable user: ...`, `Would isolate: ...`,
+`Would block: ...`) and changes nothing.
+
+## Verification
+
+Automatic, after execution, with the product's own read call: Entra
+`GET /users/{id}?$select=signInSessionsValidFromDateTime` (revocation) and `accountEnabled` (disable),
+Meraki `GET .../l3FirewallRules`, Defender for Endpoint `GET /api/machineactions/{id}` (VERIFIED).
+Secure Endpoint isolation and Defender indicators have no VERIFIED read and report `UNABLE_TO_VERIFY`,
+which never counts as contained. The overall result is CONTAINED, PARTIALLY_CONTAINED or
+CONTAINMENT_FAILED.
+
+## Rollback
+
+- `revoke_sessions`: not reversible; the user signs in again after the help desk reset.
+- `disable_user`: `enable_user` (Entra `accountEnabled: true`), only after the password reset and MFA
+  re-registration are done.
+- `isolate_endpoint`: release from isolation after the endpoint is cleaned.
+- `block_ip`: `unblock_ip` (remove the tagged MX rule or the indicator).
+
+Reversible actions are registered as temporary controls; review reminders never release anything. A
+release package is proposed from the registry and executed only after its own human release approval,
+then verified.
+
+## Failure handling
+
+- A failed or degraded source (health UNAVAILABLE, AUTH_FAILED, RATE_LIMITED) is noted, lowers
+  confidence and never blocks a recommendation backed by other evidence.
+- A failing step, expression or hook is noted and skipped; partial results stay usable.
+- A recommendation without an enabled executor is reported as UNROUTED for manual handling, never
+  dropped.
+- During execution a failed action is reported FAILED (PARTIALLY_CONTAINED or CONTAINMENT_FAILED) and
+  the incident needs remediation; nothing is retried silently and the other approved actions still run.
+
+## MITRE mapping
+
+| Tactic | Technique | Sub-technique | Why the workflow responds |
+|---|---|---|---|
+| TA0001 Initial Access | T1078 Valid Accounts | T1078.004 Cloud Accounts | The incident is a sign-in to a cloud identity with valid credentials; the package revokes the sessions, disables the account when needed and blocks the source IP. |
+| TA0006 Credential Access | T1539 Steal Web Session Cookie | none | A replayed session token or an infected endpoint of the account is how a session is stolen; revocation invalidates it and isolation stops the theft. |
+| TA0006 Credential Access | T1621 Multi-Factor Authentication Request Generation | none | An MFA approval after repeated denied prompts is a compromise indicator that leads to revocation; prompt floods without an approval belong to the mfa-fatigue workflow. |
+
+No other technique is mapped: mailbox rules, app consents and role assignments are cited as
+post-compromise context only, and their remediation belongs to the bec and cloud-compromise workflows.
+
+## Testing instructions
+
+- Scenarios: `tests/fixtures/workflows/account-takeover/` (the minimum set of 14.5.3, five edge cases and
+  the migrated legacy scenarios 01, 02, 03, 04 and 06; legacy scenario 05 seeds the mfa-fatigue
+  workflow). They run automatically, in dry run and simulated live, in
+  `tests/simulation/test_workflow_scenarios.py`.
+- Unit and lifecycle tests: `tests/workflows/account_takeover/`.
+- Commands:
+
+```bash
+python -m pytest -q -p no:cacheprovider tests/workflows/account_takeover tests/simulation/test_workflow_scenarios.py -k account-takeover
+python tools/validation/check_workflow_readmes.py --workflow account-takeover
+python tools/simulator/simulate.py --workflow account-takeover --scenario tp-approve-all --check
+python tools/simulator/simulate.py --workflow account-takeover --scenario tp-approve-all --live --check
+```
+
+All test data is fake: `example.com` accounts, documentation IP ranges, hosts like `TH-LT-1047`.
+
+## Known limitations
+
+- With the real Entra adapter only user properties and sign-in logs are normalized: risk detections, the
+  riskyUser state (UNVERIFIED), MFA method detail, directory roles and group memberships are not mapped.
+  On a tenant the indicators therefore come from sign-in risk and IP reputation, and privileged accounts
+  are recognised through the critical-asset user patterns and groups.
+- Session revocation is not reversible, can take a few minutes and does not affect external (guest)
+  users; the password reset and MFA re-registration stay a manual help-desk step.
+- The shared-infrastructure check needs typed enterprise sightings. Hunting rows without a documented
+  schema (Splunk, `runHuntingQuery`) stay generic records, so a VPN exit may still be proposed for a
+  block and the analyst decides.
+- A non-public sign-in IP (corporate VPN pool) is proposed like any other; list VPN pools in
+  `allowlists.never_block.cidrs` so the block is shown as excluded and never executed.
+- Direct Umbrella IP blocking is UNVERIFIED; IP blocks route to Meraki MX, a Defender for Endpoint
+  indicator or the native Cisco XDR action, and Secure Endpoint isolation is UNABLE_TO_VERIFY.
+- Only endpoints the incident names (hostname observables or endpoint assets) are investigated; sign-in
+  device ids are not resolved to endpoints.
+- MFA prompt floods without an approval are handled by the mfa-fatigue workflow, mailbox-rule and
+  app-consent remediation by the bec and cloud-compromise workflows.
+- A shared IP that is not proposed for a block is listed as considered (run notes and analyst summary)
+  only when some source rates it; an unrated shared IP is simply not a block candidate.

@@ -1,0 +1,63 @@
+# account-takeover workflow scenario; fake lab data only.
+schema: 1
+name: dry-run
+workflow: account-takeover
+description: >-
+  Dry run of a confirmed takeover: the package (revoke, isolate, block) is proposed and simulated.
+  Nothing changes at any vendor and the incident stays AWAITING_APPROVAL after the simulated approval.
+tags: [dry_run, true_positive]
+mode: dry_run
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], secure_endpoint: [endpoint],
+        meraki: [network]}
+incident:
+  incident_id: XDR-ATO-0008
+  title: Entra risky sign-in for jsmith@example.com from unfamiliar location
+  severity: HIGH
+  workflow_id: account-takeover
+  observables:
+    - {type: user, value: jsmith@example.com}
+    - {type: hostname, value: TH-LT-1047}
+  users: [jsmith@example.com]
+  trigger: {source: entra, mitre_techniques: [T1078.004]}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.145, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: known credential-abuse infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, display_name: J Smith, department: Finance,
+               groups: [Finance Users], account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: sign_in, sign_in_id: si-ato-0008-1, user: jsmith@example.com,
+               timestamp: "2026-01-15T11:05:00Z", ip: 203.0.113.145, country: NL, app: Office 365 Exchange Online,
+               result: success, mfa_result: satisfied, risk_level: high}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, users: [jsmith@example.com], groups: [Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-ato-0008-1, name: Infostealer.Generic, verdict: MALICIOUS,
+               severity: HIGH, endpoint: TH-LT-1047, user: jsmith@example.com, status: active,
+               sha256: 5e1f0c3a5e1f0c3a5e1f0c3a5e1f0c3a5e1f0c3a5e1f0c3a5e1f0c3a5e1f0c3a,
+               first_seen: "2026-01-15T08:40:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions:
+    - revoke_sessions:jsmith@example.com
+    - isolate_endpoint:TH-LT-1047
+    - block_ip:203.0.113.145
+  dry_run_lines:
+    - DRY RUN
+    - "Would revoke sessions: jsmith@example.com"
+    - "Would isolate: TH-LT-1047"
+    - "Would block: 203.0.113.145"
+    - No containment actions executed.
+  notifications: [incident_note, soc_notification, analyst_summary]

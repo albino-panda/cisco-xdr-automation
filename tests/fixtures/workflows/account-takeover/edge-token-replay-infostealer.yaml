@@ -1,0 +1,62 @@
+# account-takeover workflow scenario; fake lab data only.
+schema: 1
+name: edge-token-replay-infostealer
+workflow: account-takeover
+description: >-
+  A stolen session: Entra reports a token replay for gpatel from an IP with no reputation (no source
+  rates it), and gpatel's laptop TH-LT-4410 has an active infostealer detection. Revoking the sessions
+  invalidates the stolen token and isolating the laptop stops the theft; with no source rating the
+  replay IP malicious, no block is recommended.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], secure_endpoint: [endpoint],
+        meraki: [network]}
+incident:
+  incident_id: XDR-ATO-0013
+  title: Entra token replay detected for gpatel@example.com
+  severity: HIGH
+  workflow_id: account-takeover
+  observables:
+    - {type: user, value: gpatel@example.com}
+    - {type: hostname, value: TH-LT-4410}
+  users: [gpatel@example.com]
+  trigger: {source: entra, mitre_techniques: [T1539]}
+environment:
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: gpatel@example.com
+      record: {kind: user_profile, user: gpatel@example.com, display_name: G Patel, department: Research,
+               groups: [Research], account_enabled: true, risk_level: medium, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: gpatel@example.com
+      record: {kind: sign_in, sign_in_id: si-ato-0013-1, user: gpatel@example.com,
+               timestamp: "2026-01-15T10:25:00Z", ip: 192.0.2.150, country: SG, app: Office 365 SharePoint Online,
+               result: success, mfa_result: satisfied, risk_level: medium}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: gpatel@example.com
+      record: {kind: anomaly, anomaly_id: rd-ato-0013-1, anomaly_type: token_replay, severity: MEDIUM,
+               user: gpatel@example.com, ip: 192.0.2.150, detail: session token used from a second device,
+               first_seen: "2026-01-15T10:25:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-4410
+      record: {kind: endpoint, hostname: TH-LT-4410, connector_guid: 00000000-0000-4000-8000-000000004410,
+               os: Windows 11, users: [gpatel@example.com], groups: [Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-4410
+      record: {kind: detection, detection_id: det-ato-0013-1, name: Infostealer.BrowserCookies, verdict: MALICIOUS,
+               severity: HIGH, category: CredentialAccess, endpoint: TH-LT-4410, user: gpatel@example.com,
+               status: active, sha256: 8c4d3f6e8c4d3f6e8c4d3f6e8c4d3f6e8c4d3f6e8c4d3f6e8c4d3f6e8c4d3f6e,
+               first_seen: "2026-01-15T09:50:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions:
+    - revoke_sessions:gpatel@example.com
+    - isolate_endpoint:TH-LT-4410
+  containment: CONTAINED
+  controls: 1

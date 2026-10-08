@@ -1,0 +1,46 @@
+# account-takeover workflow scenario; fake lab data only.
+schema: 1
+name: tp-reject
+workflow: account-takeover
+description: >-
+  True positive on paper: rlee signs in successfully from an IP that Cisco XDR rates malicious. The
+  analyst rejects the package (the user confirmed by phone that the sign-in was a sanctioned penetration
+  test from the vendor's range). The incident closes and nothing executes.
+tags: [true_positive, reject]
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], secure_endpoint: [endpoint],
+        meraki: [network]}
+incident:
+  incident_id: XDR-ATO-0003
+  title: Entra risky sign-in for rlee@example.com
+  severity: HIGH
+  workflow_id: account-takeover
+  observables:
+    - {type: user, value: rlee@example.com}
+    - {type: ip, value: 203.0.113.177}
+  users: [rlee@example.com]
+  trigger: {source: entra, mitre_techniques: [T1078.004]}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.177, verdict: MALICIOUS, risk_score: 85, confidence: 75,
+       integrations: [cisco_xdr], summary: scanning and credential abuse}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: rlee@example.com
+      record: {kind: user_profile, user: rlee@example.com, display_name: R Lee, department: Engineering,
+               groups: [Engineering], account_enabled: true, risk_level: medium, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: rlee@example.com
+      record: {kind: sign_in, sign_in_id: si-ato-0003-1, user: rlee@example.com,
+               timestamp: "2026-01-15T10:40:00Z", ip: 203.0.113.177, country: DE, app: Azure Portal,
+               result: success, mfa_result: satisfied, risk_level: medium}
+analyst: {decision: REJECT, approvers: [analyst], comment: sanctioned penetration test confirmed out of band}
+expect:
+  actions:
+    - revoke_sessions:rlee@example.com
+    - block_ip:203.0.113.177
+  decision_state: CLOSED
+  controls: 0
+  final_state: CLOSED

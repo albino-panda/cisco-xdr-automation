@@ -1,0 +1,90 @@
+# account-takeover workflow scenario; fake lab data only.
+# Migrated from the legacy spec scenario 01. Changes: typed records instead of legacy result items; the
+# attacker IP is renumbered from 203.0.113.45 to 203.0.113.75 because the lab critical-asset policy
+# treats 203.0.113.0/26 as production servers; the VPN exit's 14 internal sightings become two typed
+# Defender XDR network connections; revoke and block both wait for a human approval (C1).
+schema: 1
+name: legacy-01-confirmed-takeover
+workflow: account-takeover
+description: >-
+  A standard user signs in successfully from an IP that Cisco XDR rates malicious, and Entra rates the
+  user high risk. Session revocation and the block of the attacker IP are recommended; both wait for a
+  human approval (revoke-session is never auto-approved). A second IP, a commercial VPN exit that
+  internal hosts also use, is only suspicious and is shared infrastructure, so it is not blocked. The
+  user is not privileged and was not revoked before, so the account is not disabled.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/account-takeover/scenarios/01-confirmed-takeover.yaml
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], secure_endpoint: [endpoint],
+        meraki: [network]}
+incident:
+  incident_id: INC-TEST-ATO-0001
+  title: Entra high-risk sign-in from anonymising infrastructure
+  severity: HIGH
+  source: Microsoft Entra ID Protection
+  workflow_id: account-takeover
+  observables:
+    - {type: user, value: ap-clerk-04@example.com}
+    - {type: ip, value: 203.0.113.75}
+    - {type: ip, value: 198.51.100.20}
+  users: [ap-clerk-04@example.com]
+  trigger: {source: entra, mitre_techniques: [T1078.004], detection: riskySignIn}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.75, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: attacker infrastructure}
+    - {type: ip, value: 198.51.100.20, verdict: SUSPICIOUS, risk_score: 50, confidence: 60,
+       integrations: [cisco_xdr], summary: commercial VPN exit}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: ap-clerk-04@example.com
+      record: {kind: user_profile, user: ap-clerk-04@example.com, department: Finance,
+               manager: finance-lead@example.com, groups: [Finance Users], roles: [], privileged: false,
+               account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: ap-clerk-04@example.com
+      record: {kind: sign_in, sign_in_id: si-legacy-01-1, user: ap-clerk-04@example.com,
+               timestamp: "2026-01-15T08:30:00Z", ip: 198.51.100.20, city: Office VPN exit, app: Outlook,
+               result: success, mfa_result: satisfied, risk_level: low}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: ap-clerk-04@example.com
+      record: {kind: sign_in, sign_in_id: si-legacy-01-2, user: ap-clerk-04@example.com,
+               timestamp: "2026-01-15T10:45:00Z", ip: 203.0.113.75, country: unfamiliar,
+               app: Office 365 Exchange Online, result: success, mfa_result: satisfied, risk_level: high}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: ap-clerk-04@example.com
+      record: {kind: anomaly, anomaly_id: rd-legacy-01-1, anomaly_type: impossible_travel, severity: MEDIUM,
+               user: ap-clerk-04@example.com, ip: 203.0.113.75, first_seen: "2026-01-15T10:45:00Z"}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: ap-clerk-04@example.com
+      record: {kind: anomaly, anomaly_id: rd-legacy-01-2, anomaly_type: unfamiliar_location, severity: MEDIUM,
+               user: ap-clerk-04@example.com, ip: 203.0.113.75, first_seen: "2026-01-15T10:45:00Z"}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: ap-clerk-04@example.com
+      record: {kind: anomaly, anomaly_id: rd-legacy-01-3, anomaly_type: anonymous_ip, severity: MEDIUM,
+               user: ap-clerk-04@example.com, ip: 198.51.100.20, first_seen: "2026-01-15T08:30:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_ip_enterprise
+      subject: 198.51.100.20
+      record: {kind: network_connection, endpoint: TH-LT-0612, remote_ip: 198.51.100.20, remote_port: 443,
+               protocol: tcp, direction: outbound, count: 9, action: allowed, first_seen: "2026-01-14T07:00:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_ip_enterprise
+      subject: 198.51.100.20
+      record: {kind: network_connection, endpoint: TH-LT-0613, remote_ip: 198.51.100.20, remote_port: 443,
+               protocol: tcp, direction: outbound, count: 5, action: allowed, first_seen: "2026-01-14T07:20:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions:
+    - revoke_sessions:ap-clerk-04@example.com
+    - block_ip:203.0.113.75
+  elevated: []
+  excluded: []
+  containment: CONTAINED
+  controls: 1

@@ -1,0 +1,66 @@
+# account-takeover workflow scenario; fake lab data only.
+schema: 1
+name: edge-mfa-approved-after-denials
+workflow: account-takeover
+description: >-
+  MFA activity as a takeover indicator: hbrown denied four push prompts and then approved one, and the
+  sign-in from the same new IP succeeded. Entra rates the user only medium risk and no source rates
+  the IP, so the plain risk and reputation tests would miss it; the MFA pattern recommends revoking the
+  sessions. With no reputation for the IP no block is recommended here (blocking prompt sources is the
+  mfa-fatigue workflow's job).
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], secure_endpoint: [endpoint],
+        meraki: [network]}
+incident:
+  incident_id: XDR-ATO-0014
+  title: Entra risky sign-in for hbrown@example.com after MFA approval
+  severity: HIGH
+  workflow_id: account-takeover
+  observables:
+    - {type: user, value: hbrown@example.com}
+  users: [hbrown@example.com]
+  trigger: {source: entra, mitre_techniques: [T1078.004]}
+environment:
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: hbrown@example.com
+      record: {kind: user_profile, user: hbrown@example.com, display_name: H Brown, department: Sales,
+               groups: [Sales Users], account_enabled: true, risk_level: medium, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: hbrown@example.com
+      record: {kind: mfa_event, user: hbrown@example.com, timestamp: "2026-01-15T06:01:00Z", method: push,
+               result: denied, ip: 192.0.2.177, country: BR}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: hbrown@example.com
+      record: {kind: mfa_event, user: hbrown@example.com, timestamp: "2026-01-15T06:03:00Z", method: push,
+               result: denied, ip: 192.0.2.177, country: BR}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: hbrown@example.com
+      record: {kind: mfa_event, user: hbrown@example.com, timestamp: "2026-01-15T06:05:00Z", method: push,
+               result: denied, ip: 192.0.2.177, country: BR}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: hbrown@example.com
+      record: {kind: mfa_event, user: hbrown@example.com, timestamp: "2026-01-15T06:07:00Z", method: push,
+               result: denied, ip: 192.0.2.177, country: BR}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: hbrown@example.com
+      record: {kind: mfa_event, user: hbrown@example.com, timestamp: "2026-01-15T06:09:00Z", method: push,
+               result: approved, ip: 192.0.2.177, country: BR}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: hbrown@example.com
+      record: {kind: sign_in, sign_in_id: si-ato-0014-1, user: hbrown@example.com,
+               timestamp: "2026-01-15T06:09:30Z", ip: 192.0.2.177, country: BR, app: Office 365 Exchange Online,
+               result: success, mfa_result: satisfied, risk_level: medium}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions: [revoke_sessions:hbrown@example.com]
+  containment: CONTAINED
+  controls: 0

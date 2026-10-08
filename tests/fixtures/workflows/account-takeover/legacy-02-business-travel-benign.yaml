@@ -1,0 +1,61 @@
+# account-takeover workflow scenario; fake lab data only.
+# Migrated from the legacy spec scenario 02. Changes: typed records instead of legacy result items; the
+# legacy anomaly names become MEDIUM Entra risk detections; the approved-travel context stays in the
+# incident trigger as data, never as evidence.
+schema: 1
+name: legacy-02-business-travel-benign
+workflow: account-takeover
+description: >-
+  Entra raises an impossible-travel alert for a user who is on an approved business trip. The new
+  location's IP is clean, Entra rates the risk medium, MFA was satisfied on the registered device and
+  there is no MFA fatigue pattern. No containment action is recommended; the run only records the
+  investigation so an analyst can close the incident.
+tags: [legacy, benign]
+legacy_source: workflows/account-takeover/scenarios/02-business-travel-benign.yaml
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], secure_endpoint: [endpoint],
+        meraki: [network]}
+incident:
+  incident_id: INC-TEST-ATO-0002
+  title: Impossible travel for a sales user
+  severity: MEDIUM
+  source: Microsoft Entra ID Protection
+  workflow_id: account-takeover
+  observables:
+    - {type: user, value: sales-rep-09@example.com}
+    - {type: ip, value: 198.51.100.77}
+  users: [sales-rep-09@example.com]
+  trigger: {source: entra, mitre_techniques: [T1078.004], detection: impossibleTravel,
+            travel_request: approved travel on file for the sign-in dates}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.77, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [cisco_xdr], summary: conference hotel network}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: sales-rep-09@example.com
+      record: {kind: user_profile, user: sales-rep-09@example.com, department: Sales,
+               manager: sales-lead@example.com, groups: [Sales Users], roles: [], privileged: false,
+               account_enabled: true, risk_level: medium, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: sales-rep-09@example.com
+      record: {kind: sign_in, sign_in_id: si-legacy-02-1, user: sales-rep-09@example.com,
+               timestamp: "2026-01-15T09:15:00Z", ip: 198.51.100.77, city: Conference hotel, app: Microsoft Teams,
+               result: success, mfa_result: satisfied, device_compliant: true, risk_level: medium}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: sales-rep-09@example.com
+      record: {kind: anomaly, anomaly_id: rd-legacy-02-1, anomaly_type: impossible_travel, severity: MEDIUM,
+               user: sales-rep-09@example.com, ip: 198.51.100.77, first_seen: "2026-01-15T09:15:00Z"}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: sales-rep-09@example.com
+      record: {kind: anomaly, anomaly_id: rd-legacy-02-2, anomaly_type: unfamiliar_location, severity: MEDIUM,
+               user: sales-rep-09@example.com, ip: 198.51.100.77, first_seen: "2026-01-15T09:15:00Z"}
+expect:
+  package: false
+  actions: []
+  below_threshold: []
+  unrouted: []

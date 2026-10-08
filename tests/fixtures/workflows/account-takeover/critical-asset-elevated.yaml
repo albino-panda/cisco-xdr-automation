@@ -1,0 +1,58 @@
+# account-takeover workflow scenario; fake lab data only.
+schema: 1
+name: critical-asset-elevated
+workflow: account-takeover
+description: >-
+  The compromised account adm-jdoe holds the Security Administrator role and signs in successfully from
+  an IP that Cisco XDR rates malicious. Revoking its sessions and disabling it (privileged and
+  compromised) need ELEVATED approval with a visible privileged-account warning: an analyst alone is
+  refused, the lead approves. The IP block is a standard action in the same package.
+tags: [critical_asset, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], secure_endpoint: [endpoint],
+        meraki: [network]}
+incident:
+  incident_id: XDR-ATO-0006
+  title: Entra risky sign-in for administrator adm-jdoe@example.com
+  severity: CRITICAL
+  workflow_id: account-takeover
+  observables:
+    - {type: user, value: adm-jdoe@example.com}
+    - {type: ip, value: 198.51.100.188}
+  users: [adm-jdoe@example.com]
+  trigger: {source: entra, mitre_techniques: [T1078.004]}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.188, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [cisco_xdr], summary: credential-abuse infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: adm-jdoe@example.com
+      record: {kind: user_profile, user: adm-jdoe@example.com, display_name: J Doe (admin), department: IT,
+               groups: [IT Admins], roles: [Security Administrator], privileged: true, account_enabled: true,
+               risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: adm-jdoe@example.com
+      record: {kind: sign_in, sign_in_id: si-ato-0006-1, user: adm-jdoe@example.com,
+               timestamp: "2026-01-15T10:05:00Z", ip: 198.51.100.188, country: BR, app: Azure Portal,
+               result: success, mfa_result: satisfied, risk_level: high}
+    - integration: entra
+      atomic: search_user_activity
+      subject: adm-jdoe@example.com
+      record: {kind: role_change, user: adm-jdoe@example.com, role_name: Privileged Role Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000e1, change: assigned, privileged: true,
+               actor: adm-jdoe@example.com, timestamp: "2026-01-15T10:12:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - revoke_sessions:adm-jdoe@example.com
+    - disable_user:adm-jdoe@example.com
+    - block_ip:198.51.100.188
+  elevated:
+    - revoke_sessions:adm-jdoe@example.com
+    - disable_user:adm-jdoe@example.com
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  containment: CONTAINED
+  controls: 2

@@ -1,0 +1,50 @@
+# account-takeover workflow scenario; fake lab data only.
+schema: 1
+name: edge-breakglass-allowlisted
+workflow: account-takeover
+description: >-
+  The tenant's break-glass account breakglass@example.com (Global Administrator) signs in from an IP
+  that Cisco XDR rates malicious. The repository allow-list never contains the emergency account, so
+  the revocation and the disable are recommended but shown as excluded with the allow-list reason
+  (never executed, never dropped silently): the lead handles the account by the break-glass runbook.
+  The attacker IP block stays in the package.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], secure_endpoint: [endpoint],
+        meraki: [network]}
+incident:
+  incident_id: XDR-ATO-0011
+  title: Entra high-risk sign-in to emergency access account
+  severity: CRITICAL
+  workflow_id: account-takeover
+  observables:
+    - {type: user, value: breakglass@example.com}
+    - {type: ip, value: 198.51.100.222}
+  users: [breakglass@example.com]
+  trigger: {source: entra, mitre_techniques: [T1078.004]}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.222, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [cisco_xdr], summary: credential-abuse infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: breakglass@example.com
+      record: {kind: user_profile, user: breakglass@example.com, display_name: Emergency access,
+               department: IT, groups: [Emergency Access], roles: [Global Administrator], privileged: true,
+               account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: breakglass@example.com
+      record: {kind: sign_in, sign_in_id: si-ato-0011-1, user: breakglass@example.com,
+               timestamp: "2026-01-15T03:12:00Z", ip: 198.51.100.222, country: KP, app: Azure Portal,
+               result: success, mfa_result: satisfied, risk_level: high}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions: [block_ip:198.51.100.222]
+  excluded:
+    - revoke_sessions:breakglass@example.com
+    - disable_user:breakglass@example.com
+  elevated: []
+  containment: CONTAINED
+  controls: 1

@@ -1,0 +1,92 @@
+# account-takeover workflow scenario; fake lab data only.
+schema: 1
+name: tp-approve-all
+workflow: account-takeover
+description: >-
+  True positive: jsmith signs in successfully from an IP that Cisco XDR rates malicious, Entra raises a
+  HIGH unfamiliar-location detection, and the user's laptop TH-LT-1047 has an active infostealer
+  detection. The package revokes the sessions, isolates the laptop and blocks the attacker IP; the
+  analyst approves everything and every action executes and verifies. The office sign-in from a clean
+  IP is context only.
+tags: [true_positive, approve_all]
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], secure_endpoint: [endpoint],
+        meraki: [network]}
+incident:
+  incident_id: XDR-ATO-0001
+  title: Entra risky sign-in for jsmith@example.com from unfamiliar location
+  severity: HIGH
+  workflow_id: account-takeover
+  observables:
+    - {type: user, value: jsmith@example.com}
+    - {type: ip, value: 203.0.113.145}
+    - {type: hostname, value: TH-LT-1047}
+  users: [jsmith@example.com]
+  trigger: {source: entra, mitre_techniques: [T1078.004]}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.145, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: known credential-abuse infrastructure}
+    - {type: ip, value: 198.51.100.10, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [cisco_xdr], summary: corporate office egress}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, object_id: 00000000-0000-4000-8000-00000000a001,
+               display_name: J Smith, department: Finance, groups: [Finance Users], roles: [],
+               privileged: false, account_enabled: true, risk_level: medium, risk_state: at_risk,
+               mfa_registered: true}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: sign_in, sign_in_id: si-ato-0001-1, user: jsmith@example.com,
+               timestamp: "2026-01-15T09:10:00Z", ip: 198.51.100.10, country: GB, city: London,
+               app: Microsoft Teams, result: success, mfa_result: satisfied, risk_level: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: sign_in, sign_in_id: si-ato-0001-2, user: jsmith@example.com,
+               timestamp: "2026-01-15T11:05:00Z", ip: 203.0.113.145, country: NL, city: Amsterdam,
+               app: Office 365 Exchange Online, result: success, mfa_result: satisfied, risk_level: medium}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: anomaly, anomaly_id: rd-ato-0001-1, anomaly_type: unfamiliar_location, severity: HIGH,
+               user: jsmith@example.com, ip: 203.0.113.145, detail: sign-in from a location never seen for the user,
+               first_seen: "2026-01-15T11:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, users: [jsmith@example.com], groups: [Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-ato-0001-1, name: Infostealer.Generic, verdict: MALICIOUS,
+               severity: HIGH, category: CredentialAccess, endpoint: TH-LT-1047, user: jsmith@example.com,
+               sha256: 5e1f0c3a5e1f0c3a5e1f0c3a5e1f0c3a5e1f0c3a5e1f0c3a5e1f0c3a5e1f0c3a, status: active,
+               first_seen: "2026-01-15T08:40:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - revoke_sessions:jsmith@example.com
+    - isolate_endpoint:TH-LT-1047
+    - block_ip:203.0.113.145
+  elevated: []
+  excluded: []
+  unrouted: []
+  below_threshold: []
+  risk: {min: 60, max: 100}
+  confidence: {min: 50, max: 100}
+  degraded_sources: []
+  evidence_min: 1
+  containment: CONTAINED
+  results:
+    revoke_sessions:jsmith@example.com: SUCCESS
+    isolate_endpoint:TH-LT-1047: SUCCESS
+    block_ip:203.0.113.145: SUCCESS
+  controls: 2
+  notifications: [incident_note, soc_notification, analyst_summary]

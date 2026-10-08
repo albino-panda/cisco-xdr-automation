@@ -1,0 +1,68 @@
+# account-takeover workflow scenario; fake lab data only.
+schema: 1
+name: tp-approve-selected
+workflow: account-takeover
+description: >-
+  True positive: Entra rates mwong high risk after a successful sign-in from an IP that Cisco XDR rates
+  malicious, and her laptop TH-LT-2210 has an active malicious detection. The analyst approves the
+  session revocation and the IP block but not the isolation (the desktop team is already on site):
+  the isolation is recorded as rejected by the analyst and never executed.
+tags: [true_positive, approve_selected]
+mode: live
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], secure_endpoint: [endpoint],
+        meraki: [network]}
+incident:
+  incident_id: XDR-ATO-0002
+  title: Entra high-risk sign-in for mwong@example.com
+  severity: HIGH
+  workflow_id: account-takeover
+  observables:
+    - {type: user, value: mwong@example.com}
+    - {type: hostname, value: TH-LT-2210}
+  users: [mwong@example.com]
+  trigger: {source: entra, mitre_techniques: [T1078.004]}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.161, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [cisco_xdr], summary: hosting provider range used for credential abuse}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: mwong@example.com
+      record: {kind: user_profile, user: mwong@example.com, object_id: 00000000-0000-4000-8000-00000000a002,
+               display_name: M Wong, department: Sales, groups: [Sales Users], privileged: false,
+               account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: mwong@example.com
+      record: {kind: sign_in, sign_in_id: si-ato-0002-1, user: mwong@example.com,
+               timestamp: "2026-01-15T10:20:00Z", ip: 198.51.100.161, country: US, app: Office 365 SharePoint Online,
+               result: success, mfa_result: satisfied, risk_level: high}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: endpoint, hostname: TH-LT-2210, connector_guid: 00000000-0000-4000-8000-000000002210,
+               os: Windows 11, users: [mwong@example.com], groups: [Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: detection, detection_id: det-ato-0002-1, name: Infostealer.Generic, verdict: MALICIOUS,
+               severity: HIGH, endpoint: TH-LT-2210, user: mwong@example.com, status: active,
+               sha256: 6a2b1d4c6a2b1d4c6a2b1d4c6a2b1d4c6a2b1d4c6a2b1d4c6a2b1d4c6a2b1d4c,
+               first_seen: "2026-01-15T09:55:00Z"}
+analyst:
+  decision: APPROVE_SELECTED
+  approvers: [analyst]
+  select: [revoke_sessions:mwong@example.com, block_ip:198.51.100.161]
+expect:
+  actions:
+    - revoke_sessions:mwong@example.com
+    - isolate_endpoint:TH-LT-2210
+    - block_ip:198.51.100.161
+  results:
+    revoke_sessions:mwong@example.com: SUCCESS
+    block_ip:198.51.100.161: SUCCESS
+    isolate_endpoint:TH-LT-2210: REJECTED_BY_ANALYST
+  containment: CONTAINED
+  controls: 1

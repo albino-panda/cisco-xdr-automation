@@ -1,0 +1,62 @@
+# account-takeover workflow scenario; fake lab data only.
+# Migrated from the legacy spec scenario 06. Changes: typed records instead of legacy result items; the
+# legacy incident.context.previously_revoked_users (incident data, never evidence) becomes the Entra
+# record that proves it: the user's sessions are valid only from 08:00 (signInSessionsValidFromDateTime)
+# and the attacker signed in successfully after that. Every action waits for a human approval (C1).
+schema: 1
+name: legacy-06-attacker-returns-after-revocation
+workflow: account-takeover
+description: >-
+  An earlier run for this incident revoked the user's sessions, and the user still shows a successful
+  sign-in from a malicious IP after that revocation. The attacker holds working credentials, so
+  revocation alone is not enough: sessions are revoked again and the account is disabled until the
+  help desk has reset the password and re-registered MFA. The attacker IP is blocked. All with approval.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/account-takeover/scenarios/06-attacker-returns-after-revocation.yaml
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], secure_endpoint: [endpoint],
+        meraki: [network]}
+incident:
+  incident_id: INC-TEST-ATO-0006
+  title: Repeat attacker sign-in after session revocation
+  severity: HIGH
+  source: Microsoft Entra ID Protection
+  workflow_id: account-takeover
+  observables:
+    - {type: user, value: hr-ops-03@example.com}
+    - {type: ip, value: 198.51.100.150}
+  users: [hr-ops-03@example.com]
+  trigger: {source: entra, mitre_techniques: [T1078.004], detection: riskySignIn,
+            previously_revoked_users: [hr-ops-03@example.com]}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.150, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: attacker infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: hr-ops-03@example.com
+      record: {kind: user_profile, user: hr-ops-03@example.com, department: Human Resources,
+               manager: hr-lead@example.com, groups: [HR Users], roles: [], privileged: false,
+               account_enabled: true, risk_level: medium, risk_state: at_risk,
+               sessions_valid_from: "2026-01-15T08:00:00Z"}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: hr-ops-03@example.com
+      record: {kind: sign_in, sign_in_id: si-legacy-06-1, user: hr-ops-03@example.com,
+               timestamp: "2026-01-15T09:40:00Z", ip: 198.51.100.150, country: unfamiliar,
+               app: Office 365 Exchange Online, result: success, mfa_result: satisfied, risk_level: medium}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: hr-ops-03@example.com
+      record: {kind: anomaly, anomaly_id: rd-legacy-06-1, anomaly_type: unfamiliar_location, severity: MEDIUM,
+               user: hr-ops-03@example.com, ip: 198.51.100.150, first_seen: "2026-01-15T09:40:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions:
+    - revoke_sessions:hr-ops-03@example.com
+    - disable_user:hr-ops-03@example.com
+    - block_ip:198.51.100.150
+  elevated: []
+  containment: CONTAINED
+  controls: 2

@@ -1,0 +1,62 @@
+# account-takeover workflow scenario; fake lab data only.
+# Migrated from the legacy spec scenario 04. Changes: typed records instead of legacy result items; the
+# private VPN pool address 10.20.30.40 becomes 198.51.100.70 inside a lab VPN pool 198.51.100.64/27
+# (documentation range only); the legacy skipped_internal status becomes the allow-list: the block is
+# listed under excluded targets with its reason, shown on the decision card and never executed.
+schema: 1
+name: legacy-04-internal-vpn-source
+workflow: account-takeover
+description: >-
+  The attacker connected to the corporate VPN with the stolen credentials, so the cloud sign-in comes
+  from a VPN pool address that Cisco XDR rates malicious. The session revocation is recommended. The IP
+  block is recommended too but the VPN pool is allow-listed: a perimeter block cannot act on an
+  internal address and could cut off a legitimate user who gets the same lease later, so the block is
+  shown as excluded and never executed. The analyst ends the VPN session from the note.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/account-takeover/scenarios/04-internal-vpn-source.yaml
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], secure_endpoint: [endpoint],
+        meraki: [network]}
+config:
+  allowlists:
+    never_block:
+      cidrs: [192.0.2.0/28, 198.51.100.64/27]
+incident:
+  incident_id: INC-TEST-ATO-0004
+  title: Risky sign-in from corporate VPN address
+  severity: HIGH
+  source: cisco_xdr
+  workflow_id: account-takeover
+  observables:
+    - {type: user, value: eng-dev-11@example.com}
+    - {type: ip, value: 198.51.100.70}
+  users: [eng-dev-11@example.com]
+  trigger: {source: cisco_xdr, mitre_techniques: [T1078.004], detection: riskySignIn, vpn_pool: 198.51.100.64/27}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.70, verdict: MALICIOUS, risk_score: 85, confidence: 75,
+       integrations: [cisco_xdr], summary: sightings tie the address to the attacker session}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: eng-dev-11@example.com
+      record: {kind: user_profile, user: eng-dev-11@example.com, department: Engineering,
+               manager: eng-lead@example.com, groups: [Engineering], roles: [], privileged: false,
+               account_enabled: true, risk_level: medium, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: eng-dev-11@example.com
+      record: {kind: sign_in, sign_in_id: si-legacy-04-1, user: eng-dev-11@example.com,
+               timestamp: "2026-01-15T10:10:00Z", ip: 198.51.100.70, city: Corporate VPN,
+               app: Office 365 SharePoint Online, result: success, mfa_result: satisfied, risk_level: medium}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: eng-dev-11@example.com
+      record: {kind: anomaly, anomaly_id: rd-legacy-04-1, anomaly_type: new_device, severity: MEDIUM,
+               user: eng-dev-11@example.com, ip: 198.51.100.70, first_seen: "2026-01-15T10:10:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions: [revoke_sessions:eng-dev-11@example.com]
+  excluded: [block_ip:198.51.100.70]
+  containment: CONTAINED
+  controls: 0

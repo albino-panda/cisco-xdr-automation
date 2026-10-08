@@ -1,0 +1,65 @@
+# account-takeover workflow scenario; fake lab data only.
+schema: 1
+name: partial-failure
+workflow: account-takeover
+description: >-
+  The analyst approves the whole package (revoke, isolate, block); the Meraki IP block fails at the
+  vendor. The sessions are revoked and the laptop is isolated, the block is reported FAILED and the
+  overall result is PARTIALLY_CONTAINED. Nothing is retried silently.
+tags: [partial_failure, true_positive, approve_all]
+mode: live
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], secure_endpoint: [endpoint],
+        meraki: [network]}
+incident:
+  incident_id: XDR-ATO-0007
+  title: Entra risky sign-in for pchan@example.com from unfamiliar location
+  severity: HIGH
+  workflow_id: account-takeover
+  observables:
+    - {type: user, value: pchan@example.com}
+    - {type: hostname, value: TH-LT-3301}
+  users: [pchan@example.com]
+  trigger: {source: entra, mitre_techniques: [T1078.004]}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.150, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: credential-abuse infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: pchan@example.com
+      record: {kind: user_profile, user: pchan@example.com, display_name: P Chan, department: Operations,
+               groups: [Operations], account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: pchan@example.com
+      record: {kind: sign_in, sign_in_id: si-ato-0007-1, user: pchan@example.com,
+               timestamp: "2026-01-15T10:50:00Z", ip: 203.0.113.150, country: VN, app: Office 365 Exchange Online,
+               result: success, mfa_result: satisfied, risk_level: high}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3301
+      record: {kind: endpoint, hostname: TH-LT-3301, connector_guid: 00000000-0000-4000-8000-000000003301,
+               os: Windows 11, users: [pchan@example.com], groups: [Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3301
+      record: {kind: detection, detection_id: det-ato-0007-1, name: Infostealer.Generic, verdict: MALICIOUS,
+               severity: HIGH, endpoint: TH-LT-3301, user: pchan@example.com, status: active,
+               sha256: 7b3c2e5d7b3c2e5d7b3c2e5d7b3c2e5d7b3c2e5d7b3c2e5d7b3c2e5d7b3c2e5d,
+               first_seen: "2026-01-15T10:30:00Z"}
+  faults:
+    - {kind: FAIL, integration: meraki, operation: block_ip, times: 10}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions:
+    - revoke_sessions:pchan@example.com
+    - isolate_endpoint:TH-LT-3301
+    - block_ip:203.0.113.150
+  containment: PARTIALLY_CONTAINED
+  results:
+    revoke_sessions:pchan@example.com: SUCCESS
+    isolate_endpoint:TH-LT-3301: SUCCESS
+    block_ip:203.0.113.150: FAILED
+  controls: 1

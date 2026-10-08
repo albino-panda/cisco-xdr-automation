@@ -1,0 +1,56 @@
+# account-takeover workflow scenario; fake lab data only.
+schema: 1
+name: edge-shared-vpn-exit
+workflow: account-takeover
+description: >-
+  The attacker signed in to ekaur's account through a commercial VPN exit that Cisco XDR rates
+  malicious, but Defender XDR hunting shows two internal laptops also reach that address: it is shared
+  infrastructure, so blocking it would cut off legitimate users. The block is not recommended; the
+  session revocation is, and the sign-in from the shared exit stays in its evidence.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], secure_endpoint: [endpoint],
+        meraki: [network]}
+incident:
+  incident_id: XDR-ATO-0012
+  title: Entra risky sign-in for ekaur@example.com from anonymous IP
+  severity: HIGH
+  workflow_id: account-takeover
+  observables:
+    - {type: user, value: ekaur@example.com}
+    - {type: ip, value: 198.51.100.40}
+  users: [ekaur@example.com]
+  trigger: {source: entra, mitre_techniques: [T1078.004]}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.40, verdict: MALICIOUS, risk_score: 80, confidence: 70,
+       integrations: [cisco_xdr], summary: commercial VPN exit abused for credential attacks}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: ekaur@example.com
+      record: {kind: user_profile, user: ekaur@example.com, display_name: E Kaur, department: Marketing,
+               groups: [Marketing], account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: ekaur@example.com
+      record: {kind: sign_in, sign_in_id: si-ato-0012-1, user: ekaur@example.com,
+               timestamp: "2026-01-15T10:00:00Z", ip: 198.51.100.40, country: CH, app: Office 365 Exchange Online,
+               result: success, mfa_result: satisfied, risk_level: high}
+    - integration: microsoft_cloud
+      atomic: search_ip_enterprise
+      subject: 198.51.100.40
+      record: {kind: network_connection, endpoint: TH-LT-0501, remote_ip: 198.51.100.40, remote_port: 443,
+               protocol: tcp, direction: outbound, count: 37, action: allowed, first_seen: "2026-01-14T08:00:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_ip_enterprise
+      subject: 198.51.100.40
+      record: {kind: network_connection, endpoint: TH-LT-0777, remote_ip: 198.51.100.40, remote_port: 443,
+               protocol: tcp, direction: outbound, count: 12, action: allowed, first_seen: "2026-01-14T09:30:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  considered: ["block_ip:198.51.100.40"]
+  actions: [revoke_sessions:ekaur@example.com]
+  below_threshold: []
+  containment: CONTAINED
+  controls: 0

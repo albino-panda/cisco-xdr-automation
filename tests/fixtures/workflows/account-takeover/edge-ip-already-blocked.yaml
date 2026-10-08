@@ -1,0 +1,47 @@
+# account-takeover workflow scenario; fake lab data only.
+schema: 1
+name: edge-ip-already-blocked
+workflow: account-takeover
+description: >-
+  The attacker IP is already blocked on the Meraki MX (an earlier incident blocked it). The block is
+  still recommended and approved like every action, and execution reports ALREADY_CONTAINED instead
+  of acting twice; the session revocation executes normally.
+tags: [edge_case, true_positive, approve_all]
+mode: live
+suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], secure_endpoint: [endpoint],
+        meraki: [network]}
+incident:
+  incident_id: XDR-ATO-0010
+  title: Entra risky sign-in for ofarah@example.com
+  severity: HIGH
+  workflow_id: account-takeover
+  observables:
+    - {type: user, value: ofarah@example.com}
+    - {type: ip, value: 203.0.113.166}
+  users: [ofarah@example.com]
+  trigger: {source: entra, mitre_techniques: [T1078.004]}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.166, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: credential-abuse infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: ofarah@example.com
+      record: {kind: user_profile, user: ofarah@example.com, display_name: O Farah, department: Finance,
+               groups: [Finance Users], account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: ofarah@example.com
+      record: {kind: sign_in, sign_in_id: si-ato-0010-1, user: ofarah@example.com,
+               timestamp: "2026-01-15T09:35:00Z", ip: 203.0.113.166, country: PL, app: Office 365 Exchange Online,
+               result: success, mfa_result: satisfied, risk_level: high}
+  preexisting:
+    - {action_type: block_ip, target: 203.0.113.166}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions:
+    - revoke_sessions:ofarah@example.com
+    - block_ip:203.0.113.166
+  already_contained: [block_ip:203.0.113.166]
+  containment: CONTAINED
