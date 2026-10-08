@@ -24,6 +24,22 @@ integrations:
     secrets:
       client_id: XDR_CLIENT_ID
       client_secret: XDR_CLIENT_SECRET
+    # Native-first routing (architecture 14.1.7). Containment recommendations run through an XDR
+    # module action only when the operator lists it here, per action type and per landing product:
+    #   native_actions.<action_type>.<product> = {module: <module name filter>, action_id: <id>}
+    # Copy module and action_id from YOUR tenant's respond/observables listing for that product;
+    # the framework never guesses them. The listing must offer exactly one module instance with that
+    # action id, otherwise the recommendation falls back to the product's direct adapter (and the
+    # reason is shown in the routing notes). Placeholder values only; there is no default table.
+    # options:
+    #   native_actions:
+    #     isolate_endpoint:
+    #       secure_endpoint: {module: "Secure Endpoint", action_id: "<action id from the listing>"}
+    #       defender_endpoint: {module: "Microsoft Defender for Endpoint", action_id: "<action id>"}
+    #     block_domain:
+    #       umbrella: {module: "Umbrella", action_id: "<action id from the listing>"}
+    #     disable_user:
+    #       entra: {module: "<identity module name>", action_id: "<action id from the listing>"}
 
   secure_endpoint:
     enabled: true
