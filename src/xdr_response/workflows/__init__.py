@@ -29,15 +29,17 @@ from xdr_response.workflows.definition import (
     WorkflowDefinition,
 )
 from xdr_response.workflows.expr import ExprError
-from xdr_response.workflows.hooks import RunView, WorkflowHooks
+from xdr_response.workflows.hooks import Consideration, Handoff, RunView, WorkflowHooks
 
 __all__ = [
     "APPROVAL_LIKE_KEYS",
     "SEMVER_RE",
     "TACTICS",
     "WORKFLOW_ID_RE",
+    "Consideration",
     "CorrelationSpec",
     "ExprError",
+    "Handoff",
     "IntegrationRequirement",
     "InvestigationStep",
     "MitreMapping",

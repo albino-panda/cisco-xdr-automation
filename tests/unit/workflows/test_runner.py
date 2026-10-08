@@ -381,3 +381,73 @@ def test_a_source_withheld_by_the_disclosure_policy_does_not_hide_its_real_healt
     assert withheld.outcome is SourceOutcome.NOT_QUERIED and withheld.health is HealthStatus.UNKNOWN
     assert run.health["virustotal"] is HealthStatus.CONNECTED
     assert "virustotal" not in run.degraded_sources()
+
+
+# ------------------------------------------- considerations and hand-offs (14.10.1) --
+from xdr_response.workflows.hooks import Consideration, Handoff  # noqa: E402
+
+
+class _ReportingHooks(SampleMalwareHooks):
+    """Reports one withheld item, one manual step and hand-offs (valid and invalid)."""
+
+    def considered(self, view: RunView) -> Sequence[Consideration]:
+        first = view.index.ids()[:1]
+        return [Consideration(subject=f"block_hash:{HASH}", reason="seen on 60 endpoints: not proposed",
+                              record_ids=first),
+                Consideration(subject=f"block_hash:{HASH}", reason="duplicate entry", record_ids=view.index.ids()[1:2]),
+                Consideration(subject=HOST, reason="remove the scheduled task by hand", record_ids=first, manual=True),
+                Consideration(subject="nothing", reason="cites nothing", record_ids=()),
+                Consideration(subject="ghost", reason="unknown record", record_ids=("rec_" + "2" * 32,)),
+                "not a consideration"]  # type: ignore[list-item]
+
+    def handoffs(self, view: RunView) -> Sequence[Handoff]:
+        first = view.index.ids()[:1]
+        return [Handoff(workflow_id="ransomware", subjects=(HOST,), reason="encryption follows", record_ids=first),
+                Handoff(workflow_id="ransomware", subjects=(HOST, "TH-LT-2001"), reason="again", record_ids=first),
+                Handoff(workflow_id="c2", subjects=(HOST,), reason="not declared", record_ids=first),
+                Handoff(workflow_id="ransomware", subjects=(), reason="no subject", record_ids=first)]
+
+
+class _ExplodingReportHooks(SampleMalwareHooks):
+    def considered(self, view: RunView) -> Sequence[Consideration]:
+        raise RuntimeError("considered exploded")
+
+    def handoffs(self, view: RunView) -> Sequence[Handoff]:
+        raise RuntimeError("handoffs exploded")
+
+
+def test_considerations_and_handoffs_are_validated_noted_and_summarised(lab):
+    lab.infected()
+    definition = _variant(related_workflows=("ransomware", "c2"), handoff_to=("ransomware",))
+    run = _run(lab, definition, _ReportingHooks())
+    assert [(c.subject, c.manual) for c in run.considered] == [(f"block_hash:{HASH}", False), (HOST, True)]
+    withheld = run.considered[0]
+    assert withheld.reason == "seen on 60 endpoints: not proposed" and len(withheld.record_ids) == 2
+    assert [(h.workflow_id, h.subjects) for h in run.handoffs] == [("ransomware", (HOST, "TH-LT-2001"))]
+    assert f"considered, not proposed: block_hash:{HASH}: seen on 60 endpoints: not proposed" in run.notes
+    assert f"manual step: {HOST}: remove the scheduled task by hand" in run.notes
+    assert any(n.startswith(f"hand-off: run ransomware for {HOST}, TH-LT-2001: encryption follows") for n in run.notes)
+    ignored = [n for n in run.notes if n.startswith(("hook consideration ignored", "hook hand-off ignored",
+                                                     "hook considered item ignored"))]
+    assert len(ignored) == 5
+    assert any("'c2' is not in handoff_to" in n for n in ignored)
+    summary = run.summary()
+    assert summary.considered == (f"block_hash:{HASH}: seen on 60 endpoints: not proposed "
+                                  f"[{', '.join(withheld.record_ids)}]",)
+    assert summary.manual_steps[0].startswith(f"{HOST}: remove the scheduled task by hand [rec_")
+    assert summary.handoffs[0].startswith(f"ransomware for {HOST}, TH-LT-2001: encryption follows [rec_")
+    # Reporting never changes what is recommended.
+    assert _selectors(run, RuleOutcomeStatus.PROPOSED) == {ISOLATE, BLOCK}
+
+
+def test_hand_offs_need_a_declared_target_and_hook_failures_never_block(lab):
+    lab.infected()
+    run = _run(lab, WORKFLOW, _ReportingHooks())  # the sample declares no handoff_to
+    assert run.handoffs == ()
+    assert "hook hand-off ignored: 'ransomware' is not in handoff_to []" in run.notes  # noted once (same text)
+    assert "hook hand-off ignored: 'c2' is not in handoff_to []" in run.notes
+    run = _run(lab, WORKFLOW, _ExplodingReportHooks())
+    assert "hook considered failed: RuntimeError: considered exploded" in run.notes
+    assert "hook handoffs failed: RuntimeError: handoffs exploded" in run.notes
+    assert run.considered == () and run.handoffs == ()
+    assert _selectors(run, RuleOutcomeStatus.PROPOSED) == {ISOLATE, BLOCK}

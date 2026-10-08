@@ -414,3 +414,17 @@ def test_titles() -> None:
         "[CRITICAL] XDR-83921 containment proposed, awaiting human approval: Potential ransomware on TH-LT-1047")
     assert render_analyst_summary(event).title == (
         "Analyst summary XDR-83921: containment proposed, awaiting human approval")
+
+
+@pytest.mark.parametrize("render", [render_incident_note, render_analyst_summary])
+def test_considered_items_manual_steps_and_handoffs_are_reported(render: Renderer) -> None:
+    summary = b.summary(considered=("block_hash:" + "a" * 64 + ": seen on 60 endpoints [rec_1]",),
+                        manual_steps=("jsmith@example.com: remove inbox rule 'x' [rec_2]",),
+                        handoffs=("account-takeover for jsmith@example.com: signed in after the click [rec_3]",))
+    body = render(b.event(LifecycleEventKind.DETECTION_COMPLETED, summary=summary)).body
+    assert "Considered, deliberately not proposed:\n  - block_hash:" in body
+    assert "Manual steps (no verified automated action; not in the package):\n  - jsmith@example.com" in body
+    assert ("Suggested hand-offs to other workflows (nothing is started):\n"
+            "  - account-takeover for jsmith@example.com") in body
+    plain = render(b.event(LifecycleEventKind.DETECTION_COMPLETED)).body
+    assert "Considered, deliberately" not in plain and "hand-offs" not in plain

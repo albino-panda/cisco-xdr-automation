@@ -81,6 +81,9 @@ class WorkflowSummary(FrozenModel):
     unrouted: tuple[str, ...] = ()  # "<action_type> <target>: <reason>"
     below_threshold: tuple[str, ...] = ()
     blast_radius: BlastRadius = BlastRadius()
+    considered: tuple[str, ...] = ()  # "<subject>: <reason> [<record ids>]": examined, deliberately not proposed
+    manual_steps: tuple[str, ...] = ()  # "<subject>: <what to do> [<record ids>]": no VERIFIED write exists
+    handoffs: tuple[str, ...] = ()  # "<workflow> for <subjects>: <reason> [<record ids>]": suggestions only
 
 
 class LifecycleEvent(FrozenModel):

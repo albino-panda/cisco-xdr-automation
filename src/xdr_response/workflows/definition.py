@@ -428,7 +428,13 @@ class RecommendationRule(FrozenModel):
     target: str  # expression -> str (normalized by the builder)
     evidence: str  # expression -> list[str] of record ids (>= 1 at run time)
     include_target_enrichment: bool = True
-    asset: str | None = None  # expression -> {"groups", "tags", "roles", "ip"} (optional keys)
+    #: expression -> {"groups", "tags", "roles", "ip", "ips", "users", "privileged"} (optional keys)
+    asset: str | None = None
+    #: expression -> list of SHA-256 values: the binaries whose behaviour alone the recommendation
+    #: rests on (a relay block because the tool is flagged). When every one is sanctioned (allow-listed
+    #: or approved-tool hash, approved signer on a prevalence record) the runner withholds the action as
+    #: ALLOWLISTED and shows it as considered. ``[]`` (or None) when the target stands on its own.
+    binaries: str | None = None
     params: Mapping[str, str] = {}  # param name -> expression; reserved keys refused; no floats
     rationale: str  # expression -> str
     min_risk: int = Field(default=0, ge=0, le=100)  # below: "considered, not proposed" note
@@ -454,7 +460,7 @@ class RecommendationRule(FrozenModel):
                              "types can be recommended (restoration is only built by RestorationPlanner)")
         return value
 
-    @field_validator("for_each", "when", "target", "evidence", "asset", "rationale")
+    @field_validator("for_each", "when", "target", "evidence", "asset", "binaries", "rationale")
     @classmethod
     def _expressions(cls, value: str | None, info: Any) -> str | None:
         return _check_expr(value, f"rule {info.field_name}")
@@ -565,6 +571,8 @@ class WorkflowDefinition(FrozenModel):
     mitre: tuple[MitreMapping, ...] = Field(min_length=1)
     known_limitations: tuple[str, ...] = Field(min_length=1)
     related_workflows: tuple[str, ...] = ()
+    #: Workflows this one may hand off to (hook ``handoffs``, 14.10.1); a subset of related_workflows.
+    handoff_to: tuple[str, ...] = ()
 
     @field_validator("id")
     @classmethod
@@ -592,12 +600,15 @@ class WorkflowDefinition(FrozenModel):
             _non_empty(item, "known limitation")
         return value
 
-    @field_validator("related_workflows")
+    @field_validator("related_workflows", "handoff_to")
     @classmethod
-    def _related(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+    def _related(cls, value: tuple[str, ...], info: Any) -> tuple[str, ...]:
         bad = [v for v in value if not _ID_RE.match(v)]
         if bad:
-            raise ValueError(f"related workflow ids must be kebab-case: {bad}")
+            raise ValueError(f"{info.field_name} ids must be kebab-case: {bad}")
+        dupes = _duplicates(list(value))
+        if dupes:
+            raise ValueError(f"{info.field_name} lists ids twice: {dupes}")
         return value
 
     @model_validator(mode="after")
@@ -620,6 +631,9 @@ class WorkflowDefinition(FrozenModel):
                 raise ValueError(f"duplicate {what} ids: {dupes}")
         if self.id in self.related_workflows:
             raise ValueError("a workflow cannot list itself in related_workflows")
+        outside = [w for w in self.handoff_to if w not in self.related_workflows]
+        if outside:
+            raise ValueError(f"handoff_to {outside} must also be listed in related_workflows")
 
     def _check_integrations(self) -> None:
         required = [r.integration for r in self.required_integrations]

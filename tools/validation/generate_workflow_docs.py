@@ -54,8 +54,8 @@ PHASES: Mapping[str, int] = {
 }
 
 MITRE_NOTES = (
-    "Mail bombing has no dedicated ATT&CK technique. It is mapped by effect (T1499) and by the "
-    "impersonation that usually follows (T1656).",
+    "Mail bombing maps to T1667 *Email Bombing* (added in ATT&CK v17). The legacy spec mapped it by effect "
+    "to T1499 *Endpoint Denial of Service*; that forced mapping was dropped when the workflow migrated.",
     "T1219 was renamed *Remote Access Tools* in ATT&CK v17; the ID is unchanged.",
     "Legacy specs carry no tactic; tactics appear when a workflow migrates to a `WorkflowDefinition` "
     "(every mapping there names its tactic and a rationale, so no mapping is forced).",
@@ -92,6 +92,7 @@ class WorkflowEntry:
     actions: tuple[str, ...]
     integrations: tuple[str, ...]
     scenarios: int
+    handoffs: tuple[str, ...] = ()  # WorkflowDefinition.handoff_to (migrated workflows only)
 
 
 @dataclass
@@ -146,6 +147,7 @@ def migrated_entry(definition: Any, root: Path) -> WorkflowEntry:
         actions=actions,
         integrations=tuple(r.integration for r in definition.required_integrations),
         scenarios=_count(root / "tests" / "fixtures" / "workflows" / definition.id),
+        handoffs=tuple(getattr(definition, "handoff_to", ()) or ()),
     )
 
 
@@ -265,18 +267,21 @@ def render_workflows_readme(entries: Sequence[WorkflowEntry]) -> str:
         "`src/xdr_response/workflows/`; `legacy spec` workflows are still `workflows/<id>/workflow.yaml` "
         "specs checked by `xdr_plan`. Every action listed is only a recommendation: it needs a human "
         "approval (ELEVATED for critical assets and over blast-radius caps) before the lifecycle "
-        f"executes it. Regenerate with `python {GENERATOR} --write`.",
+        f"executes it. \"Hands off to\" lists the workflows a run may suggest next (a note for the analyst; "
+        f"nothing is started). Regenerate with `python {GENERATOR} --write`.",
         "",
-        "| Workflow | Phase | Status | Severity | ATT&CK | Recommended actions | Required integrations | Scenarios |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Workflow | Phase | Status | Severity | ATT&CK | Recommended actions | Required integrations | Scenarios "
+        "| Hands off to |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for e in entries:
         attack = ", ".join(t.id for t in e.techniques) or "-"
         actions = ", ".join(f"`{a}`" for a in e.actions) or "-"
         integrations = ", ".join(f"`{i}`" for i in e.integrations) or "-"
         phase = str(e.phase) if e.phase is not None else "-"
+        handoffs = ", ".join(f"`{h}`" for h in e.handoffs) or "-"
         lines.append(f"| {_workflow_link(e.id, '../../')} | {phase} | {e.status} | {e.severity} | "
-                     f"{attack} | {actions} | {integrations} | {e.scenarios} |")
+                     f"{attack} | {actions} | {integrations} | {e.scenarios} | {handoffs} |")
     return "\n".join(lines) + "\n"
 
 

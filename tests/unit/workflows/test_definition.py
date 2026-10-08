@@ -241,3 +241,17 @@ def test_definition_matches_picks_the_highest_priority_trigger():
     definition = WorkflowDefinition.model_validate(data)
     assert definition.matches(make_incident()).description == "high"
     assert definition.matches(make_incident(title="Other")).description == "low"
+
+
+# ------------------------------------------------------- hand-off targets (14.10.1) --
+def test_handoff_targets_must_be_related_kebab_case_and_unique():
+    ok = WorkflowDefinition.model_validate(_data(related_workflows=("account-takeover", "c2"),
+                                                 handoff_to=("account-takeover",)))
+    assert ok.handoff_to == ("account-takeover",)
+    with pytest.raises(ValidationError, match="must also be listed in related_workflows"):
+        WorkflowDefinition.model_validate(_data(related_workflows=("c2",), handoff_to=("account-takeover",)))
+    with pytest.raises(ValidationError, match="handoff_to ids must be kebab-case"):
+        WorkflowDefinition.model_validate(_data(related_workflows=("Account_Takeover",),
+                                                handoff_to=("Account_Takeover",)))
+    with pytest.raises(ValidationError, match="related_workflows lists ids twice"):
+        WorkflowDefinition.model_validate(_data(related_workflows=("c2", "c2")))

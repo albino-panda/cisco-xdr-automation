@@ -110,7 +110,13 @@ def test_readmes_link_every_workflow_and_mark_generated(root):
     assert "| [T1003.001](https://attack.mitre.org/techniques/T1003/001/) | OS Credential Dumping: LSASS Memory | - |" in mitre_md
     assert "| TA0040 Impact | [`ransomware`](../../workflows/ransomware/README.md) |" in mitre_md
     assert ("| [`ransomware`](../../workflows/ransomware/README.md) | 2 | migrated | critical | T1486, T1490 | "
-            "`isolate_endpoint`, `block_hash` | `secure_endpoint` | 2 |") in index_md
+            "`isolate_endpoint`, `block_hash` | `secure_endpoint` | 2 | - |") in index_md
+    assert "| Scenarios | Hands off to |" in index_md
+
+
+def test_hand_off_targets_are_listed(root):
+    index_md = gen.render_workflows_readme(gen.collect(root, [definition(handoff_to=("account-takeover",))], []))
+    assert index_md.rstrip().endswith("| 2 | `account-takeover` |")
 
 
 def test_output_is_deterministic(root):

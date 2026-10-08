@@ -230,6 +230,9 @@ class ScenarioExpect(FrozenModel):
     risk: ScoreRange | None = None
     confidence: ScoreRange | None = None
     degraded_sources: tuple[str, ...] | None = None
+    considered: tuple[str, ...] | None = None  # subjects of hook considerations (not manual), exact set
+    manual_steps: tuple[str, ...] | None = None  # subjects of hook manual steps, exact set
+    handoffs: tuple[str, ...] | None = None  # "<workflow>:<subject>" of hook hand-offs, exact set
     warnings: tuple[str, ...] = ()
     evidence_min: int = Field(default=1, ge=1)
     dry_run_lines: tuple[str, ...] | None = None
@@ -538,6 +541,12 @@ class WorkflowScenarioRun(ScenarioRun):
         if expect.degraded_sources is not None and set(run.degraded_sources()) != set(expect.degraded_sources):
             problems.append(f"degraded sources {list(run.degraded_sources())} != expected "
                             f"{sorted(expect.degraded_sources)}")
+        hook_sets = (("considered", expect.considered, {c.subject for c in run.considered if not c.manual}),
+                     ("manual steps", expect.manual_steps, {c.subject for c in run.considered if c.manual}),
+                     ("hand-offs", expect.handoffs, {f"{h.workflow_id}:{s}" for h in run.handoffs for s in h.subjects}))
+        for label, wanted, got in hook_sets:
+            if wanted is not None and set(wanted) != got:
+                problems.append(f"{label} {sorted(got)} != expected {sorted(set(wanted))}")
         return problems
 
     def _check_decision(self, expect: ScenarioExpect) -> list[str]:

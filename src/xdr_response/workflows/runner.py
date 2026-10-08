@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
@@ -36,7 +37,21 @@ from xdr_response.atomics.correlation.models import BlastRadiusReport, Correlati
 from xdr_response.atomics.enrichment.models import ObservableReport
 from xdr_response.atomics.evidence import EvidenceBuilder, EvidenceError, RecordIndex
 from xdr_response.atomics.notifications.models import WorkflowSummary
-from xdr_response.atomics.records import AnyRecord, AtomicResult, EnrichmentRecord, SourceOutcome
+from xdr_response.atomics.records import (
+    AnyRecord,
+    AtomicResult,
+    DetectionRecord,
+    EmailMessageRecord,
+    EndpointRecord,
+    EnrichmentRecord,
+    HashPrevalenceRecord,
+    NetworkConnectionRecord,
+    PersistenceItemRecord,
+    ProcessEventRecord,
+    RoleChangeRecord,
+    SourceOutcome,
+    UserProfileRecord,
+)
 from xdr_response.clock import Clock
 from xdr_response.config import Settings
 from xdr_response.logs.redaction import get_redactor
@@ -59,6 +74,7 @@ from xdr_response.models import (
     canonical_json,
     get_action_spec,
     normalize_target,
+    same_endpoint,
 )
 from xdr_response.models.recommendation import risk_band
 from xdr_response.models.scoring import ScoreBreakdown, ScoringContext, ScoringSignal
@@ -66,13 +82,18 @@ from xdr_response.scoring.engine import ScoringEngine
 from xdr_response.scoring.signals import signals_from_enrichment, signals_from_records
 from xdr_response.workflows.definition import InvestigationStep, RecommendationRule, WorkflowDefinition
 from xdr_response.workflows.expr import ExprError, evaluate
-from xdr_response.workflows.hooks import RunView, WorkflowHooks
+from xdr_response.workflows.hooks import Consideration, Handoff, RunView, WorkflowHooks
 
 __all__ = ["RuleOutcomeStatus", "RuleOutcome", "WorkflowRun", "WorkflowRunner"]
 
 _O = ObservableType
 _T = TargetKind
 _NOTE_CHARS = 500
+_SUBJECT_CHARS = 200
+#: Keys a rule's ``asset`` expression may return (14.3, 14.11.6).
+_ASSET_KEYS = frozenset({"groups", "tags", "roles", "ip", "ips", "users", "privileged"})
+_MAX_HOOK_ITEMS = 50  # considerations or hand-offs kept per run (the rest is noted as omitted)
+_MAX_CITED = 3  # record ids shown per summary line
 _SUPPORTING = frozenset({Verdict.MALICIOUS, Verdict.SUSPICIOUS})
 _HEALTH_RANK: Mapping[HealthStatus, int] = {
     HealthStatus.CONNECTED: 0, HealthStatus.UNKNOWN: 1, HealthStatus.DEGRADED: 2,
@@ -105,6 +126,11 @@ class RuleOutcomeStatus(StrEnum):
     DUPLICATE = "DUPLICATE"
     NO_EVIDENCE = "NO_EVIDENCE"
     ERROR = "ERROR"
+    #: The file the action targets carries the signer of an approved tool (``approved_rmm`` /
+    #: ``approved_dns_tools`` ``signers``) in a record of the run, or the process the action targets
+    #: (``<HOST>/<pid>``) runs a binary whose SHA-256 is allow-listed (``never_block.hashes``, an
+    #: approved tool's ``hashes``): not proposed, shown as considered.
+    ALLOWLISTED = "ALLOWLISTED"
 
 
 class RuleOutcome(FrozenModel):
@@ -147,6 +173,8 @@ class WorkflowRun:
     confidence_score: int
     health: Mapping[str, HealthStatus]  # worst status per integration
     notes: tuple[str, ...]
+    considered: tuple[Consideration, ...] = ()  # hook items not recommended, and manual steps (14.10.1)
+    handoffs: tuple[Handoff, ...] = ()  # hook hand-off suggestions, never started (14.10.1)
 
     def outcomes_with(self, status: RuleOutcomeStatus) -> tuple[RuleOutcome, ...]:
         """Outcomes of one status, in rule order."""
@@ -169,6 +197,9 @@ class WorkflowRun:
                                   f"{o.confidence_score} (rule {o.rule_id})"
                                   for o in self.outcomes_with(RuleOutcomeStatus.BELOW_THRESHOLD)),
             blast_radius=self.blast_radius.to_blast_radius(),
+            considered=tuple(_consideration_line(c) for c in self.considered if not c.manual),
+            manual_steps=tuple(_consideration_line(c) for c in self.considered if c.manual),
+            handoffs=tuple(_handoff_line(h) for h in self.handoffs),
         )
 
     def raw_enrichments(self) -> tuple[EnrichmentResult, ...]:
@@ -210,6 +241,8 @@ class _Run:
     blast: BlastRadiusReport | None = None
     signals: tuple[ScoringSignal, ...] = ()
     facts: Mapping[str, Any] = field(default_factory=dict)
+    considered: list[Consideration] = field(default_factory=list)
+    handoffs: list[Handoff] = field(default_factory=list)
     built: list[BuiltRecommendation] = field(default_factory=list)
     outcomes: list[RuleOutcome] = field(default_factory=list)
     breakdowns: dict[tuple[ActionType, str], ScoreBreakdown] = field(default_factory=dict)
@@ -250,6 +283,219 @@ class _RuleFailure(Exception):
         self.target = target
         self.record_ids = tuple(record_ids)
         self.breakdown = breakdown
+
+
+def _is_sha256(value: str) -> bool:
+    return len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
+
+def _process_events(index: RecordIndex, kind: TargetKind, target: str) -> list[ProcessEventRecord]:
+    """The run's process events of a ``<HOST>/<pid>`` PROCESS target that report the binary's hash."""
+    if kind is not TargetKind.PROCESS:
+        return []
+    host, _, rest = target.partition("/")
+    rest = rest.strip()
+    if not rest.isdigit():
+        return []
+    return [r for r in index.records()
+            if isinstance(r, ProcessEventRecord) and r.sha256 and r.pid is not None
+            and str(r.pid) == rest and same_endpoint(str(r.endpoint), host)]
+
+
+def _file_hashes(index: RecordIndex, kind: TargetKind, target: str) -> set[str]:
+    """SHA-256 values of the file a HASH / FILE / PROCESS target names.
+
+    ``<HOST>/<sha256>`` composites name the hash directly; a ``<HOST>/<pid>`` process target names the
+    hashes of the run's process events of that pid on that host (short name or FQDN).
+    """
+    if kind is TargetKind.HASH:
+        value = target.strip().lower()
+        return {value} if _is_sha256(value) else set()
+    if kind not in (TargetKind.FILE, TargetKind.PROCESS):
+        return set()
+    rest = target.partition("/")[2].strip().lower()
+    if _is_sha256(rest):
+        return {rest}
+    return {str(r.sha256).lower() for r in _process_events(index, kind, target)}
+
+
+def _executable(name: str | None) -> str:
+    """Lower-case file name of a process name or path (``C:\\x\\Agent.exe`` -> ``agent.exe``)."""
+    if not name:
+        return ""
+    return re.split(r"[\\/]", name.strip())[-1].strip().lower()
+
+
+def _process_candidates(index: RecordIndex, kind: TargetKind, target: str) -> tuple[set[str], list[str], bool]:
+    """``(hashes, record_ids, complete)``: every candidate binary of a ``<HOST>/<pid>`` process.
+
+    Process ids are reused, so every process event of that pid on that host (short name or FQDN)
+    counts, not only the newest. An event that reports a SHA-256 contributes it. An event that
+    reports only a name and the pid (Defender timeline rows, some trajectory events) is identified by
+    the run's records on the same host that name the same executable and report its SHA-256 (process
+    events, detections, connections, persistence items, hash prevalence records that list the host),
+    or by a connection of that pid; every such hash is a candidate. ``complete`` is False when an
+    event's binary cannot be identified (a hashless event whose executable no record of the host
+    reports with a hash): its binary is unknown, so the process is never treated as sanctioned.
+
+    A caller treats the process as a sanctioned binary only when the candidates are complete and
+    *all* of them are sanctioned (14.11.6, 14.11.7): one unknown build of the same name, or one
+    unsanctioned binary that ran under the same pid, keeps the action proposed.
+    """
+    if kind is not TargetKind.PROCESS:
+        return set(), [], False
+    host, _, rest = target.partition("/")
+    rest = rest.strip()
+    if not rest.isdigit():
+        return set(), [], False
+    events = [r for r in index.records() if isinstance(r, ProcessEventRecord) and r.pid is not None
+              and str(r.pid) == rest and same_endpoint(str(r.endpoint), host)]
+    if not events:
+        return set(), [], False
+    hashes: dict[str, None] = {}
+    ids: dict[str, None] = {r.record_id: None for r in events}
+    for record in events:
+        if record.sha256:
+            hashes[str(record.sha256).lower()] = None
+    hashless = [r for r in events if not r.sha256]
+    if not hashless:
+        return set(hashes), list(ids), True
+    event_names = [{_executable(n) for n in (r.process_name, r.file_path)} - {""} for r in hashless]
+    names = set().union(*event_names)
+    unnamed = any(not n for n in event_names)
+    found_names: set[str] = set()
+    pid_hash = False
+    for record in index.records():
+        sha: str | None = None
+        on_host = False
+        record_names: tuple[str | None, ...] = ()
+        same_pid = False
+        if isinstance(record, ProcessEventRecord):
+            sha, record_names = record.sha256, (record.process_name, record.file_path)
+            on_host = same_endpoint(str(record.endpoint), host)
+        elif isinstance(record, DetectionRecord):
+            sha, record_names = record.sha256, (record.process_name, record.file_path)
+            on_host = bool(record.endpoint) and same_endpoint(str(record.endpoint), host)
+        elif isinstance(record, NetworkConnectionRecord):
+            sha, record_names = record.sha256, (record.process_name,)
+            on_host = bool(record.endpoint) and same_endpoint(str(record.endpoint), host)
+            same_pid = record.pid is not None and str(record.pid) == rest
+        elif isinstance(record, PersistenceItemRecord):
+            sha, record_names = record.sha256, (record.path, record.name)
+            on_host = same_endpoint(str(record.endpoint), host)
+        elif isinstance(record, HashPrevalenceRecord):
+            sha, record_names = record.sha256, (record.file_name,)
+            on_host = any(same_endpoint(str(e), host) for e in record.endpoints)
+        if not sha or not on_host:
+            continue
+        matched = names & {_executable(n) for n in record_names}
+        if same_pid or matched:
+            hashes[str(sha).lower()] = None
+            ids[record.record_id] = None
+            found_names |= matched
+            pid_hash = pid_hash or same_pid
+    identified = all((n & found_names) or pid_hash for n in event_names if n)
+    complete = bool(hashes) and identified and (not unnamed or pid_hash)
+    return set(hashes), list(ids), complete
+
+
+def _sanctioned(state: _Run, hashes: Iterable[str]) -> tuple[list[str], list[str]] | None:
+    """``(reasons, record_ids)`` when *every* hash is a sanctioned binary, else ``None``.
+
+    Sanctioned: the hash is in ``never_block.hashes`` or is an approved tool's hash
+    (``approved_rmm`` / ``approved_dns_tools``), or a hash prevalence record of the run reports it
+    signed by an approved tool's signer. An empty set, or one value that is not a SHA-256 or not
+    sanctioned, is never sanctioned (nothing is withheld on a guess).
+    """
+    wanted = [str(h).strip().lower() for h in hashes]
+    if not wanted:
+        return None
+    allowlists = state.ctx.allowlists
+    reasons: dict[str, None] = {}
+    record_ids: dict[str, None] = {}
+    for sha in wanted:
+        if not _is_sha256(sha):
+            return None
+        reason = allowlists.hash_reason(sha)
+        if reason:
+            reasons[reason] = None
+            continue
+        signed = [r for r in state.index.records() if isinstance(r, HashPrevalenceRecord)
+                  and r.sha256.lower() == sha and r.signer and allowlists.signer_reason(r.signer)]
+        if not signed:
+            return None
+        for record in signed:
+            reasons[str(allowlists.signer_reason(record.signer))] = None
+            record_ids[record.record_id] = None
+    return list(reasons), list(record_ids)
+
+
+_ENDPOINT_TARGETS = frozenset({TargetKind.ENDPOINT, TargetKind.FILE, TargetKind.PROCESS, TargetKind.PERSISTENCE_ITEM})
+
+
+def _record_users(index: RecordIndex, kind: TargetKind, target: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """``(users, record_ids)``: who uses the asset a target acts on, as the run's records report it.
+
+    An endpoint (or a file, process or persistence item on it): the users of its endpoint records
+    (matched by host identity, short name or FQDN). An email message: the recipients of its message
+    records (matched by message id, internet message id or network message id), whose mailboxes the
+    action changes. Used only to add critical-asset context (an executive's endpoint or mailbox is
+    ELEVATED), never to remove any.
+    """
+    users: dict[str, None] = {}
+    ids: dict[str, None] = {}
+    if kind in _ENDPOINT_TARGETS:
+        host = target.partition("/")[0] if kind is not TargetKind.ENDPOINT else target
+        for record in index.records():
+            if isinstance(record, EndpointRecord) and record.users and same_endpoint(str(record.hostname), host):
+                users.update(dict.fromkeys(str(u).lower() for u in record.users))
+                ids[record.record_id] = None
+    elif kind is TargetKind.EMAIL_MESSAGE:
+        wanted = target.strip()
+        for record in index.records():
+            if isinstance(record, EmailMessageRecord) and record.recipients and wanted in {
+                    record.message_id, record.internet_message_id, record.network_message_id}:
+                users.update(dict.fromkeys(str(u).lower() for u in record.recipients))
+                ids[record.record_id] = None
+    return tuple(users), tuple(ids)
+
+
+def _record_addresses(index: RecordIndex, kind: TargetKind, target: str) -> tuple[str, ...]:
+    """Every IP address the run's endpoint records report for the host an endpoint action acts on
+    (matched by host identity, short name or FQDN), in record order. Context only, never removes."""
+    if kind not in _ENDPOINT_TARGETS:
+        return ()
+    host = target.partition("/")[0] if kind is not TargetKind.ENDPOINT else target
+    out: dict[str, None] = {}
+    for record in index.records():
+        if isinstance(record, EndpointRecord) and record.ip_addresses and same_endpoint(str(record.hostname), host):
+            out.update(dict.fromkeys(str(a) for a in record.ip_addresses))
+    return tuple(out)
+
+
+#: Role changes after which the account holds (or can activate at will) the role.
+_ROLE_GAINED = frozenset({"assigned", "activated", "eligible_assigned"})
+
+
+def _record_privileged(index: RecordIndex, kind: TargetKind, target: str) -> bool:
+    """True when a record of the run reports that the account an action acts on is privileged.
+
+    A user profile record marks it (``UserProfileRecord.privileged``: the source's flag, or a listed
+    privileged directory role), or a role change record reports that the account was assigned,
+    activated or made eligible for a privileged role (``RoleChangeRecord.privileged``, 14.11.7). The
+    profile can predate a role granted during the incident; a later removal does not undo it here
+    (context is only ever added: the action is ELEVATED, never weaker).
+    """
+    if kind not in (TargetKind.USER, TargetKind.EMAIL_ADDRESS):
+        return False
+    wanted = target.strip().lower()
+    for record in index.records():
+        if isinstance(record, UserProfileRecord) and record.privileged and str(record.user).lower() == wanted:
+            return True
+        if (isinstance(record, RoleChangeRecord) and record.privileged and record.change in _ROLE_GAINED
+                and str(record.user).lower() == wanted):
+            return True
+    return False
 
 
 def _error_text(exc: BaseException) -> str:
@@ -446,6 +692,94 @@ class WorkflowRunner:
         except Exception as exc:  # noqa: BLE001 - non-JSON facts are noted and ignored
             state.note(f"hook facts ignored: {_error_text(exc)}")
             state.facts = {}
+        state.considered = self._valid_considerations(state, view)
+        state.handoffs = self._valid_handoffs(state, view)
+
+    @staticmethod
+    def _hook_items(state: _Run, items_of: Any, view: RunView, method: str, kind: type) -> list[Any]:
+        """The hook's items of ``kind`` (an exception or a wrong type is noted and ignored)."""
+        try:
+            items = list(items_of(view) or ())
+        except Exception as exc:  # noqa: BLE001 - hooks never crash a run
+            state.note(f"hook {method} failed: {_error_text(exc)}")
+            return []
+        valid = []
+        for item in items:
+            if not isinstance(item, kind):
+                state.note(f"hook {method} item ignored: not a {kind.__name__} ({type(item).__name__})")
+            else:
+                valid.append(item)
+        if len(valid) > _MAX_HOOK_ITEMS:
+            state.note(f"hook {method}: {len(valid) - _MAX_HOOK_ITEMS} item(s) omitted (max {_MAX_HOOK_ITEMS})")
+            valid = valid[:_MAX_HOOK_ITEMS]
+        return valid
+
+    @staticmethod
+    def _cited_problem(state: _Run, record_ids: object) -> str:
+        if not isinstance(record_ids, tuple) or not record_ids or not all(isinstance(r, str) for r in record_ids):
+            return "needs a non-empty tuple of record ids"
+        try:
+            state.index.require(record_ids)
+        except EvidenceError as exc:
+            return str(exc)
+        return ""
+
+    def _valid_considerations(self, state: _Run, view: RunView) -> list[Consideration]:
+        redactor = get_redactor()
+        kept: dict[tuple[str, bool], Consideration] = {}
+        items = self._hook_items(state, state.hooks.considered, view,  # type: ignore[union-attr]
+                                 "considered", Consideration)
+        for item in items:
+            subject, reason = _one_line(item.subject), _one_line(item.reason)
+            problem = self._cited_problem(state, item.record_ids)
+            if not subject or not reason:
+                problem = problem or "needs a subject and a reason"
+            if problem:
+                state.note(f"hook consideration ignored ({subject or '?'}): {problem}")
+                continue
+            clean = Consideration(subject=redactor.redact_text(subject)[:_SUBJECT_CHARS],
+                                  reason=redactor.redact_text(reason)[:_NOTE_CHARS],
+                                  record_ids=tuple(dict.fromkeys(item.record_ids)), manual=bool(item.manual))
+            key = (clean.subject, clean.manual)
+            first = kept.get(key)
+            if first is not None:  # the same subject twice: one entry, the first reason, both records
+                clean = replace(first, record_ids=tuple(dict.fromkeys((*first.record_ids, *clean.record_ids))))
+            kept[key] = clean
+        for item in kept.values():
+            label = "manual step" if item.manual else "considered, not proposed"
+            state.note(f"{label}: {item.subject}: {item.reason}")
+        return list(kept.values())
+
+    def _valid_handoffs(self, state: _Run, view: RunView) -> list[Handoff]:
+        redactor = get_redactor()
+        allowed = state.workflow.handoff_to
+        kept: dict[str, Handoff] = {}
+        items = self._hook_items(state, state.hooks.handoffs, view, "handoffs", Handoff)  # type: ignore[union-attr]
+        for item in items:
+            raw = item.subjects if isinstance(item.subjects, tuple) else ()
+            subjects = tuple(dict.fromkeys(_one_line(s) for s in raw if _one_line(s)))
+            reason = _one_line(item.reason)
+            problem = self._cited_problem(state, item.record_ids)
+            if item.workflow_id not in allowed:
+                problem = f"{item.workflow_id!r} is not in handoff_to {list(allowed)}"
+            elif not subjects or not reason:
+                problem = problem or "needs subjects and a reason"
+            if problem:
+                state.note(f"hook hand-off ignored: {problem}")
+                continue
+            clean = Handoff(workflow_id=item.workflow_id,
+                            subjects=tuple(redactor.redact_text(s)[:_SUBJECT_CHARS] for s in subjects),
+                            reason=redactor.redact_text(reason)[:_NOTE_CHARS],
+                            record_ids=tuple(dict.fromkeys(item.record_ids)))
+            first = kept.get(clean.workflow_id)
+            if first is not None:  # one hand-off per workflow: the first reason, subjects and records unioned
+                clean = replace(first, subjects=tuple(dict.fromkeys((*first.subjects, *clean.subjects))),
+                                record_ids=tuple(dict.fromkeys((*first.record_ids, *clean.record_ids))))
+            kept[clean.workflow_id] = clean
+        for item in kept.values():
+            state.note(f"hand-off: run {item.workflow_id} for {', '.join(item.subjects)}: {item.reason} "
+                       "(suggestion only; nothing is started)")
+        return list(kept.values())
 
     def _valid_signals(self, state: _Run, view: RunView) -> list[ScoringSignal]:
         try:
@@ -515,6 +849,9 @@ class WorkflowRunner:
             return
         scored = self._score(state, rule, names)
         breakdown = scored.breakdown
+        self._approved_signer(state, rule, scored)
+        self._allowlisted_binary(state, rule, scored)
+        self._sanctioned_binaries(state, rule, scored, names)
         if breakdown.risk_score < rule.min_risk or breakdown.confidence_score < rule.min_confidence:
             raise _RuleFailure(RuleOutcomeStatus.BELOW_THRESHOLD,
                                f"risk {breakdown.risk_score} (min {rule.min_risk}), confidence "
@@ -522,6 +859,128 @@ class WorkflowRunner:
                                target=scored.target, record_ids=scored.rule_ids, breakdown=breakdown)
         built = self._build(state, rule, names, scored)
         self._accept(state, rule, built, scored)
+
+    @staticmethod
+    def _approved_signer(state: _Run, rule: RecommendationRule, scored: _Scored) -> None:
+        """Withhold a file action (hash block, quarantine, terminate) whose file a record of the run
+        reports as signed by an approved tool's signer (``approved_rmm`` / ``approved_dns_tools``
+        ``signers``). A new build of a sanctioned tool is identified by its signer before its hash is
+        listed. The action is not proposed; it is shown as considered (subject, reason, the records
+        that report the signer) and as an ``ALLOWLISTED`` outcome, never silently dropped."""
+        if scored.kind is TargetKind.PROCESS:
+            return  # every binary of the pid must be sanctioned: _allowlisted_binary (14.11.7)
+        hashes = _file_hashes(state.index, scored.kind, scored.target)
+        if not hashes:
+            return
+        reasons: list[str] = []
+        record_ids: list[str] = []
+        signed: set[str] = set()
+        for record in state.index.records():
+            if not isinstance(record, HashPrevalenceRecord):
+                continue  # the record kind that reports a file's code-signing subject
+            signer = record.signer
+            if not signer or record.sha256.lower() not in hashes:
+                continue
+            reason = state.ctx.allowlists.signer_reason(signer)
+            if reason:
+                reasons.append(reason)
+                record_ids.append(record.record_id)
+                signed.add(record.sha256.lower())
+        if not reasons or signed != hashes:
+            return  # every file the target names must be signed by an approved signer
+        detail = (f"file {', '.join(sorted(hashes))} is signed by an approved tool's signer ({'; '.join(dict.fromkeys(reasons))}): "
+                  "allow-listed, not proposed")
+        subject = f"{rule.action.value}:{scored.target}"
+        if not any(c.subject == subject for c in state.considered):
+            redactor = get_redactor()
+            state.considered.append(Consideration(
+                subject=redactor.redact_text(subject)[:_SUBJECT_CHARS], reason=redactor.redact_text(detail)[:_NOTE_CHARS],
+                record_ids=tuple(dict.fromkeys(record_ids))))
+        raise _RuleFailure(RuleOutcomeStatus.ALLOWLISTED, detail, target=scored.target,
+                           record_ids=tuple(dict.fromkeys([*scored.rule_ids, *record_ids])),
+                           breakdown=scored.breakdown)
+
+    @staticmethod
+    def _allowlisted_binary(state: _Run, rule: RecommendationRule, scored: _Scored) -> None:
+        """Withhold an action on a running process (``<HOST>/<pid>``) whose binary is sanctioned.
+
+        The allow-list sees only the pid in the target, so the binary comes from the run's process
+        events of that pid on that host (:func:`_process_candidates`): the hash each event reports,
+        or, for an event that reports only a name, the hashes the host's other records give for the
+        same executable. Process ids are reused, so every event of the pid counts. The termination is
+        withheld only when the candidates are complete and **every** candidate is sanctioned
+        (:func:`_sanctioned`: in ``never_block.hashes``, an approved tool's hash, or an approved
+        signer on a prevalence record of that hash); terminating it would kill the sanctioned tool.
+        It is then shown as considered (subject, reason, the records) and as an ``ALLOWLISTED``
+        outcome, never silently dropped. One unknown or unsanctioned binary under the same pid keeps
+        the action proposed (14.11.6, 14.11.7).
+        """
+        if state.ctx.allowlists.excluded_reason(rule.action, scored.target, scored.kind):
+            return  # the allow-list already excludes the target itself (shown in excluded_targets)
+        hashes, ids, complete = _process_candidates(state.index, scored.kind, scored.target)
+        if not complete:
+            return
+        sanctioned = _sanctioned(state, hashes)
+        if sanctioned is None:
+            return
+        reasons, signer_ids = sanctioned
+        record_ids = list(dict.fromkeys([*ids, *signer_ids]))
+        inferred = ""
+        if not _process_events(state.index, scored.kind, scored.target):
+            inferred = (f" (the process events report no hash; the host's records name the same executable "
+                        f"with {', '.join(sorted(hashes))})")
+        detail = (f"process {scored.target} runs an allow-listed binary ({'; '.join(reasons)}){inferred}: "
+                  "allow-listed, not proposed")
+        subject = f"{rule.action.value}:{scored.target}"
+        if not any(c.subject == subject for c in state.considered):
+            redactor = get_redactor()
+            state.considered.append(Consideration(
+                subject=redactor.redact_text(subject)[:_SUBJECT_CHARS],
+                reason=redactor.redact_text(detail)[:_NOTE_CHARS], record_ids=tuple(record_ids)))
+        raise _RuleFailure(RuleOutcomeStatus.ALLOWLISTED, detail, target=scored.target,
+                           record_ids=tuple(dict.fromkeys([*scored.rule_ids, *record_ids])),
+                           breakdown=scored.breakdown)
+
+    def _sanctioned_binaries(self, state: _Run, rule: RecommendationRule, scored: _Scored,
+                             names: Mapping[str, Any]) -> None:
+        """Withhold an action that rests only on binaries that are sanctioned (``rule.binaries``).
+
+        A rule whose case is the behaviour of a tool (a relay domain block because the tool is
+        flagged) names the tool's SHA-256 values in ``binaries``. When every one is sanctioned (an
+        allow-listed or approved-tool hash, or a file a record of the run reports signed by an
+        approved signer: :func:`_sanctioned`), the action would cut the sanctioned tool everywhere: it
+        is not proposed, shown as considered and as an ``ALLOWLISTED`` outcome, never silently
+        dropped. A rule passes ``[]`` when the target stands on its own evidence (a rated
+        destination); a target the allow-list already excludes is left to ``PackageBuilder``.
+        """
+        if rule.binaries is None:
+            return
+        if state.ctx.allowlists.excluded_reason(rule.action, scored.target, scored.kind):
+            return
+        value = self._expr(rule.binaries, names, "binaries")
+        if value is None:
+            return
+        if isinstance(value, (str, Mapping)) or not isinstance(value, Iterable):
+            raise _RuleFailure(RuleOutcomeStatus.ERROR, f"binaries: must give a list, got {type(value).__name__}")
+        values = list(value)
+        hashes = [str(v) for v in values if v]
+        # a binary without a hash (a tool known only by name) can never be shown to be sanctioned
+        sanctioned = _sanctioned(state, hashes) if len(hashes) == len(values) else None
+        if sanctioned is None:
+            return
+        reasons, record_ids = sanctioned
+        detail = (f"{rule.action.value} {scored.target} rests only on sanctioned binaries "
+                  f"({', '.join(sorted({h.lower() for h in hashes}))}: {'; '.join(reasons)}): allow-listed, not proposed")
+        subject = f"{rule.action.value}:{scored.target}"
+        if not any(c.subject == subject for c in state.considered):
+            redactor = get_redactor()
+            state.considered.append(Consideration(
+                subject=redactor.redact_text(subject)[:_SUBJECT_CHARS],
+                reason=redactor.redact_text(detail)[:_NOTE_CHARS],
+                record_ids=tuple(dict.fromkeys([*scored.rule_ids, *record_ids]))))
+        raise _RuleFailure(RuleOutcomeStatus.ALLOWLISTED, detail, target=scored.target,
+                           record_ids=tuple(dict.fromkeys([*scored.rule_ids, *record_ids])),
+                           breakdown=scored.breakdown)
 
     def _expr(self, expression: str, names: Mapping[str, Any], what: str) -> Any:
         try:
@@ -543,7 +1002,7 @@ class WorkflowRunner:
             cited = state.index.require(rule_ids)
         except EvidenceError as exc:
             raise _RuleFailure(RuleOutcomeStatus.NO_EVIDENCE, str(exc), target=target, record_ids=rule_ids) from None
-        asset = self._asset(rule, names, target, kind)
+        asset = self._record_asset(state, target, kind, self._asset(rule, names, target, kind))
         observable = _target_observable(kind, target) or cited[0].subject
         enrichments = _target_enrichments(state.index, observable)
         extra = [r.record_id for r in enrichments if r.verdict in _SUPPORTING] if rule.include_target_enrichment else []
@@ -563,14 +1022,40 @@ class WorkflowRunner:
         value = self._expr(rule.asset, names, "asset")
         if value is None:
             return None
-        if not isinstance(value, Mapping) or set(value) - {"groups", "tags", "roles", "ip"}:
-            raise _RuleFailure(RuleOutcomeStatus.ERROR, "asset: must be a mapping of groups, tags, roles, ip")
+        if not isinstance(value, Mapping) or set(value) - _ASSET_KEYS:
+            raise _RuleFailure(RuleOutcomeStatus.ERROR,
+                               "asset: must be a mapping of groups, tags, roles, ip, ips, users, privileged")
         try:
             return Asset(name=target, kind=kind, groups=tuple(value.get("groups") or ()),
                          tags=tuple(value.get("tags") or ()), roles=tuple(value.get("roles") or ()),
-                         ip=value.get("ip") or None)
+                         ip=value.get("ip") or None, ips=tuple(a for a in value.get("ips") or () if a),
+                         users=tuple(value.get("users") or ()), privileged=value.get("privileged") is True)
         except ValueError as exc:
             raise _RuleFailure(RuleOutcomeStatus.ERROR, f"asset: {exc}") from None
+
+    @staticmethod
+    def _record_asset(state: _Run, target: str, kind: TargetKind, asset: Asset | None) -> Asset | None:
+        """The rule's asset context plus what the run's records report about the target.
+
+        Framework-level, for every workflow: the users of the endpoint an action contains (endpoint
+        records) and the recipients of the message an action quarantines or deletes (message
+        records); every address of the endpoint (all ``ip_addresses`` of its endpoint records, not
+        only the first: a production address on a second interface counts); and, for an account,
+        the identity source's ``privileged`` flag (user profile records). An executive's endpoint or
+        mailbox, a host with a critical address and an account the source marks privileged are then
+        ELEVATED with a warning whatever the rule's asset expression says. Context is only ever added.
+        """
+        users, _ids = _record_users(state.index, kind, target)
+        addresses = _record_addresses(state.index, kind, target)
+        privileged = _record_privileged(state.index, kind, target)
+        if not users and not addresses and not privileged:
+            return asset
+        try:
+            found = Asset(name=target, kind=kind, users=users, ip=addresses[0] if addresses else None,
+                          ips=addresses[1:], privileged=privileged)
+        except ValueError:
+            return asset
+        return _merge_assets(asset, found)
 
     def _scoring_context(self, state: _Run, target: str, kind: TargetKind, asset: Asset | None,
                          observable: Observable, rule_ids: Sequence[str]) -> ScoringContext:
@@ -713,6 +1198,8 @@ class WorkflowRunner:
             state.note(f"rule {rule.id} below threshold ({label}): {failure.detail}")
         elif failure.status is RuleOutcomeStatus.UNROUTED:
             state.note(f"rule {rule.id} unrouted ({label}): {failure.detail}; manual handling required")
+        elif failure.status is RuleOutcomeStatus.ALLOWLISTED:
+            state.note(f"considered, not proposed: {label}: {failure.detail}")
         elif failure.status is RuleOutcomeStatus.NO_EVIDENCE:
             state.note(f"rule {rule.id} not proposed ({label}): no evidence: {failure.detail}")
 
@@ -733,10 +1220,31 @@ class WorkflowRunner:
             correlation=state.correlation or CorrelationResult(incident_id=state.incident.incident_id),
             blast_radius=state.blast or BlastRadiusReport(), signals=state.signals, built=tuple(state.built),
             outcomes=tuple(state.outcomes), proposals=proposals, breakdowns=dict(state.breakdowns),
-            risk_score=risk, confidence_score=confidence, health=health, notes=tuple(state.notes))
+            risk_score=risk, confidence_score=confidence, health=health, notes=tuple(state.notes),
+            considered=tuple(state.considered), handoffs=tuple(state.handoffs))
 
 
 # ------------------------------------------------------------ pure helpers --
+def _one_line(text: object) -> str:
+    return " ".join(text.split()) if isinstance(text, str) else ""
+
+
+def _cited(record_ids: Sequence[str]) -> str:
+    shown = ", ".join(record_ids[:_MAX_CITED])
+    more = f" +{len(record_ids) - _MAX_CITED}" if len(record_ids) > _MAX_CITED else ""
+    return f"[{shown}{more}]"
+
+
+def _consideration_line(item: Consideration) -> str:
+    """``"<subject>: <reason> [rec_...]"`` (workflow summary)."""
+    return f"{item.subject}: {item.reason} {_cited(item.record_ids)}"
+
+
+def _handoff_line(item: Handoff) -> str:
+    """``"<workflow> for <subjects>: <reason> [rec_...]"`` (workflow summary)."""
+    return f"{item.workflow_id} for {', '.join(item.subjects)}: {item.reason} {_cited(item.record_ids)}"
+
+
 def _incident_item(incident: Incident) -> dict[str, Any]:
     item = incident.model_dump(mode="json")
     by_type: dict[str, list[str]] = {}
