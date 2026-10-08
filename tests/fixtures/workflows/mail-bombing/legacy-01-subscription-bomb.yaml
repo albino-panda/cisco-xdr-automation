@@ -1,0 +1,79 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+# Migrated from the legacy spec scenario; times are moved to the lab clock (2026-01-15), the relative
+# order is unchanged.
+schema: 1
+name: legacy-01-subscription-bomb
+workflow: mail-bombing
+description: >-
+  Legacy 01: classic subscription bomb raised by cisco-xdr-mailbomb-detector, 120 messages from 45
+  sender domains in five minutes, almost all neutral or graymail. The burst (here the three messages the
+  flood search returned) is quarantined behind approval. The recipient's only sign-in is before the
+  flood; the legacy self-service password change the day before has no record kind (Entra directory
+  audit, see known limitations) and was outside the window anyway, so sessions are not revoked.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/mail-bombing/scenarios/01-subscription-bomb.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-MB-0001
+  title: "[CRITICAL] Possible email bombing of finance-analyst@example.com: 120 msgs / 45 domains in 5 min"
+  severity: CRITICAL
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: finance-analyst@example.com}
+    - {type: email_message_id, value: etd-mb-l01-001}
+    - {type: domain, value: signup-alerts.example}
+    - {type: domain, value: newsletter-hub.test}
+    - {type: ip, value: 198.51.100.1}
+    - {type: ip, value: 198.51.100.2}
+  users: [finance-analyst@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    event_type: mailbomb.detection
+    schema_version: 1
+    detection_id: mailbomb-0000000000000001
+    detected_at: "2026-01-15T09:05:00Z"
+    risk_score: 80
+    is_escalation: false
+    matched_rules: ["threshold:critical", "threshold:high", "threshold:medium"]
+    recipient: finance-analyst@example.com
+    recipient_domain: example.com
+    metrics: {window_start: "2026-01-15T09:00:00Z", window_end: "2026-01-15T09:05:00Z", window_minutes: 5,
+              total_messages: 120, unique_senders: 103, unique_sender_domains: 45, unique_source_ips: 35,
+              unique_subjects: 120, neutral_count: 100, graymail_count: 7, spam_count: 13, malicious_count: 0}
+environment:
+  reputations:
+    - {type: domain, value: newsletter-hub.test, verdict: CLEAN, risk_score: 0, confidence: 70,
+       integrations: [umbrella], summary: Marketing}
+  records:
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-l01-001,
+       record: {kind: email_message, message_id: etd-mb-l01-001, sender: alerts@signup-alerts.example,
+                sender_domain: signup-alerts.example, recipients: [finance-analyst@example.com], recipient_count: 1,
+                subject_line: You are now subscribed, received_at: "2026-01-15T09:00:20Z", direction: inbound,
+                verdict: CLEAN, delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-l01-001,
+       record: {kind: email_message, message_id: etd-mb-l01-002, sender: digest@newsletter-hub.test,
+                sender_domain: newsletter-hub.test, recipients: [finance-analyst@example.com], recipient_count: 1,
+                subject_line: Your newsletter selection, received_at: "2026-01-15T09:01:40Z", direction: inbound,
+                verdict: CLEAN, threat_types: [graymail], delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-l01-001,
+       record: {kind: email_message, message_id: etd-mb-l01-003, sender: club@reader-rewards.example,
+                sender_domain: reader-rewards.example, recipients: [finance-analyst@example.com], recipient_count: 1,
+                subject_line: Welcome to Reader Rewards, received_at: "2026-01-15T09:03:10Z", direction: inbound,
+                verdict: CLEAN, delivery_location: inbox}}
+    - {integration: entra, atomic: investigate_user, subject: finance-analyst@example.com,
+       record: {kind: user_profile, user: finance-analyst@example.com, department: Finance,
+                manager: finance-lead@example.com, groups: [Finance], roles: [], risk_level: low}}
+    - {integration: entra, atomic: investigate_authentication, subject: finance-analyst@example.com,
+       record: {kind: sign_in, user: finance-analyst@example.com, timestamp: "2026-01-15T08:12:00Z",
+                ip: 203.0.113.10, app: Outlook, result: success, risk_level: none}}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - quarantine_email:etd-mb-l01-001
+    - quarantine_email:etd-mb-l01-002
+    - quarantine_email:etd-mb-l01-003
+  elevated: []
+  containment: CONTAINED
+  controls: 3

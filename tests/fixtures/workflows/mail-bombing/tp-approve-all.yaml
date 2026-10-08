@@ -1,0 +1,137 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+schema: 1
+name: tp-approve-all
+workflow: mail-bombing
+description: >-
+  True positive: the mail-bomb detector reports a subscription bomb against jsmith@example.com. The
+  flood buries a "password was changed" notice and a malicious DocuSign lure; inside the window a
+  high-risk sign-in succeeds after denied MFA prompts, a hiding mailbox rule appears and the
+  endpoint later shows remote-access tooling. The analyst approves the whole package: the flood and
+  the lure are quarantined, sessions revoked, the account disabled, the endpoint isolated and the
+  lure domain blocked. The buried notice stays in the mailbox for the analyst.
+tags: [true_positive, approve_all]
+mode: both
+incident:
+  incident_id: XDR-MB-0001
+  title: "[CRITICAL] Possible email bombing of jsmith@example.com: 120 msgs / 45 domains in 5 min"
+  severity: HIGH
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: jsmith@example.com}
+    - {type: email_message_id, value: etd-mb-0001-001}
+    - {type: hostname, value: TH-LT-1047}
+  users: [jsmith@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    mitre_techniques: [T1667]
+    event_type: mailbomb.detection
+    detection_id: mailbomb-0000000000000101
+    recipient: jsmith@example.com
+    is_escalation: false
+    metrics: {window_start: "2026-01-15T11:00:00Z", window_end: "2026-01-15T11:05:00Z", total_messages: 120,
+              unique_senders: 103, unique_sender_domains: 45, neutral_count: 100, graymail_count: 7,
+              spam_count: 12, malicious_count: 1}
+environment:
+  reputations:
+    - {type: domain, value: docs-sign.example, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [umbrella, virustotal], summary: "lure domain"}
+  records:
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0001-001
+      record: {kind: email_message, message_id: etd-mb-0001-001, sender: noreply@signup-alerts.example,
+               sender_domain: signup-alerts.example, recipients: [jsmith@example.com], recipient_count: 1,
+               subject_line: Welcome to Signup Alerts, received_at: "2026-01-15T11:00:30Z", direction: inbound,
+               verdict: CLEAN, delivery_location: inbox}
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0001-001
+      record: {kind: email_message, message_id: etd-mb-0001-002, sender: news@newsletter-hub.test,
+               sender_domain: newsletter-hub.test, recipients: [jsmith@example.com], recipient_count: 1,
+               subject_line: Your weekly digest, received_at: "2026-01-15T11:01:10Z", direction: inbound,
+               verdict: CLEAN, threat_types: [graymail], delivery_location: inbox}
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0001-001
+      record: {kind: email_message, message_id: etd-mb-0001-003, sender: hello@promo-club.example,
+               sender_domain: promo-club.example, recipients: [jsmith@example.com], recipient_count: 1,
+               subject_line: Confirm your subscription, received_at: "2026-01-15T11:02:00Z", direction: inbound,
+               verdict: CLEAN, delivery_location: inbox}
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0001-001
+      record: {kind: email_message, message_id: etd-mb-0001-004, sender: account-security@login.example,
+               sender_domain: login.example, recipients: [jsmith@example.com], recipient_count: 1,
+               subject_line: Your password was changed, received_at: "2026-01-15T11:03:20Z", direction: inbound,
+               verdict: CLEAN, delivery_location: inbox}
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0001-001
+      record: {kind: email_message, message_id: etd-mb-0001-005, sender: sign@docs-sign.example,
+               sender_domain: docs-sign.example, recipients: [jsmith@example.com], recipient_count: 1,
+               subject_line: "DocuSign: invoice awaiting your signature", received_at: "2026-01-15T11:03:50Z",
+               direction: inbound, verdict: MALICIOUS, threat_types: [phish], urls: ["https://docs-sign.example/view"],
+               domains: [docs-sign.example], delivery_location: inbox}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, display_name: J Smith, department: Finance,
+               groups: [Finance], roles: [], account_enabled: true, risk_level: medium, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T11:02:30Z", method: push,
+               result: denied, ip: 198.51.100.77, country: NL}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: mfa_event, user: jsmith@example.com, timestamp: "2026-01-15T11:02:50Z", method: push,
+               result: approved, ip: 198.51.100.77, country: NL}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: sign_in, sign_in_id: si-0001-1, user: jsmith@example.com, timestamp: "2026-01-15T11:03:00Z",
+               ip: 198.51.100.77, country: NL, app: Office 365 Exchange Online, result: success,
+               mfa_result: satisfied, device_compliant: false, risk_level: high}
+    - integration: entra
+      atomic: search_user_activity
+      subject: jsmith@example.com
+      record: {kind: mailbox_rule, mailbox: jsmith@example.com, rule_id: rule-0001, name: Security notices,
+               enabled: true, move_to_folder: RSS Subscriptions, mark_as_read: true,
+               conditions: ["subject contains security"], created_at: "2026-01-15T11:04:10Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, users: [jsmith@example.com], groups: [Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-1047-rat, name: RemoteAccess.Unapproved, verdict: MALICIOUS,
+               severity: HIGH, category: RemoteAccess, endpoint: TH-LT-1047, user: jsmith@example.com,
+               first_seen: "2026-01-15T11:25:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  considered: ["quarantine_email:etd-mb-0001-004"]
+  handoffs: ["account-takeover:jsmith@example.com", "unauthorized-rmm:TH-LT-1047"]
+  package: true
+  actions:
+    - quarantine_email:etd-mb-0001-001
+    - quarantine_email:etd-mb-0001-002
+    - quarantine_email:etd-mb-0001-003
+    - quarantine_email:etd-mb-0001-005
+    - revoke_sessions:jsmith@example.com
+    - disable_user:jsmith@example.com
+    - isolate_endpoint:TH-LT-1047
+    - block_domain:docs-sign.example
+  elevated: []
+  excluded: []
+  unrouted: []
+  below_threshold: []
+  degraded_sources: []
+  evidence_min: 1
+  containment: CONTAINED
+  controls: 7
+  notifications: [incident_note, soc_notification, analyst_summary]

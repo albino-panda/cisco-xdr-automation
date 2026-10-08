@@ -1,0 +1,55 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+schema: 1
+name: dry-run
+workflow: mail-bombing
+description: >-
+  Dry run: a subscription bomb with a "new sign-in" alert buried in it. The package (quarantine of the
+  flood, revocation of the sessions) is proposed and simulated; nothing changes at any vendor and the
+  incident does not move past the approval step.
+tags: [dry_run, true_positive]
+mode: dry_run
+incident:
+  incident_id: XDR-MB-0008
+  title: "[HIGH] Possible email bombing of nwong@example.com: 82 msgs / 33 domains in 5 min"
+  severity: HIGH
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: nwong@example.com}
+    - {type: email_message_id, value: etd-mb-0008-001}
+  users: [nwong@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    event_type: mailbomb.detection
+    recipient: nwong@example.com
+    metrics: {window_start: "2026-01-15T04:00:00Z", window_end: "2026-01-15T04:05:00Z", total_messages: 82,
+              unique_sender_domains: 33, neutral_count: 70, graymail_count: 6, spam_count: 6, malicious_count: 0}
+environment:
+  records:
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0008-001
+      record: {kind: email_message, message_id: etd-mb-0008-001, sender: welcome@coupon-world.example,
+               sender_domain: coupon-world.example, recipients: [nwong@example.com], recipient_count: 1,
+               subject_line: Your coupons are ready, received_at: "2026-01-15T04:00:40Z", direction: inbound,
+               verdict: CLEAN, threat_types: [graymail], delivery_location: inbox}
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0008-001
+      record: {kind: email_message, message_id: etd-mb-0008-002, sender: alerts@login.example,
+               sender_domain: login.example, recipients: [nwong@example.com], recipient_count: 1,
+               subject_line: New sign-in to your account, received_at: "2026-01-15T04:02:10Z", direction: inbound,
+               verdict: CLEAN, delivery_location: inbox}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  considered: ["quarantine_email:etd-mb-0008-002"]
+  package: true
+  actions:
+    - quarantine_email:etd-mb-0008-001
+    - revoke_sessions:nwong@example.com
+  dry_run_lines:
+    - DRY RUN
+    - "Would quarantine email: etd-mb-0008-001"
+    - "Would revoke sessions: nwong@example.com"
+    - No containment actions executed.
+  notifications: [incident_note, soc_notification, analyst_summary]

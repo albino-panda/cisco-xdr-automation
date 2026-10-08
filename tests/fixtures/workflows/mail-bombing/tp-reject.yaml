@@ -1,0 +1,49 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+schema: 1
+name: tp-reject
+workflow: mail-bombing
+description: >-
+  True positive: a subscription bomb with an MFA prompt inside the flood window. The analyst rejects
+  the package (the mailbox owner already cleaned up with the help desk); nothing executes and the
+  incident is closed.
+tags: [true_positive, reject]
+mode: both
+incident:
+  incident_id: XDR-MB-0003
+  title: "[HIGH] Possible email bombing of akim@example.com: 95 msgs / 40 domains in 5 min"
+  severity: HIGH
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: akim@example.com}
+    - {type: email_message_id, value: etd-mb-0003-001}
+  users: [akim@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    event_type: mailbomb.detection
+    recipient: akim@example.com
+    metrics: {window_start: "2026-01-15T09:30:00Z", window_end: "2026-01-15T09:35:00Z", total_messages: 95,
+              unique_sender_domains: 40, neutral_count: 80, graymail_count: 10, spam_count: 5, malicious_count: 0}
+environment:
+  records:
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0003-001
+      record: {kind: email_message, message_id: etd-mb-0003-001, sender: info@club-signup.example,
+               sender_domain: club-signup.example, recipients: [akim@example.com], recipient_count: 1,
+               subject_line: Thanks for joining, received_at: "2026-01-15T09:31:00Z", direction: inbound,
+               verdict: CLEAN, delivery_location: inbox}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: akim@example.com
+      record: {kind: mfa_event, user: akim@example.com, timestamp: "2026-01-15T09:33:00Z", method: push,
+               result: timeout, ip: 203.0.113.80}
+analyst: {decision: REJECT, approvers: [analyst], comment: handled with the help desk}
+expect:
+  package: true
+  actions:
+    - quarantine_email:etd-mb-0003-001
+    - revoke_sessions:akim@example.com
+  decision_state: CLOSED
+  controls: 0
+  final_state: CLOSED

@@ -1,0 +1,64 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+schema: 1
+name: edge-fake-helpdesk-followup
+workflow: mail-bombing
+description: >-
+  The fake IT-support follow-up: no identity event hides in the flood, but an hour after it started the
+  recipient's endpoint shows unapproved remote-access tooling and resolves a domain two intelligence
+  sources rate malicious. An older suspicious detection from before the flood is not tied to it. The
+  package quarantines the flood, isolates the endpoint and blocks the domain; the remote-access tool
+  itself is the unauthorized-rmm workflow's job.
+tags: [edge_case, true_positive]
+mode: both
+incident:
+  incident_id: XDR-MB-0012
+  title: "[HIGH] Possible email bombing of bnguyen@example.com: 105 msgs / 47 domains in 5 min"
+  severity: HIGH
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: bnguyen@example.com}
+    - {type: email_message_id, value: etd-mb-0012-001}
+    - {type: hostname, value: TH-LT-2210}
+  users: [bnguyen@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    event_type: mailbomb.detection
+    recipient: bnguyen@example.com
+    metrics: {window_start: "2026-01-15T09:00:00Z", window_end: "2026-01-15T09:05:00Z", total_messages: 105,
+              unique_sender_domains: 47, neutral_count: 90, graymail_count: 9, spam_count: 6, malicious_count: 0}
+environment:
+  reputations:
+    - {type: domain, value: helpdesk-support.example, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [umbrella, virustotal], summary: "remote support lure"}
+  records:
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0012-001,
+       record: {kind: email_message, message_id: etd-mb-0012-001, sender: hello@travel-deals.example,
+                sender_domain: travel-deals.example, recipients: [bnguyen@example.com], recipient_count: 1,
+                subject_line: Travel deals for you, received_at: "2026-01-15T09:00:30Z", direction: inbound,
+                verdict: CLEAN, threat_types: [graymail], delivery_location: inbox}}
+    - {integration: secure_endpoint, atomic: investigate_endpoint, subject: TH-LT-2210,
+       record: {kind: endpoint, hostname: TH-LT-2210, connector_guid: 00000000-0000-4000-8000-000000002210,
+                os: Windows 11, users: [bnguyen@example.com], groups: [Workstations], isolation_capable: true,
+                isolation_state: not_isolated}}
+    - {integration: secure_endpoint, atomic: investigate_endpoint, subject: TH-LT-2210,
+       record: {kind: detection, detection_id: det-2210-old, name: PUA.Toolbar, verdict: SUSPICIOUS, severity: LOW,
+                endpoint: TH-LT-2210, first_seen: "2026-01-14T15:00:00Z"}}
+    - {integration: secure_endpoint, atomic: investigate_endpoint, subject: TH-LT-2210,
+       record: {kind: detection, detection_id: det-2210-rat, name: RemoteAccess.Unapproved, verdict: MALICIOUS,
+                severity: HIGH, category: RemoteAccess, endpoint: TH-LT-2210, user: bnguyen@example.com,
+                first_seen: "2026-01-15T10:02:00Z"}}
+    - {integration: secure_endpoint, atomic: investigate_endpoint, subject: TH-LT-2210,
+       record: {kind: dns_query, endpoint: TH-LT-2210, domain: helpdesk-support.example, query_type: A, count: 4,
+                verdict: SUSPICIOUS, first_seen: "2026-01-15T10:01:30Z"}}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  handoffs: ["unauthorized-rmm:TH-LT-2210"]
+  package: true
+  actions:
+    - quarantine_email:etd-mb-0012-001
+    - isolate_endpoint:TH-LT-2210
+    - block_domain:helpdesk-support.example
+  elevated: []
+  containment: CONTAINED
+  controls: 3

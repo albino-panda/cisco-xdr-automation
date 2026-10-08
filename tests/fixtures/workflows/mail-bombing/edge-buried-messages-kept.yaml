@@ -1,0 +1,65 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+schema: 1
+name: edge-buried-messages-kept
+workflow: mail-bombing
+description: >-
+  Concealment found only in the mail: Entra shows no event inside the flood window (its only sign-in is
+  before the flood), but the hidden-message search finds a "password reset" notice and a wire-transfer
+  request buried in the flood. Both stay out of the quarantine so the analyst and the user see them;
+  the password-reset notice alone backs the session revocation (Secure Email evidence only), and the
+  wire-transfer request is listed for the analyst without driving an action.
+tags: [edge_case, true_positive]
+mode: both
+incident:
+  incident_id: XDR-MB-0011
+  title: "[HIGH] Possible email bombing of finance-analyst@example.com: 90 msgs / 38 domains in 5 min"
+  severity: HIGH
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: finance-analyst@example.com}
+    - {type: email_message_id, value: etd-mb-0011-001}
+  users: [finance-analyst@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    event_type: mailbomb.detection
+    recipient: finance-analyst@example.com
+    metrics: {window_start: "2026-01-15T02:00:00Z", window_end: "2026-01-15T02:05:00Z", total_messages: 90,
+              unique_sender_domains: 38, neutral_count: 75, graymail_count: 8, spam_count: 7, malicious_count: 0}
+environment:
+  records:
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0011-001,
+       record: {kind: email_message, message_id: etd-mb-0011-001, sender: hi@gadget-news.example,
+                sender_domain: gadget-news.example, recipients: [finance-analyst@example.com], recipient_count: 1,
+                subject_line: Gadget news is here, received_at: "2026-01-15T02:00:20Z", direction: inbound,
+                verdict: CLEAN, threat_types: [graymail], delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0011-001,
+       record: {kind: email_message, message_id: etd-mb-0011-002, sender: noreply@recipe-box.test,
+                sender_domain: recipe-box.test, recipients: [finance-analyst@example.com], recipient_count: 1,
+                subject_line: Your first recipe box, received_at: "2026-01-15T02:01:00Z", direction: inbound,
+                verdict: CLEAN, delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0011-001,
+       record: {kind: email_message, message_id: etd-mb-0011-003, sender: account-security@login.example,
+                sender_domain: login.example, recipients: [finance-analyst@example.com], recipient_count: 1,
+                subject_line: Password reset requested for your account, received_at: "2026-01-15T02:02:15Z",
+                direction: inbound, verdict: CLEAN, delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0011-001,
+       record: {kind: email_message, message_id: etd-mb-0011-004, sender: cfo-office@partner-pay.example,
+                sender_domain: partner-pay.example, recipients: [finance-analyst@example.com], recipient_count: 1,
+                subject_line: Urgent wire transfer for supplier, received_at: "2026-01-15T02:03:05Z",
+                direction: inbound, verdict: CLEAN, delivery_location: inbox}}
+    - {integration: entra, atomic: investigate_authentication, subject: finance-analyst@example.com,
+       record: {kind: sign_in, sign_in_id: si-0011-1, user: finance-analyst@example.com,
+                timestamp: "2026-01-15T01:12:00Z", ip: 203.0.113.10, country: US, app: Outlook, result: success,
+                mfa_result: satisfied, risk_level: none}}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  considered: ["quarantine_email:etd-mb-0011-003", "quarantine_email:etd-mb-0011-004"]
+  package: true
+  actions:
+    - quarantine_email:etd-mb-0011-001
+    - quarantine_email:etd-mb-0011-002
+    - revoke_sessions:finance-analyst@example.com
+  elevated: []
+  containment: CONTAINED
+  controls: 2

@@ -1,0 +1,63 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+# Migrated from the legacy spec scenario; times are moved to the lab clock (2026-01-15).
+schema: 1
+name: legacy-02-newsletter-spike-benign
+workflow: mail-bombing
+description: >-
+  Legacy 02: a vendor newsletter platform resends the same issue 160 times to one events mailbox. The
+  detector's extreme-volume rule fires on volume alone, but there is a single sender domain and no
+  hidden identity event. Not a subscription bomb: nothing is quarantined or revoked; the analyst adds
+  the platform to the detector exclusions instead.
+tags: [legacy, benign]
+legacy_source: workflows/mail-bombing/scenarios/02-newsletter-spike-benign.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-MB-0002
+  title: "[CRITICAL] Possible email bombing of events-team@example.com: 160 msgs / 1 domains in 5 min"
+  severity: CRITICAL
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: events-team@example.com}
+    - {type: email_message_id, value: etd-mb-l02-001}
+    - {type: domain, value: mailer.vendor-news.test}
+    - {type: ip, value: 203.0.113.25}
+  users: [events-team@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    event_type: mailbomb.detection
+    schema_version: 1
+    detection_id: mailbomb-0000000000000002
+    risk_score: 41
+    is_escalation: false
+    matched_rules: ["extreme_volume", "threshold:critical"]
+    recipient: events-team@example.com
+    metrics: {window_start: "2026-01-15T10:00:00Z", window_end: "2026-01-15T10:05:00Z", window_minutes: 5,
+              total_messages: 160, unique_senders: 1, unique_sender_domains: 1, unique_source_ips: 2,
+              unique_subjects: 1, neutral_count: 160, graymail_count: 0, spam_count: 0, malicious_count: 0}
+environment:
+  reputations:
+    - {type: domain, value: mailer.vendor-news.test, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [umbrella], summary: Marketing}
+  records:
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-l02-001,
+       record: {kind: email_message, message_id: etd-mb-l02-001, sender: issue@mailer.vendor-news.test,
+                sender_domain: mailer.vendor-news.test, recipients: [events-team@example.com], recipient_count: 1,
+                subject_line: Vendor News issue 42, received_at: "2026-01-15T10:00:05Z", direction: inbound,
+                verdict: CLEAN, delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-l02-001,
+       record: {kind: email_message, message_id: etd-mb-l02-002, sender: issue@mailer.vendor-news.test,
+                sender_domain: mailer.vendor-news.test, recipients: [events-team@example.com], recipient_count: 1,
+                subject_line: Vendor News issue 42, received_at: "2026-01-15T10:00:07Z", direction: inbound,
+                verdict: CLEAN, delivery_location: inbox}}
+    - {integration: entra, atomic: investigate_user, subject: events-team@example.com,
+       record: {kind: user_profile, user: events-team@example.com, department: Marketing,
+                manager: marketing-lead@example.com, groups: [Marketing], roles: [], risk_level: none}}
+    - {integration: entra, atomic: investigate_authentication, subject: events-team@example.com,
+       record: {kind: sign_in, user: events-team@example.com, timestamp: "2026-01-15T09:30:00Z",
+                ip: 203.0.113.10, app: Outlook, result: success, risk_level: none}}
+expect:
+  handoffs: []
+  package: false
+  actions: []
+  below_threshold: []

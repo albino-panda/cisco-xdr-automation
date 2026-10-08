@@ -1,0 +1,91 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+schema: 1
+name: edge-no-detector-metrics
+workflow: mail-bombing
+description: >-
+  An XDR incident tagged Email Bombing (not raised by the mail-bomb detector, so no detector metrics).
+  The flood window and the qualification come from the observed messages alone: ten neutral or
+  graymail messages from ten sender domains inside ten minutes. Each is proposed for quarantine with a
+  lower pattern confidence than a detector-backed flood.
+tags: [edge_case, true_positive]
+mode: both
+incident:
+  incident_id: XDR-MB-0013
+  title: Subscription flood reported by the mail gateway
+  severity: MEDIUM
+  source: cisco_xdr
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: kwilson@example.com}
+    - {type: email_message_id, value: etd-mb-0013-001}
+  users: [kwilson@example.com]
+  trigger: {source: secure_email, mitre_techniques: [T1667]}
+environment:
+  records:
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0013-001,
+       record: {kind: email_message, message_id: etd-mb-0013-001, sender: news@alpha-news.example, sender_domain: alpha-news.example,
+                recipients: [kwilson@example.com], recipient_count: 1, subject_line: Welcome aboard,
+                received_at: "2026-01-15T08:21:00Z", direction: inbound, verdict: CLEAN,
+                delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0013-001,
+       record: {kind: email_message, message_id: etd-mb-0013-002, sender: news@beta-offers.example, sender_domain: beta-offers.example,
+                recipients: [kwilson@example.com], recipient_count: 1, subject_line: Your offer inside,
+                received_at: "2026-01-15T08:22:00Z", direction: inbound, verdict: CLEAN,
+                delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0013-001,
+       record: {kind: email_message, message_id: etd-mb-0013-003, sender: news@gamma-club.test, sender_domain: gamma-club.test,
+                recipients: [kwilson@example.com], recipient_count: 1, subject_line: Club membership confirmed,
+                received_at: "2026-01-15T08:23:00Z", direction: inbound, verdict: CLEAN, threat_types: [graymail],
+                delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0013-001,
+       record: {kind: email_message, message_id: etd-mb-0013-004, sender: news@delta-signup.example, sender_domain: delta-signup.example,
+                recipients: [kwilson@example.com], recipient_count: 1, subject_line: Confirm your email,
+                received_at: "2026-01-15T08:24:00Z", direction: inbound, verdict: CLEAN,
+                delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0013-001,
+       record: {kind: email_message, message_id: etd-mb-0013-005, sender: news@epsilon-deals.test, sender_domain: epsilon-deals.test,
+                recipients: [kwilson@example.com], recipient_count: 1, subject_line: Deals of the day,
+                received_at: "2026-01-15T08:25:00Z", direction: inbound, verdict: CLEAN,
+                delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0013-001,
+       record: {kind: email_message, message_id: etd-mb-0013-006, sender: news@zeta-weekly.example, sender_domain: zeta-weekly.example,
+                recipients: [kwilson@example.com], recipient_count: 1, subject_line: This week in brief,
+                received_at: "2026-01-15T08:26:00Z", direction: inbound, verdict: CLEAN, threat_types: [graymail],
+                delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0013-001,
+       record: {kind: email_message, message_id: etd-mb-0013-007, sender: news@eta-alerts.test, sender_domain: eta-alerts.test,
+                recipients: [kwilson@example.com], recipient_count: 1, subject_line: Your daily alert digest,
+                received_at: "2026-01-15T08:27:00Z", direction: inbound, verdict: CLEAN,
+                delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0013-001,
+       record: {kind: email_message, message_id: etd-mb-0013-008, sender: news@theta-promo.example, sender_domain: theta-promo.example,
+                recipients: [kwilson@example.com], recipient_count: 1, subject_line: Promo code enclosed,
+                received_at: "2026-01-15T08:28:00Z", direction: inbound, verdict: CLEAN,
+                delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0013-001,
+       record: {kind: email_message, message_id: etd-mb-0013-009, sender: news@iota-digest.test, sender_domain: iota-digest.test,
+                recipients: [kwilson@example.com], recipient_count: 1, subject_line: Morning digest,
+                received_at: "2026-01-15T08:29:00Z", direction: inbound, verdict: CLEAN, threat_types: [graymail],
+                delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0013-001,
+       record: {kind: email_message, message_id: etd-mb-0013-010, sender: news@kappa-shop.example, sender_domain: kappa-shop.example,
+                recipients: [kwilson@example.com], recipient_count: 1, subject_line: Order our bestsellers,
+                received_at: "2026-01-15T08:30:00Z", direction: inbound, verdict: CLEAN,
+                delivery_location: inbox}}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - quarantine_email:etd-mb-0013-001
+    - quarantine_email:etd-mb-0013-002
+    - quarantine_email:etd-mb-0013-003
+    - quarantine_email:etd-mb-0013-004
+    - quarantine_email:etd-mb-0013-005
+    - quarantine_email:etd-mb-0013-006
+    - quarantine_email:etd-mb-0013-007
+    - quarantine_email:etd-mb-0013-008
+    - quarantine_email:etd-mb-0013-009
+    - quarantine_email:etd-mb-0013-010
+  elevated: []
+  containment: CONTAINED
+  controls: 10

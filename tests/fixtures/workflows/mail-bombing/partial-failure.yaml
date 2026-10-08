@@ -1,0 +1,54 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+schema: 1
+name: partial-failure
+workflow: mail-bombing
+description: >-
+  The flood quarantine is approved, but Secure Email refuses to move one message. Containment is
+  partial: that message is reported FAILED (never retried silently) and the other one is quarantined.
+tags: [partial_failure, true_positive]
+mode: live
+incident:
+  incident_id: XDR-MB-0007
+  title: "[HIGH] Possible email bombing of rpatel@example.com: 110 msgs / 52 domains in 5 min"
+  severity: HIGH
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: rpatel@example.com}
+    - {type: email_message_id, value: etd-mb-0007-001}
+  users: [rpatel@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    event_type: mailbomb.detection
+    recipient: rpatel@example.com
+    metrics: {window_start: "2026-01-15T06:00:00Z", window_end: "2026-01-15T06:05:00Z", total_messages: 110,
+              unique_sender_domains: 52, neutral_count: 95, graymail_count: 8, spam_count: 7, malicious_count: 0}
+environment:
+  records:
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0007-001
+      record: {kind: email_message, message_id: etd-mb-0007-001, sender: noreply@trial-offers.example,
+               sender_domain: trial-offers.example, recipients: [rpatel@example.com], recipient_count: 1,
+               subject_line: Your free trial starts now, received_at: "2026-01-15T06:00:20Z", direction: inbound,
+               verdict: CLEAN, delivery_location: inbox}
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0007-001
+      record: {kind: email_message, message_id: etd-mb-0007-002, sender: list@daily-digest.test,
+               sender_domain: daily-digest.test, recipients: [rpatel@example.com], recipient_count: 1,
+               subject_line: Daily digest, received_at: "2026-01-15T06:01:00Z", direction: inbound,
+               verdict: CLEAN, threat_types: [graymail], delivery_location: inbox}
+  faults:
+    - {kind: FAIL, integration: secure_email, operation: quarantine_email, target: etd-mb-0007-002, times: 10}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - quarantine_email:etd-mb-0007-001
+    - quarantine_email:etd-mb-0007-002
+  containment: PARTIALLY_CONTAINED
+  results:
+    quarantine_email:etd-mb-0007-001: SUCCESS
+    quarantine_email:etd-mb-0007-002: FAILED
+  controls: 1

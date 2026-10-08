@@ -1,0 +1,77 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+# Migrated from the legacy spec scenario; times are moved to the lab clock (2026-01-15), the relative
+# order is unchanged.
+schema: 1
+name: legacy-03-buried-mfa-and-reset
+workflow: mail-bombing
+description: >-
+  Legacy 03, the case mail bombing is used for: while 140 sign-up confirmations from 60 domains bury
+  the inbox, a self-service password reset and an unexpected MFA prompt hit the same account inside
+  the detection window. The reset has no Entra record kind, so it is converted to the reset notice the
+  flood buried; the MFA prompt and an interrupted sign-in from an unfamiliar address come from Entra.
+  Quarantine of the burst and revocation of the recipient's sessions are proposed, both behind human
+  approval (session revocation always needs approval).
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/mail-bombing/scenarios/03-buried-mfa-and-reset.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-MB-0003
+  title: "[CRITICAL] Possible email bombing of payroll-officer@example.com: 140 msgs / 60 domains in 5 min"
+  severity: CRITICAL
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: payroll-officer@example.com}
+    - {type: email_message_id, value: etd-mb-l03-001}
+    - {type: domain, value: account-confirm.example}
+    - {type: ip, value: 198.51.100.40}
+  users: [payroll-officer@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    event_type: mailbomb.detection
+    schema_version: 1
+    detection_id: mailbomb-0000000000000003
+    risk_score: 92
+    is_escalation: false
+    matched_rules: ["threshold:critical", "threshold:high", "threshold:medium"]
+    recipient: payroll-officer@example.com
+    metrics: {window_start: "2026-01-15T11:15:00Z", window_end: "2026-01-15T11:20:00Z", window_minutes: 5,
+              total_messages: 140, unique_senders: 128, unique_sender_domains: 60, unique_source_ips: 44,
+              unique_subjects: 139, neutral_count: 118, graymail_count: 12, spam_count: 10, malicious_count: 0}
+environment:
+  records:
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-l03-001,
+       record: {kind: email_message, message_id: etd-mb-l03-001, sender: confirm@account-confirm.example,
+                sender_domain: account-confirm.example, recipients: [payroll-officer@example.com], recipient_count: 1,
+                subject_line: Confirm your registration, received_at: "2026-01-15T11:15:10Z", direction: inbound,
+                verdict: CLEAN, delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-l03-001,
+       record: {kind: email_message, message_id: etd-mb-l03-002, sender: team@forum-hub.test,
+                sender_domain: forum-hub.test, recipients: [payroll-officer@example.com], recipient_count: 1,
+                subject_line: Activate your forum profile, received_at: "2026-01-15T11:16:20Z", direction: inbound,
+                verdict: CLEAN, threat_types: [graymail], delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-l03-001,
+       record: {kind: email_message, message_id: etd-mb-l03-003, sender: account-security@login.example,
+                sender_domain: login.example, recipients: [payroll-officer@example.com], recipient_count: 1,
+                subject_line: Password reset requested, received_at: "2026-01-15T11:17:05Z", direction: inbound,
+                verdict: CLEAN, delivery_location: inbox}}
+    - {integration: entra, atomic: investigate_user, subject: payroll-officer@example.com,
+       record: {kind: user_profile, user: payroll-officer@example.com, department: Finance,
+                manager: finance-lead@example.com, groups: [Payroll], roles: [], risk_level: medium}}
+    - {integration: entra, atomic: investigate_authentication, subject: payroll-officer@example.com,
+       record: {kind: sign_in, user: payroll-officer@example.com, timestamp: "2026-01-15T11:17:30Z",
+                ip: 192.0.2.77, app: Office 365 Exchange Online, result: interrupted, risk_level: medium}}
+    - {integration: entra, atomic: investigate_authentication, subject: payroll-officer@example.com,
+       record: {kind: mfa_event, user: payroll-officer@example.com, timestamp: "2026-01-15T11:17:40Z",
+                method: push, result: unknown, ip: 192.0.2.77}}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  considered: ["quarantine_email:etd-mb-l03-003"]
+  package: true
+  actions:
+    - quarantine_email:etd-mb-l03-001
+    - quarantine_email:etd-mb-l03-002
+    - revoke_sessions:payroll-officer@example.com
+  elevated: []
+  containment: CONTAINED
+  controls: 2

@@ -1,0 +1,70 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+schema: 1
+name: tp-approve-selected
+workflow: mail-bombing
+description: >-
+  True positive: a subscription bomb against payroll-officer@example.com with an MFA push prompt the
+  user did not start inside the flood window. The analyst approves only the quarantine of the flood;
+  the session revocation is recorded as rejected by the analyst and never executed.
+tags: [true_positive, approve_selected]
+mode: live
+incident:
+  incident_id: XDR-MB-0002
+  title: "[HIGH] Possible email bombing of payroll-officer@example.com: 140 msgs / 60 domains in 5 min"
+  severity: HIGH
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: payroll-officer@example.com}
+    - {type: email_message_id, value: etd-mb-0002-001}
+  users: [payroll-officer@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    mitre_techniques: [T1667]
+    event_type: mailbomb.detection
+    recipient: payroll-officer@example.com
+    metrics: {window_start: "2026-01-15T10:15:00Z", window_end: "2026-01-15T10:20:00Z", total_messages: 140,
+              unique_sender_domains: 60, neutral_count: 118, graymail_count: 12, spam_count: 10, malicious_count: 0}
+environment:
+  records:
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0002-001
+      record: {kind: email_message, message_id: etd-mb-0002-001, sender: confirm@account-confirm.example,
+               sender_domain: account-confirm.example, recipients: [payroll-officer@example.com], recipient_count: 1,
+               subject_line: Please confirm your newsletter signup, received_at: "2026-01-15T10:15:20Z",
+               direction: inbound, verdict: CLEAN, delivery_location: inbox}
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0002-001
+      record: {kind: email_message, message_id: etd-mb-0002-002, sender: deals@shop-weekly.test,
+               sender_domain: shop-weekly.test, recipients: [payroll-officer@example.com], recipient_count: 1,
+               subject_line: Weekend deals inside, received_at: "2026-01-15T10:16:05Z", direction: inbound,
+               verdict: CLEAN, threat_types: [graymail], delivery_location: inbox}
+    - integration: entra
+      atomic: investigate_user
+      subject: payroll-officer@example.com
+      record: {kind: user_profile, user: payroll-officer@example.com, department: Finance, groups: [Payroll],
+               roles: [], account_enabled: true, risk_level: low}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: payroll-officer@example.com
+      record: {kind: mfa_event, user: payroll-officer@example.com, timestamp: "2026-01-15T10:17:40Z", method: push,
+               result: denied, ip: 192.0.2.77}
+analyst:
+  decision: APPROVE_SELECTED
+  approvers: [analyst]
+  select: [quarantine_email:etd-mb-0002-001, quarantine_email:etd-mb-0002-002]
+expect:
+  package: true
+  actions:
+    - quarantine_email:etd-mb-0002-001
+    - quarantine_email:etd-mb-0002-002
+    - revoke_sessions:payroll-officer@example.com
+  elevated: []
+  results:
+    quarantine_email:etd-mb-0002-001: SUCCESS
+    quarantine_email:etd-mb-0002-002: SUCCESS
+    revoke_sessions:payroll-officer@example.com: REJECTED_BY_ANALYST
+  containment: CONTAINED
+  controls: 2

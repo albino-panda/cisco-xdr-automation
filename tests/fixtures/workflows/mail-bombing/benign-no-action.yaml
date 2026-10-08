@@ -1,0 +1,58 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+schema: 1
+name: benign-no-action
+workflow: mail-bombing
+description: >-
+  Benign: a vendor newsletter platform resends one issue 160 times to the events mailbox. The detector
+  fires on volume alone, but there is a single sender domain (not a subscription bomb) and no identity
+  event or endpoint detection: nothing is proposed and the incident stays NOT_STARTED.
+tags: [benign]
+mode: both
+incident:
+  incident_id: XDR-MB-0004
+  title: "[CRITICAL] Possible email bombing of events-team@example.com: 160 msgs / 1 domains in 5 min"
+  severity: HIGH
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: events-team@example.com}
+    - {type: email_message_id, value: etd-mb-0004-001}
+    - {type: domain, value: mailer.vendor-news.test}
+  users: [events-team@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    event_type: mailbomb.detection
+    recipient: events-team@example.com
+    matched_rules: [extreme_volume]
+    metrics: {window_start: "2026-01-15T08:00:00Z", window_end: "2026-01-15T08:05:00Z", total_messages: 160,
+              unique_sender_domains: 1, neutral_count: 160, graymail_count: 0, spam_count: 0, malicious_count: 0}
+environment:
+  reputations:
+    - {type: domain, value: mailer.vendor-news.test, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [umbrella, virustotal], summary: "newsletter platform"}
+  records:
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0004-001
+      record: {kind: email_message, message_id: etd-mb-0004-001, sender: issue@mailer.vendor-news.test,
+               sender_domain: mailer.vendor-news.test, recipients: [events-team@example.com], recipient_count: 1,
+               subject_line: Vendor News January issue, received_at: "2026-01-15T08:00:10Z", direction: inbound,
+               verdict: CLEAN, threat_types: [graymail], delivery_location: inbox}
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0004-001
+      record: {kind: email_message, message_id: etd-mb-0004-002, sender: issue@mailer.vendor-news.test,
+               sender_domain: mailer.vendor-news.test, recipients: [events-team@example.com], recipient_count: 1,
+               subject_line: Vendor News January issue, received_at: "2026-01-15T08:00:12Z", direction: inbound,
+               verdict: CLEAN, threat_types: [graymail], delivery_location: inbox}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: events-team@example.com
+      record: {kind: sign_in, sign_in_id: si-0004-1, user: events-team@example.com,
+               timestamp: "2026-01-15T07:30:00Z", ip: 203.0.113.10, country: US, app: Outlook, result: success,
+               mfa_result: satisfied, risk_level: none}
+expect:
+  package: false
+  actions: []
+  below_threshold: []
+  unrouted: []

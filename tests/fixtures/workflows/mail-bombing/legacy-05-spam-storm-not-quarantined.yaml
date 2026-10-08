@@ -1,0 +1,64 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+# Migrated from the legacy spec scenario; times are moved to the lab clock (2026-01-15).
+schema: 1
+name: legacy-05-spam-storm-not-quarantined
+workflow: mail-bombing
+description: >-
+  Legacy 05: the detector fires on 90 messages from 30 domains, but most carry spam or malicious
+  verdicts (clean ratio 16 percent). This is a spam or phishing storm, not a subscription bomb, so this
+  workflow proposes no quarantine and no block: Secure Email policies handle malicious mail and the
+  analyst follows the phishing workflow. No identity event was buried, so nothing is revoked.
+tags: [legacy, benign]
+legacy_source: workflows/mail-bombing/scenarios/05-spam-storm-not-quarantined.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-MB-0005
+  title: "[HIGH] Possible email bombing of sales-desk@example.com: 90 msgs / 30 domains in 5 min"
+  severity: HIGH
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: sales-desk@example.com}
+    - {type: email_message_id, value: etd-mb-l05-001}
+    - {type: domain, value: invoice-portal.example}
+    - {type: ip, value: 192.0.2.15}
+  users: [sales-desk@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    event_type: mailbomb.detection
+    schema_version: 1
+    detection_id: mailbomb-0000000000000005
+    risk_score: 58
+    is_escalation: false
+    matched_rules: ["threshold:high", "threshold:medium"]
+    recipient: sales-desk@example.com
+    metrics: {window_start: "2026-01-15T07:40:00Z", window_end: "2026-01-15T07:45:00Z", window_minutes: 5,
+              total_messages: 90, unique_senders: 85, unique_sender_domains: 30, unique_source_ips: 27,
+              unique_subjects: 12, neutral_count: 10, graymail_count: 5, spam_count: 60, malicious_count: 15}
+environment:
+  reputations:
+    - {type: domain, value: invoice-portal.example, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [umbrella, virustotal], summary: Phishing}
+  records:
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-l05-001,
+       record: {kind: email_message, message_id: etd-mb-l05-001, sender: promo@cheap-meds.test,
+                sender_domain: cheap-meds.test, recipients: [sales-desk@example.com], recipient_count: 1,
+                subject_line: Limited offer, received_at: "2026-01-15T07:40:30Z", direction: inbound,
+                verdict: SUSPICIOUS, threat_types: [spam], delivery_location: junk}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-l05-001,
+       record: {kind: email_message, message_id: etd-mb-l05-002, sender: billing@invoice-portal.example,
+                sender_domain: invoice-portal.example, recipients: [sales-desk@example.com], recipient_count: 1,
+                subject_line: Invoice overdue, received_at: "2026-01-15T07:42:00Z", direction: inbound,
+                verdict: MALICIOUS, threat_types: [phish], domains: [invoice-portal.example],
+                delivery_location: quarantine}}
+    - {integration: entra, atomic: investigate_user, subject: sales-desk@example.com,
+       record: {kind: user_profile, user: sales-desk@example.com, department: Sales,
+                manager: sales-lead@example.com, groups: [Sales], roles: [], risk_level: low}}
+    - {integration: entra, atomic: investigate_authentication, subject: sales-desk@example.com,
+       record: {kind: sign_in, user: sales-desk@example.com, timestamp: "2026-01-15T06:58:00Z",
+                ip: 203.0.113.10, app: Outlook, result: success, risk_level: none}}
+expect:
+  handoffs: ["phishing:sales-desk@example.com"]
+  package: false
+  actions: []
+  below_threshold: []

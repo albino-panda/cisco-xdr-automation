@@ -1,0 +1,57 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+schema: 1
+name: critical-asset-elevated
+workflow: mail-bombing
+description: >-
+  The bombed mailbox belongs to a Global Administrator and a risky sign-in attempt from an unfamiliar
+  location appears inside the flood window. Revoking the administrator's sessions is a critical-asset
+  action: it needs ELEVATED approval with a visible warning, an analyst alone is refused and the lead
+  approves. The reversible quarantine of the flood stays at standard approval.
+tags: [critical_asset, true_positive]
+mode: both
+incident:
+  incident_id: XDR-MB-0006
+  title: "[HIGH] Possible email bombing of mjones@example.com: 70 msgs / 25 domains in 5 min"
+  severity: HIGH
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: mjones@example.com}
+    - {type: email_message_id, value: etd-mb-0006-001}
+  users: [mjones@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    event_type: mailbomb.detection
+    recipient: mjones@example.com
+    metrics: {window_start: "2026-01-15T07:10:00Z", window_end: "2026-01-15T07:15:00Z", total_messages: 70,
+              unique_sender_domains: 25, neutral_count: 60, graymail_count: 5, spam_count: 5, malicious_count: 0}
+environment:
+  records:
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0006-001
+      record: {kind: email_message, message_id: etd-mb-0006-001, sender: welcome@forum-join.example,
+               sender_domain: forum-join.example, recipients: [mjones@example.com], recipient_count: 1,
+               subject_line: Activate your forum account, received_at: "2026-01-15T07:10:40Z", direction: inbound,
+               verdict: CLEAN, delivery_location: inbox}
+    - integration: entra
+      atomic: investigate_user
+      subject: mjones@example.com
+      record: {kind: user_profile, user: mjones@example.com, department: IT, groups: [IT Operations],
+               roles: [Global Administrator], account_enabled: true, risk_level: medium}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: mjones@example.com
+      record: {kind: sign_in, sign_in_id: si-0006-1, user: mjones@example.com, timestamp: "2026-01-15T07:12:30Z",
+               ip: 198.51.100.120, country: BR, app: Azure Portal, result: failure, mfa_result: denied,
+               risk_level: medium}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - quarantine_email:etd-mb-0006-001
+    - revoke_sessions:mjones@example.com
+  elevated: [revoke_sessions:mjones@example.com]
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  containment: CONTAINED
+  controls: 1

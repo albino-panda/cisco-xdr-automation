@@ -1,0 +1,52 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+schema: 1
+name: release-restoration
+workflow: mail-bombing
+description: >-
+  The flood is quarantined after approval. Once the analyst has reviewed it, a separate human release
+  decision moves the messages back to the inbox (release is never automatic).
+tags: [release, true_positive, approve_all]
+mode: live
+incident:
+  incident_id: XDR-MB-0009
+  title: "[HIGH] Possible email bombing of tgarcia@example.com: 64 msgs / 22 domains in 5 min"
+  severity: HIGH
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: tgarcia@example.com}
+    - {type: email_message_id, value: etd-mb-0009-001}
+  users: [tgarcia@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    event_type: mailbomb.detection
+    recipient: tgarcia@example.com
+    metrics: {window_start: "2026-01-15T05:00:00Z", window_end: "2026-01-15T05:05:00Z", total_messages: 64,
+              unique_sender_domains: 22, neutral_count: 50, graymail_count: 10, spam_count: 4, malicious_count: 0}
+environment:
+  records:
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0009-001
+      record: {kind: email_message, message_id: etd-mb-0009-001, sender: hello@app-signup.example,
+               sender_domain: app-signup.example, recipients: [tgarcia@example.com], recipient_count: 1,
+               subject_line: Verify your email to get started, received_at: "2026-01-15T05:00:30Z",
+               direction: inbound, verdict: CLEAN, delivery_location: inbox}
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0009-001
+      record: {kind: email_message, message_id: etd-mb-0009-002, sender: team@webinar-hub.test,
+               sender_domain: webinar-hub.test, recipients: [tgarcia@example.com], recipient_count: 1,
+               subject_line: You are registered for the webinar, received_at: "2026-01-15T05:01:30Z",
+               direction: inbound, verdict: CLEAN, threat_types: [graymail], delivery_location: inbox}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+release: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - quarantine_email:etd-mb-0009-001
+    - quarantine_email:etd-mb-0009-002
+  containment: CONTAINED
+  controls: 2
+  restoration: RESTORED
+  final_state: RESTORED

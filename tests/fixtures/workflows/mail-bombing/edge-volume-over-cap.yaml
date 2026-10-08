@@ -1,0 +1,74 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+schema: 1
+name: edge-volume-over-cap
+workflow: mail-bombing
+description: >-
+  Volume over the cap: the lab caps a package at 3 messages (thresholds blast_radius.max_messages) and
+  the flood search returns 5 flood messages. Every quarantine stays proposed (never dropped) but needs
+  ELEVATED approval with a blast-radius warning; the lead approves.
+tags: [edge_case, true_positive]
+mode: both
+config:
+  thresholds: {blast_radius: {max_messages: 3}}
+incident:
+  incident_id: XDR-MB-0010
+  title: "[CRITICAL] Possible email bombing of dlee@example.com: 300 msgs / 120 domains in 5 min"
+  severity: HIGH
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: dlee@example.com}
+    - {type: email_message_id, value: etd-mb-0010-001}
+  users: [dlee@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    event_type: mailbomb.detection
+    recipient: dlee@example.com
+    is_escalation: true
+    metrics: {window_start: "2026-01-15T03:00:00Z", window_end: "2026-01-15T03:05:00Z", total_messages: 300,
+              unique_sender_domains: 120, neutral_count: 260, graymail_count: 25, spam_count: 15, malicious_count: 0}
+environment:
+  records:
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0010-001,
+       record: {kind: email_message, message_id: etd-mb-0010-001, sender: a@list-one.example,
+                sender_domain: list-one.example, recipients: [dlee@example.com], recipient_count: 1,
+                subject_line: Welcome to list one, received_at: "2026-01-15T03:00:10Z", direction: inbound,
+                verdict: CLEAN, delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0010-001,
+       record: {kind: email_message, message_id: etd-mb-0010-002, sender: b@list-two.example,
+                sender_domain: list-two.example, recipients: [dlee@example.com], recipient_count: 1,
+                subject_line: Welcome to list two, received_at: "2026-01-15T03:00:40Z", direction: inbound,
+                verdict: CLEAN, delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0010-001,
+       record: {kind: email_message, message_id: etd-mb-0010-003, sender: c@list-three.test,
+                sender_domain: list-three.test, recipients: [dlee@example.com], recipient_count: 1,
+                subject_line: Confirm list three, received_at: "2026-01-15T03:01:20Z", direction: inbound,
+                verdict: CLEAN, threat_types: [graymail], delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0010-001,
+       record: {kind: email_message, message_id: etd-mb-0010-004, sender: d@list-four.test,
+                sender_domain: list-four.test, recipients: [dlee@example.com], recipient_count: 1,
+                subject_line: Thanks for signing up, received_at: "2026-01-15T03:02:00Z", direction: inbound,
+                verdict: CLEAN, delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-0010-001,
+       record: {kind: email_message, message_id: etd-mb-0010-005, sender: e@list-five.example,
+                sender_domain: list-five.example, recipients: [dlee@example.com], recipient_count: 1,
+                subject_line: Your daily offers, received_at: "2026-01-15T03:03:30Z", direction: inbound,
+                verdict: CLEAN, threat_types: [graymail], delivery_location: inbox}}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - quarantine_email:etd-mb-0010-001
+    - quarantine_email:etd-mb-0010-002
+    - quarantine_email:etd-mb-0010-003
+    - quarantine_email:etd-mb-0010-004
+    - quarantine_email:etd-mb-0010-005
+  elevated:
+    - quarantine_email:etd-mb-0010-001
+    - quarantine_email:etd-mb-0010-002
+    - quarantine_email:etd-mb-0010-003
+    - quarantine_email:etd-mb-0010-004
+    - quarantine_email:etd-mb-0010-005
+  warnings: [ELEVATED APPROVAL REQUIRED, exceeds the blast-radius cap of 3]
+  containment: CONTAINED
+  controls: 5

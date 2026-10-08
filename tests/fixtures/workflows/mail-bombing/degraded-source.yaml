@@ -1,0 +1,64 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+schema: 1
+name: degraded-source
+workflow: mail-bombing
+description: >-
+  Secure Email is unavailable during the flood search, so no flood message can be cited and nothing is
+  quarantined. Entra still reports an MFA fatigue detection and denied pushes inside the flood window:
+  the session revocation is recommended from that evidence alone, and the run lists secure_email as a
+  degraded source in its notes (a failed source never blocks a recommendation backed by other
+  evidence).
+tags: [degraded_source, true_positive]
+mode: both
+incident:
+  incident_id: XDR-MB-0005
+  title: "[HIGH] Possible email bombing of lchen@example.com: 88 msgs / 31 domains in 5 min"
+  severity: HIGH
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: lchen@example.com}
+    - {type: email_message_id, value: etd-mb-0005-001}
+  users: [lchen@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    event_type: mailbomb.detection
+    recipient: lchen@example.com
+    metrics: {window_start: "2026-01-15T10:40:00Z", window_end: "2026-01-15T10:45:00Z", total_messages: 88,
+              unique_sender_domains: 31, neutral_count: 70, graymail_count: 10, spam_count: 8, malicious_count: 0}
+environment:
+  records:
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-mb-0005-001
+      record: {kind: email_message, message_id: etd-mb-0005-001, sender: hi@signup-mania.example,
+               sender_domain: signup-mania.example, recipients: [lchen@example.com], recipient_count: 1,
+               subject_line: Welcome aboard, received_at: "2026-01-15T10:40:30Z", direction: inbound,
+               verdict: CLEAN, delivery_location: inbox}
+    - integration: entra
+      atomic: investigate_user
+      subject: lchen@example.com
+      record: {kind: user_profile, user: lchen@example.com, department: Sales, groups: [Sales], roles: [],
+               account_enabled: true, risk_level: medium}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: lchen@example.com
+      record: {kind: anomaly, anomaly_id: rd-0005-1, anomaly_type: mfa_fatigue, severity: MEDIUM,
+               user: lchen@example.com, ip: 198.51.100.45, detail: Repeated push prompts denied,
+               first_seen: "2026-01-15T10:42:00Z"}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: lchen@example.com
+      record: {kind: mfa_event, user: lchen@example.com, timestamp: "2026-01-15T10:42:10Z", method: push,
+               result: denied, ip: 198.51.100.45}
+  faults:
+    - {kind: UNAVAILABLE, integration: secure_email, operation: investigate, times: 5}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - revoke_sessions:lchen@example.com
+  elevated: []
+  degraded_sources: [secure_email]
+  containment: CONTAINED
+  controls: 0

@@ -1,0 +1,71 @@
+# mail-bombing scenario; fake lab data only (example.com, *.example, *.test, documentation IPs).
+# Migrated from the legacy spec scenario; times are moved to the lab clock (2026-01-15). The legacy
+# "protected user" guardrail is now the critical-asset policy (privileged_account: breakglass* and the
+# Global Administrator role), so the revocation is ELEVATED with a warning instead of skipped (C3).
+schema: 1
+name: legacy-04-breakglass-recipient
+workflow: mail-bombing
+description: >-
+  Legacy 04: a break-glass account's mailbox is flooded and an MFA fatigue pattern appears inside the
+  window. The revoke rule fires and the critical-asset policy keeps it proposed with ELEVATED approval
+  and a warning, so cutting emergency access needs a lead; an analyst alone is refused. The reversible
+  quarantine of the neutral and graymail messages stays at standard approval.
+tags: [legacy, critical_asset, true_positive]
+legacy_source: workflows/mail-bombing/scenarios/04-breakglass-recipient.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-MB-0004
+  title: "[HIGH] Possible email bombing of breakglass-01@example.com: 75 msgs / 28 domains in 5 min"
+  severity: HIGH
+  source: cisco-xdr-mailbomb-detector
+  workflow_id: mail-bombing
+  observables:
+    - {type: email_address, value: breakglass-01@example.com}
+    - {type: email_message_id, value: etd-mb-l04-001}
+    - {type: domain, value: promo-signup.test}
+    - {type: ip, value: 203.0.113.60}
+  users: [breakglass-01@example.com]
+  trigger:
+    source: cisco-xdr-mailbomb-detector
+    event_type: mailbomb.detection
+    schema_version: 1
+    detection_id: mailbomb-0000000000000004
+    risk_score: 63
+    is_escalation: false
+    matched_rules: ["threshold:high", "threshold:medium"]
+    recipient: breakglass-01@example.com
+    metrics: {window_start: "2026-01-15T02:05:00Z", window_end: "2026-01-15T02:10:00Z", window_minutes: 5,
+              total_messages: 75, unique_senders: 70, unique_sender_domains: 28, unique_source_ips: 22,
+              unique_subjects: 74, neutral_count: 60, graymail_count: 9, spam_count: 6, malicious_count: 0}
+environment:
+  records:
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-l04-001,
+       record: {kind: email_message, message_id: etd-mb-l04-001, sender: offers@promo-signup.test,
+                sender_domain: promo-signup.test, recipients: [breakglass-01@example.com], recipient_count: 1,
+                subject_line: Your promo signup, received_at: "2026-01-15T02:05:30Z", direction: inbound,
+                verdict: CLEAN, delivery_location: inbox}}
+    - {integration: secure_email, atomic: search_email_campaign, subject: etd-mb-l04-001,
+       record: {kind: email_message, message_id: etd-mb-l04-002, sender: news@gear-store.example,
+                sender_domain: gear-store.example, recipients: [breakglass-01@example.com], recipient_count: 1,
+                subject_line: New arrivals this week, received_at: "2026-01-15T02:06:10Z", direction: inbound,
+                verdict: CLEAN, threat_types: [graymail], delivery_location: inbox}}
+    - {integration: entra, atomic: investigate_user, subject: breakglass-01@example.com,
+       record: {kind: user_profile, user: breakglass-01@example.com, department: IT, manager: it-lead@example.com,
+                groups: [Emergency Access], roles: [Global Administrator], risk_level: high}}
+    - {integration: entra, atomic: investigate_authentication, subject: breakglass-01@example.com,
+       record: {kind: sign_in, user: breakglass-01@example.com, timestamp: "2026-01-15T02:07:10Z",
+                ip: 198.51.100.90, app: Azure Portal, result: failure, risk_level: medium}}
+    - {integration: entra, atomic: investigate_authentication, subject: breakglass-01@example.com,
+       record: {kind: anomaly, anomaly_type: mfa_fatigue, severity: MEDIUM, user: breakglass-01@example.com,
+                detail: "Six push prompts in two minutes, all denied", first_seen: "2026-01-15T02:07:00Z"}}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - quarantine_email:etd-mb-l04-001
+    - quarantine_email:etd-mb-l04-002
+    - revoke_sessions:breakglass-01@example.com
+  elevated: [revoke_sessions:breakglass-01@example.com]
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  containment: CONTAINED
+  controls: 2
