@@ -26,7 +26,8 @@ audit trail, control registry and token ledger at the configured paths.
 """
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+import os
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -78,7 +79,13 @@ from xdr_response.secrets import default_secret_provider
 from xdr_response.verification import VerificationEngine
 
 if TYPE_CHECKING:  # pragma: no cover
+    from xdr_response.lifecycle.observers import LifecycleObserver
     from xdr_response.lifecycle.orchestrator import ResponseOrchestrator
+    from xdr_response.workflows.discovery import WorkflowCatalog
+
+#: Default notification outbox of :func:`bootstrap` (env ``XDR_RESPONSE_NOTIFICATIONS_PATH`` wins).
+DEFAULT_NOTIFICATIONS_PATH = Path("var/notifications/outbox.jsonl")
+NOTIFICATIONS_PATH_ENV = "XDR_RESPONSE_NOTIFICATIONS_PATH"
 
 __all__ = ["Runtime", "build_runtime", "bootstrap", "in_memory_runtime"]
 
@@ -111,6 +118,9 @@ class Runtime:
     incident_store: IncidentStore
     package_store: PackageStore
     recorder: AuditRecorder
+    # Phase 1 additions (section 14.3.6)
+    workflows: "WorkflowCatalog | None" = None
+    observers: "tuple[LifecycleObserver, ...]" = ()
 
     @property
     def dry_run(self) -> bool:
@@ -134,11 +144,19 @@ def build_runtime(settings: Settings, secrets: SecretProvider, *, authenticator:
                   investigator: InvestigationService | None = None,
                   id_factory: Callable[[], str] | None = None,
                   max_concurrency: int = 1,
-                  integration_concurrency: Mapping[str, int] | None = None) -> Runtime:
+                  integration_concurrency: Mapping[str, int] | None = None,
+                  workflows: "WorkflowCatalog | None" = None,
+                  observers: "Sequence[LifecycleObserver]" = ()) -> Runtime:
     """Wire every component and install the guard verifier, dry-run flag and denial hook.
 
     Defaults: durable JSONL audit trail, control registry and token ledger at the
     ``settings.runtime`` paths; in-memory incident and package stores; the rule-based recommender.
+
+    With a workflow catalog (section 14.3.6) the investigator is a ``WorkflowInvestigator``
+    (read-only ``WorkflowRunner`` with the Phase 0 ``InvestigationService`` as fallback) and the
+    recommender a ``WorkflowRecommender`` (fallback ``RuleBasedRecommender``); explicit
+    ``investigator=`` / ``recommender=`` arguments still win. Without a catalog everything behaves
+    exactly as in Phase 0. ``observers`` receive lifecycle events (bookkeeping only).
     """
     from xdr_response.lifecycle.orchestrator import ResponseOrchestrator
 
@@ -196,8 +214,14 @@ def build_runtime(settings: Settings, secrets: SecretProvider, *, authenticator:
     machine = IncidentStateMachine(incident_store, audit, clock, tokens=verify_only)
     if investigator is None:
         investigator = InvestigationService(adapters, audit=audit, clock=clock)
+        if workflows is not None:
+            investigator = _workflow_investigator(workflows, investigator, adapters, settings, audit, clock)
     if recommender is None:
         recommender = RuleBasedRecommender(adapters)
+        if workflows is not None:
+            from xdr_response.lifecycle.workflow_adapter import WorkflowRecommender
+
+            recommender = WorkflowRecommender(recommender)
     health = HealthMonitor(adapters, audit=audit)
 
     # ---- deterministic safety wiring of the process-wide execution guard ----
@@ -214,6 +238,7 @@ def build_runtime(settings: Settings, secrets: SecretProvider, *, authenticator:
         orchestrator=None,  # type: ignore[arg-type] - set right below
         verification=verification, runner=runner, investigator=investigator, recommender=recommender,
         health=health, incident_store=incident_store, package_store=package_store, recorder=recorder,
+        workflows=workflows, observers=_observers(observers),
     )
     runtime.orchestrator = ResponseOrchestrator(runtime, incidents=incident_store, packages=package_store)
     return runtime
@@ -222,16 +247,51 @@ def build_runtime(settings: Settings, secrets: SecretProvider, *, authenticator:
 def bootstrap(config_dir: Path | str = "config", *, authenticator: ApproverAuthenticator,
               env: Mapping[str, str] | None = None, secrets: SecretProvider | None = None,
               clock: Clock | None = None,
-              transport_factory: Callable[[str], httpx.BaseTransport | None] | None = None) -> Runtime:
+              transport_factory: Callable[[str], httpx.BaseTransport | None] | None = None,
+              workflows: bool = True, notifications_path: Path | str | None = None) -> Runtime:
     """Load configuration and secrets and build a durable runtime (deployment entry point).
 
     ``DRY_RUN`` in ``env`` (default: the process environment) overrides ``runtime.dry_run``.
     Secrets come from the environment, then from ``XDR_RESPONSE_SECRETS_DIR`` mounted files.
+    ``workflows=True`` discovers the workflow catalog (a broken workflow fails loudly). The
+    notification outbox is ``notifications_path``, else ``XDR_RESPONSE_NOTIFICATIONS_PATH``, else
+    ``var/notifications/outbox.jsonl`` (rendered text only; nothing is posted to a vendor).
     """
+    from xdr_response.atomics.notifications.service import NotificationService
+    from xdr_response.atomics.notifications.sinks import JsonlNotificationSink
+    from xdr_response.workflows.discovery import discover_workflows
+
+    environment = os.environ if env is None else env
     settings = load_settings(config_dir, env=env)
     provider = secrets if secrets is not None else default_secret_provider(env)
+    outbox = notifications_path or environment.get(NOTIFICATIONS_PATH_ENV) or DEFAULT_NOTIFICATIONS_PATH
+    notifications = NotificationService([JsonlNotificationSink(outbox, clock=clock)], clock=clock)
     return build_runtime(settings, provider, authenticator=authenticator, clock=clock,
-                         transport_factory=transport_factory)
+                         transport_factory=transport_factory,
+                         workflows=discover_workflows() if workflows else None, observers=(notifications,))
+
+
+def _workflow_investigator(catalog: "WorkflowCatalog", fallback: InvestigationService, adapters: AdapterRegistry,
+                           settings: Settings, audit: AuditSink, clock: Clock) -> InvestigationService:
+    """``WorkflowInvestigator`` over a read-only facade (its dry-run check matches the orchestrator's)."""
+    from xdr_response.atomics.context import ReadOnlyAdapters
+    from xdr_response.lifecycle.workflow_adapter import WorkflowInvestigator
+    from xdr_response.workflows.runner import WorkflowRunner
+
+    runner = WorkflowRunner(ReadOnlyAdapters(adapters), settings, clock=clock)
+    investigator = WorkflowInvestigator(catalog, runner, fallback, audit=audit,
+                                        dry_run=lambda: guard.is_dry_run() or bool(settings.runtime.dry_run))
+    return investigator  # type: ignore[return-value] - same run() contract as InvestigationService
+
+
+def _observers(observers: "Sequence[LifecycleObserver]") -> "tuple[LifecycleObserver, ...]":
+    from xdr_response.lifecycle.observers import LifecycleObserver
+
+    out = tuple(observers)
+    for observer in out:
+        if not isinstance(observer, LifecycleObserver):
+            raise TypeError(f"observer {type(observer).__name__} has no on_event(event) method")
+    return out
 
 
 def in_memory_runtime(settings: Settings, secrets: SecretProvider, *, authenticator: ApproverAuthenticator,

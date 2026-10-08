@@ -61,7 +61,7 @@ SECRETS = {
 class Lab:
     """Runtime wired to the fake vendors."""
 
-    def __init__(self, *, dry_run: bool = False) -> None:
+    def __init__(self, *, dry_run: bool = False, workflows=None) -> None:
         self.clock = FixedClock(FIXED_NOW)
         self.umbrella = FakeUmbrella(key=SECRETS["UMBRELLA_API_KEY"], secret=SECRETS["UMBRELLA_API_SECRET"],
                                      categorization={DOMAIN: -1})
@@ -84,7 +84,7 @@ class Lab:
         self.runtime: Runtime = build_runtime(
             settings, make_test_secrets(**SECRETS), authenticator=make_authenticator(), clock=self.clock,
             audit=self.audit, registry=InMemoryControlRegistry(clock=self.clock), ledger=InMemoryTokenUseLedger(),
-            transport_factory=transports.get, sleep=lambda _s: None)
+            transport_factory=transports.get, sleep=lambda _s: None, workflows=workflows)
         self.orchestrator = self.runtime.orchestrator
 
     def incident(self, incident_id: str = "XDR-INT-0001") -> Incident:

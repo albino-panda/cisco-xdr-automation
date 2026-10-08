@@ -35,13 +35,19 @@ Safety properties, all enforced by deterministic code:
   ``dry_run=True`` and can never authorize a live execution later (not even after dry run is
   switched off within the token TTL).
 * Every step is audited; a failed state-transition audit write leaves the incident unchanged.
+
+Phase 1 (section 14.3.6): with a workflow catalog wired, :meth:`open_incident` stores the incident
+with the resolved workflow id and version (so packages and tokens carry them), and lifecycle
+observers receive a ``LifecycleEvent`` after investigation and proposal, decisions, release
+proposals and closing. Observers are bookkeeping only: their exceptions are logged and swallowed,
+they never change state and never see a token.
 """
 from __future__ import annotations
 
 import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from xdr_response import guard
 from xdr_response.audit.summary import ExecutionAuditSummary, build_execution_summary
@@ -52,6 +58,7 @@ from xdr_response.lifecycle.investigation import InvestigationReport
 from xdr_response.lifecycle.machine import LIFECYCLE_ACTOR
 from xdr_response.lifecycle.recommendation import Recommendation
 from xdr_response.logs.redaction import get_redactor
+from xdr_response.logs.setup import get_logger
 from xdr_response.models import (
     ActionPackage,
     ApprovalOutcome,
@@ -81,6 +88,7 @@ __all__ = ["ResponseOrchestrator", "DecisionResult", "DetectionResult", "VERIFIC
 EXECUTION_ACTOR = "automation:execution"
 VERIFICATION_ACTOR = "automation:verification"
 _APPROVING = frozenset({DecisionType.APPROVE_ALL, DecisionType.APPROVE_SELECTED})
+_log = get_logger("lifecycle.orchestrator")
 
 
 @dataclass(frozen=True)
@@ -161,11 +169,17 @@ class ResponseOrchestrator:
 
     # ---------------------------------------------------------- detection --
     def open_incident(self, incident: Incident) -> Incident:
-        """Register a detected incident in ``NOT_STARTED`` and audit ``INCIDENT_RECEIVED``."""
+        """Register a detected incident in ``NOT_STARTED`` and audit ``INCIDENT_RECEIVED``.
+
+        With a workflow catalog the stored incident carries the resolved workflow id and version.
+        """
         if not isinstance(incident, Incident):
             raise TypeError("incident must be an Incident")
         if incident.state is not IncidentState.NOT_STARTED or incident.history:
             raise ValueError("a new incident must be NOT_STARTED with an empty history")
+        catalog = self._rt.workflows
+        if catalog is not None:
+            incident = catalog.assign(incident)
         with self._lock(incident.incident_id):
             try:
                 self._incidents.get(incident.incident_id)
@@ -204,6 +218,12 @@ class ResponseOrchestrator:
         With nothing to contain (or everything allow-listed) the incident stays ``NOT_STARTED``.
         In dry run the package is also simulated and the DRY RUN report returned.
         """
+        result = self._investigate_and_propose(incident_id)
+        if self._rt.observers:
+            self._emit_detection(result)
+        return result
+
+    def _investigate_and_propose(self, incident_id: str) -> DetectionResult:
         with self._lock(incident_id):
             incident = self._incidents.get(incident_id)
             if incident.state is not IncidentState.NOT_STARTED:
@@ -299,6 +319,13 @@ class ResponseOrchestrator:
     def submit_decision(self, request: DecisionRequest,
                         credentials: Sequence[ApproverCredential]) -> DecisionResult:
         """Record a human decision on the pending containment package and act on it."""
+        result = self._submit_decision(request, credentials)
+        if self._rt.observers:
+            self._emit_decision(result, request.package_id, "containment_completed")
+        return result
+
+    def _submit_decision(self, request: DecisionRequest,
+                         credentials: Sequence[ApproverCredential]) -> DecisionResult:
         package_id = request.package_id
         try:
             incident_id = self._packages.get(package_id).incident_id
@@ -392,6 +419,14 @@ class ResponseOrchestrator:
     def propose_release(self, incident_id: str, control_keys: Sequence[str] | None = None, *,
                         requested_by: str = "automation:restoration_planner") -> ReleasePackage:
         """Release package for ACTIVE controls of the incident -> ``AWAITING_RELEASE_APPROVAL``."""
+        package = self._propose_release(incident_id, control_keys, requested_by=requested_by)
+        if self._rt.observers:
+            self._emit("release_proposed", self._incidents.get(incident_id), package=package,
+                       dry_run=package.dry_run or self._dry_run_active())
+        return package
+
+    def _propose_release(self, incident_id: str, control_keys: Sequence[str] | None, *,
+                         requested_by: str) -> ReleasePackage:
         with self._lock(incident_id):
             incident = self._incidents.get(incident_id)
             target = IncidentState.AWAITING_RELEASE_APPROVAL
@@ -409,6 +444,13 @@ class ResponseOrchestrator:
     def submit_release_decision(self, request: DecisionRequest,
                                 credentials: Sequence[ApproverCredential]) -> DecisionResult:
         """Record a human decision on the pending release package and act on it."""
+        result = self._submit_release_decision(request, credentials)
+        if self._rt.observers:
+            self._emit_decision(result, request.package_id, "restoration_completed")
+        return result
+
+    def _submit_release_decision(self, request: DecisionRequest,
+                                 credentials: Sequence[ApproverCredential]) -> DecisionResult:
         try:
             incident_id = self._packages.get(request.package_id).incident_id
         except KeyError:
@@ -469,13 +511,62 @@ class ResponseOrchestrator:
             incident = self._transition(incident_id, IncidentState.CLOSED, actor=actor,
                                         reason=f"{reason}{note}"[:4000])
             self._void_unexecuted_approvals(incident_id)
-            return incident
+        if self._rt.observers:
+            self._emit("incident_closed", incident, notes=(note.lstrip("; "),) if note else (),
+                       dry_run=self._dry_run_active())
+        return incident
+
+    # ----------------------------------------------------------- observers --
+    def _emit(self, kind: str, incident: Incident, **fields: Any) -> None:
+        """Build a ``LifecycleEvent`` and hand it to every observer (failures logged, never raised)."""
+        from xdr_response.atomics.notifications.models import LifecycleEvent, LifecycleEventKind
+        from xdr_response.lifecycle.observers import notify_observers
+
+        try:
+            event = LifecycleEvent(kind=LifecycleEventKind(kind), at=self._rt.clock.now(), incident=incident,
+                                   **fields)
+        except (ValueError, TypeError) as exc:  # an event that cannot be built is logged, never fatal
+            _log.error("lifecycle event %s for %s not emitted: %s", kind, incident.incident_id,
+                       type(exc).__name__)
+            return
+        notify_observers(self._rt.observers, event)
+
+    def _emit_detection(self, result: DetectionResult) -> None:
+        summary = _workflow_summary(result.investigation)
+        kind = "package_proposed" if result.package is not None else "detection_completed"
+        dry_run = result.package.dry_run if result.package is not None else self._dry_run_active()
+        self._emit(kind, result.incident, package=result.package, summary=summary, notes=result.notes,
+                   dry_run=dry_run)
+
+    def _emit_decision(self, result: DecisionResult, package_id: str, completed: str) -> None:
+        try:
+            package = self._packages.get(package_id)
+        except KeyError:
+            package = None
+        dry_run = result.dry_run or self._dry_run_active() or bool(package is not None and package.dry_run)
+        self._emit("decision_recorded", result.incident, package=package, decision=result.outcome.decision,
+                   dry_run=dry_run)
+        if result.report is not None and not result.report.dry_run:
+            self._emit(completed, result.incident, package=package, decision=result.outcome.decision,
+                       report=result.report, dry_run=False)
 
     def _void_unexecuted_approvals(self, incident_id: str) -> None:
         for purpose in (ApprovalPurpose.CONTAINMENT, ApprovalPurpose.RELEASE):
             package = self._packages.latest_for_incident(incident_id, purpose)
             if package is not None and not self._packages.is_executed(package.package_id):
                 self._rt.tokens.revoke_package(package.package_id)
+
+
+def _workflow_summary(investigation: InvestigationReport) -> Any:
+    """``run.summary()`` of a workflow investigation, else None (Phase 0 generic path)."""
+    run = getattr(investigation, "run", None)
+    if run is None:
+        return None
+    try:
+        return run.summary()
+    except Exception as exc:  # noqa: BLE001 - a summary problem never blocks the lifecycle
+        _log.error("workflow summary unavailable: %s", type(exc).__name__)
+        return None
 
 
 def _as_simulation_if_dry_run(package: ActionPackage, dry_run_active: bool) -> ActionPackage:

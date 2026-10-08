@@ -151,7 +151,10 @@ class ScenarioRun:
     """One simulated lifecycle of a scenario (dry run or simulated live)."""
 
     def __init__(self, scenario: Scenario, *, live: bool = False, clock: Clock | None = None,
-                 settings: Settings | None = None) -> None:
+                 settings: Settings | None = None, workflows: Any = None, observers: Sequence[Any] = (),
+                 recommender: Any = None) -> None:
+        """``workflows`` (a ``WorkflowCatalog``) and ``observers`` are passed to the runtime (14.3.6);
+        ``recommender`` replaces the runtime's recommender (legacy replay, 14.3.8)."""
         self.scenario = scenario
         self.live = live
         self.clock: Clock = clock or FixedClock(SIM_NOW)
@@ -166,7 +169,8 @@ class ScenarioRun:
         counter = iter(range(1, 1_000_000))
         self.runtime: Runtime = in_memory_runtime(
             self.settings, secrets, authenticator=self.authenticator, clock=self.clock,
-            sleep=lambda _s: None, id_factory=lambda: f"{next(counter):032x}")
+            sleep=lambda _s: None, id_factory=lambda: f"{next(counter):032x}", workflows=workflows,
+            observers=tuple(observers), **({"recommender": recommender} if recommender is not None else {}))
         register_simulated_adapters(self.runtime.adapters, self.environment, suite=scenario.suite,
                                     audit=self.runtime.audit)
         self._apply_environment(scenario.environment)

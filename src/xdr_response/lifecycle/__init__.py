@@ -31,6 +31,11 @@ _EXPORTS = {
     "build_runtime": "xdr_response.lifecycle.runtime",
     "bootstrap": "xdr_response.lifecycle.runtime",
     "in_memory_runtime": "xdr_response.lifecycle.runtime",
+    # Phase 1 (section 14.3.6)
+    "WorkflowInvestigationReport": "xdr_response.lifecycle.workflow_adapter",
+    "WorkflowInvestigator": "xdr_response.lifecycle.workflow_adapter",
+    "WorkflowRecommender": "xdr_response.lifecycle.workflow_adapter",
+    "LifecycleObserver": "xdr_response.lifecycle.observers",
 }
 
 __all__ = sorted(_EXPORTS)
