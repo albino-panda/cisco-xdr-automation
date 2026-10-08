@@ -55,8 +55,10 @@ WORKFLOW = WorkflowDefinition(
                     mitre_techniques=("T1486", "T1490"), priority=200),
         TriggerSpec(type="xdr_incident_rule",
                     description="XDR incident whose title names ransomware, mass file modification, shadow-copy "
-                                "deletion or encrypted files",
-                    title_patterns=("*ransom*", "*mass file modification*", "*shadow cop*", "*encrypted*"),
+                                "deletion or encrypted files (an encrypted network channel is c2, not ransomware)",
+                    title_patterns=("*ransom*", "*mass file modification*", "*shadow cop*", "*files encrypted*",
+                                    "*file encrypted*", "*encrypted files*", "*share encrypted*",
+                                    "*mass encryption*", "*file encryption*"),
                     priority=150),
         TriggerSpec(type="manual", description="An analyst starts the workflow for an incident"),
     ),

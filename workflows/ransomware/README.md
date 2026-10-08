@@ -22,7 +22,10 @@ recommended action waits for a human decision in the lifecycle orchestrator.
 - **XDR incident rule** (priority 200): the incident reports ATT&CK technique T1486 or T1490 (or one
   of their sub-techniques) in `trigger.mitre_techniques`.
 - **XDR incident rule** (priority 150): the incident title matches `*ransom*`,
-  `*mass file modification*`, `*shadow cop*` or `*encrypted*` (case-insensitive).
+  `*mass file modification*`, `*shadow cop*`, `*files encrypted*`, `*file encrypted*`,
+  `*encrypted files*`, `*share encrypted*`, `*mass encryption*` or `*file encryption*`
+  (case-insensitive). A title about an encrypted network channel ("Encrypted beaconing ...") does not
+  match; it belongs to `c2` (T1573).
 - **Manual**: an analyst starts the workflow for an incident (`incident.workflow_id: ransomware`).
 
 The XDR trigger sends only the incident id; the incident is re-read through the VERIFIED APIs

@@ -48,6 +48,11 @@ def test_the_definition_validates_and_is_discovered_with_its_hooks():
     ("Ransomware detected on finance workstation", (), True),
     ("Mass file modification on SRV-BKP-02", (), True),
     ("File share encrypted from HR workstation", (), True),
+    ("Files encrypted on TH-LT-1047", (), True),
+    ("Mass encryption of documents on SRV-FS-01", (), True),
+    # An encrypted network channel is command and control (c2, T1573), not ransomware (14.12.2).
+    ("Encrypted beaconing from TH-LT-5520 to static-assets.test", (), False),
+    ("Encrypted channel to a newly registered domain", (), False),
     ("Phishing reported by a user", ("T1566",), False),
 ])
 def test_triggers(title: str, techniques: tuple[str, ...], expected: bool):
