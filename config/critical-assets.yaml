@@ -21,14 +21,15 @@ classes:
       tags: ["identity", "pki", "federation"]
 
   executive_endpoint:
-    display_name: Executive endpoint
-    role: Endpoint used by an executive or VIP
-    potential_impact: Isolation interrupts an executive's work and must be coordinated with their office.
+    display_name: Executive or VIP asset
+    role: Endpoint, mailbox or account used by an executive or VIP
+    potential_impact: Containment interrupts an executive's work and must be coordinated with their office.
     match:
       hostname_patterns: ["EXEC-*", "VIP-*"]
       users: ["ceo@example.com", "cfo@example.com"]
       groups: ["Executives"]
       tags: ["vip", "executive"]
+      used_by: true             # users also match the endpoints and mailboxes they use
 
   production_server:
     display_name: Production server
@@ -79,6 +80,8 @@ classes:
     match:
       user_patterns: ["adm-*", "admin-*", "*-admin@*", "breakglass*"]
       groups: ["Domain Admins", "Global Administrators"]
+      # An account the identity provider marks privileged (UserProfileRecord.privileged, Asset.privileged)
+      # is always in this class, whatever its role names are (architecture 14.11.6).
       # Entra admin rights are directory roles, not groups (Asset.roles, compared case-insensitively).
       # Keep in step with PRIVILEGED_ROLE_NAMES in src/xdr_response/atomics/records.py.
       roles:

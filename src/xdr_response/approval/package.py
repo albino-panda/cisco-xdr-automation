@@ -13,7 +13,10 @@ deterministically in this order:
    merged into it (union of groups, tags, roles) and can never replace or shrink it;
 5. ``always_elevated`` action types set ``ELEVATED``;
 6. blast radius above the ``thresholds.yaml`` caps sets ``ELEVATED`` with a warning on every action
-   of the capped kind (nothing is removed);
+   of the capped kind (nothing is removed); an action that takes a host off the network
+   (``isolate_endpoint``, ``block_network_client``) on a host whose asset context holds an address
+   in ``never_block.ips`` / ``never_block.cidrs`` sets ``ELEVATED`` with a warning (14.11.7: the
+   isolation cuts allow-listed infrastructure off the network; shown, never silent or blocked);
 7. number the evidence, compute the evidence snapshot hash, set ``expires_at = now + package_ttl``.
 """
 from __future__ import annotations
@@ -27,6 +30,7 @@ from xdr_response.approval.critical_assets import WARNING_PREFIX, CriticalAssetP
 from xdr_response.clock import Clock, SystemClock
 from xdr_response.config import AllowlistPolicy, BlastRadiusSettings, Settings
 from xdr_response.models import (
+    ActionType,
     ApprovalLevel,
     ApprovalPurpose,
     Asset,
@@ -40,17 +44,24 @@ from xdr_response.models import (
     ProposedAction,
     RecommendedAction,
     TargetKind,
+    asset_addresses,
     canonical_json,
     evidence_snapshot_hash,
     get_action_spec,
     make_idempotency_key,
+    merge_asset_context,
     normalize_target,
     number_evidence,
 )
 
-__all__ = ["PackageBuilder", "DEFAULT_REQUESTER"]
+__all__ = ["PackageBuilder", "DEFAULT_REQUESTER", "INFRASTRUCTURE_ADDRESS_ROLE"]
 
 DEFAULT_REQUESTER = "automation:package_builder"
+#: ``CriticalAssetWarning.role`` of the warning on an isolation of a host that holds an allow-listed
+#: infrastructure address (``never_block.ips`` / ``never_block.cidrs``).
+INFRASTRUCTURE_ADDRESS_ROLE = "allow-listed infrastructure address"
+#: Actions that take a host off the network: every address the host holds goes with it.
+_NETWORK_CUTTING = frozenset({ActionType.ISOLATE_ENDPOINT, ActionType.BLOCK_NETWORK_CLIENT})
 
 _ENDPOINT_KINDS = frozenset({TargetKind.ENDPOINT, TargetKind.FILE, TargetKind.PROCESS, TargetKind.PERSISTENCE_ITEM})
 _USER_KINDS = frozenset({TargetKind.USER, TargetKind.ROLE_ASSIGNMENT})
@@ -93,17 +104,11 @@ def _blast_group(kind: TargetKind) -> str | None:
 
 
 def _union_assets(primary: Asset | None, extra: Asset | None) -> Asset | None:
-    """Union of two asset contexts: groups, tags and roles of both; ``primary`` wins for name and IP."""
+    """Union of two asset contexts: groups, tags, roles, users and addresses of both, ``privileged``
+    when either says so; ``primary`` wins for name and first IP (:func:`merge_asset_context`)."""
     if primary is None or extra is None:
         return primary or extra
-
-    def merged(a: tuple[str, ...], b: tuple[str, ...]) -> tuple[str, ...]:
-        return tuple(dict.fromkeys((*a, *b)))
-
-    return primary.model_copy(update={
-        "groups": merged(primary.groups, extra.groups), "tags": merged(primary.tags, extra.tags),
-        "roles": merged(primary.roles, extra.roles), "ip": primary.ip or extra.ip,
-    })
+    return merge_asset_context(primary, extra)
 
 
 def _as_proposal(action: RecommendedAction) -> ProposedAction:
@@ -197,6 +202,7 @@ class PackageBuilder:
             kind = TargetKind(action.target_kind)
             asset = self._incident_asset(incident, action.target, kind) if incident is not None else None
             reasons = [w.message for w in self._critical.evaluate(action.action_type, action.target, kind, asset)]
+            reasons += [w.message for w in self._infrastructure_warnings(action.action_type, action.target, asset)]
             if get_action_spec(action.action_type).always_elevated:
                 reasons.append(f"{action.action_type.value} is always ELEVATED")
             group = _blast_group(kind)
@@ -279,13 +285,34 @@ class PackageBuilder:
             ))
         return out
 
+    def _infrastructure_warnings(self, action_type: ActionType, target: str,
+                                 asset: Asset | None) -> list[CriticalAssetWarning]:
+        """One warning per allow-listed infrastructure address of a host an action takes off the
+        network. ``AllowlistPolicy.excluded_reason`` sees only the host name; the addresses come from
+        the asset context (the incident's asset and the addresses the run's endpoint records report).
+        The action stays proposed (the host may be the compromised one) but needs ELEVATED approval."""
+        if action_type not in _NETWORK_CUTTING:
+            return []
+        out: list[CriticalAssetWarning] = []
+        for address in asset_addresses(asset):
+            reason = self._allowlists.address_reason(address)
+            if not reason:
+                continue
+            impact = (f"{target} holds allow-listed infrastructure address {address} ({reason}); "
+                      f"{action_type.value} cuts that address off the network")
+            out.append(CriticalAssetWarning(
+                asset=target, asset_class=None, role=INFRASTRUCTURE_ADDRESS_ROLE, action_type=action_type,
+                potential_impact=impact, message=f"{WARNING_PREFIX} - {action_type.value} on {target}: {impact}"))
+        return out
+
     # -------------------------------------------------------------- rules 4,5,7 --
     def _recommend(self, incident_id: str, d: _Draft, by_content: dict[bytes, Evidence],
                    blast_warnings: list[CriticalAssetWarning]) -> RecommendedAction:
         p = d.proposal
         spec = get_action_spec(p.action_type)
         kind = TargetKind(p.target_kind)
-        warnings = self._critical.evaluate(p.action_type, d.target, kind, d.asset) + blast_warnings
+        warnings = (self._critical.evaluate(p.action_type, d.target, kind, d.asset)
+                    + self._infrastructure_warnings(p.action_type, d.target, d.asset) + blast_warnings)
         level = ApprovalLevel.ELEVATED if warnings or spec.always_elevated else ApprovalLevel.STANDARD
         numbers = {by_content[_evidence_key(e)].number: by_content[_evidence_key(e)] for e in d.evidence}
         return RecommendedAction(

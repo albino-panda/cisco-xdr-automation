@@ -17,11 +17,35 @@ vendor error bodies are covered: escaped JSON pairs inside a JSON string
 (a backslash before every quote of a ``"password": "..."`` pair) and XML elements of sensitive
 keys (``<sessionKey>...</sessionKey>``).
 
+One-time, verification, security, sign-in, reset and recovery codes are credentials in prose too
+(``Your verification code is 482913``, ``Password reset code: 482913``, ``482913 is your sign-in
+code``), and so is a password stated in prose (``Your new password is X``, ``temporary password
+X``, ``password is X`` when X looks like a credential) unless the word after it is an ordinary
+status word (``password is expiring``). Security notices quote them in subject lines, which reach
+records and the audit trail.
+
 Registered secrets are also matched in their JSON-escaped forms (backslash-u unicode escapes
 under the default ``ensure_ascii`` and backslash-escaped slashes), because vendors echo
 credentials inside JSON.
 :meth:`Redactor.redact_body` parses JSON bodies (recursively decoding string values that are JSON
 themselves) and redacts the structure before the text rules run.
+
+Command-line flags whose name is a sensitive key are redacted when the value is a separate
+argument too (``tool.exe --password VALUE``, ``-token VALUE``), not only in the ``--key=value``
+form. :meth:`Redactor.redact_command_line` (used for recorded process command lines) adds the
+forms that are credentials only by command-line convention: ``-p VALUE`` (the conventional
+password flag of database clients) and ``-u user:password`` / ``--user user:password`` (the
+password part of a basic-auth pair).
+
+Every text (not only command lines, 14.11.7) gets the password in URL userinfo
+(``https://user:password@host``) and the forms in which Windows and PowerShell administrative
+commands carry passwords, because a service ImagePath, a task action, a detection title, a script
+block or an untyped vendor attribute quotes the command with its arguments: ``/name:VALUE`` switches whose name is a password
+(``cmdkey /pass:X``, ``/pw:X``, ``/pwd:X``, ``wmic /password:X``), ``/rp X`` (schtasks run-as
+password), ``/p X`` after a ``/u USER`` (schtasks and similar), the plain-text literal of
+``ConvertTo-SecureString 'X' -AsPlainText`` / ``-String X`` (a ``$variable`` is kept), and the
+positional password of ``net use [device] \\\\host\\share X`` and ``net user NAME X`` (the ``*``
+prompt is kept).
 """
 from __future__ import annotations
 
@@ -36,7 +60,7 @@ from urllib.parse import unquote_plus, urlsplit, urlunsplit
 
 from pydantic import BaseModel, SecretBytes, SecretStr
 
-__all__ = ["REDACTED", "SENSITIVE_KEY_PATTERN", "Redactor", "get_redactor", "normalize_key"]
+__all__ = ["COMMAND_LINE_KEY_PATTERN", "REDACTED", "SENSITIVE_KEY_PATTERN", "Redactor", "get_redactor", "normalize_key"]
 
 REDACTED = "[REDACTED]"
 
@@ -71,6 +95,13 @@ _JWT = re.compile(r"\beyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]*")
 #: Encoded approval token ``base64url(canonical claims).key_id.signature`` for every legal key id
 #: (``[A-Za-z0-9_-]{1,64}``) and the 64 hex HMAC signature.
 _APPROVAL_TOKEN = re.compile(r"[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{1,64}\.[0-9a-fA-F]{64}(?![0-9A-Za-z])")
+#: Mapping keys (normalized by :func:`normalize_key`) whose string value is a process command line:
+#: :meth:`Redactor.redact` applies :meth:`Redactor.redact_command_line` to it, so a raw vendor
+#: finding or a typed lab record quoted in an audit payload gets the same treatment as the record's
+#: own ``command_line`` field (``command_line``, ``commandLine``, ``ProcessCommandLine``,
+#: ``InitiatingProcessCommandLine``, ``cmdline``, ``cmd_line``).
+COMMAND_LINE_KEY_PATTERN: re.Pattern[str] = re.compile(
+    r"(?:.*[-_.])?(?:command[-_]?line|cmd[-_]?line|commandline)", re.IGNORECASE)
 #: ``key = value`` / ``key: value`` with optional quotes around the key and the value (JSON text,
 #: Python dict reprs, headers, query strings). The value is replaced only when the key is sensitive.
 #: Only the key and separator are consumed; the value is captured in a lookahead so that a value
@@ -90,25 +121,130 @@ _XML_ELEMENT = re.compile(
     r"<(?P<tag>(?:[A-Za-z_][\w.\-]*:)?(?P<local>[A-Za-z_][\w.\-]{0,63}))(?P<attrs>\s[^<>]*)?>"
     r"(?P<value>[^<]*)</(?P=tag)\s*>"
 )
+#: ``--key VALUE`` / ``-key VALUE``: a command-line flag whose value is the next argument. The value
+#: is replaced only when the flag name is a sensitive key; a following flag (``-x``) is not a value.
+_FLAG_ARG = re.compile(
+    r"""(?<![A-Za-z0-9_.\-])-{1,2}(?P<key>[A-Za-z][A-Za-z0-9_.\-]{0,63})[ \t]+"""
+    r"""(?P<value>"[^"]*"|'[^']*'|(?!-)[^\s"']+)"""
+)
+#: Command lines only: ``-p VALUE`` (conventional password flag, for example database clients).
+_CMD_P_FLAG = re.compile(
+    r"""(?<![A-Za-z0-9_.\-])(?P<flag>-p[ \t]+)(?P<value>"[^"]*"|'[^']*'|(?!-)[^\s"']+)"""
+)
+#: Command lines only: ``-u user:password`` / ``--user user:password`` / ``--user=user:password``.
+_CMD_USER_PAIR = re.compile(
+    r"""(?<![A-Za-z0-9_.\-])(?P<flag>(?:-u|--user|--proxy-user)(?:[ \t]+|=))(?P<q>["']?)"""
+    r"""(?P<user>[^\s:"'@]+):(?P<value>[^\s"']+)(?P=q)"""
+)
+#: Any text: Windows ``/name:VALUE`` / ``/name=VALUE`` switches whose name is a password
+#: (``cmdkey /pass:X``, ``wmic /password:X``, ``/pw:X``, ``/pwd:X``) or any sensitive key. The
+#: switch starts an argument (after whitespace, a quote or at the start), never inside a path.
+_CMD_SLASH_SWITCH = re.compile(
+    r"""(?<![^\s"'])/(?P<key>[A-Za-z][A-Za-z0-9_\-]{0,31})[:=]"""
+    r"""(?P<value>"[^"]*"|'[^']*'|[^\s"']+)"""
+)
+_CMD_SLASH_PASSWORD_NAMES = frozenset({"pass", "pw", "pwd", "passwd", "password", "rp", "runpassword"})
+#: Any text: ``/rp VALUE`` (schtasks run-as password) and ``/p VALUE`` (the password of a
+#: preceding ``/u USER``, schtasks and similar) with the value as the next argument; another switch
+#: is not a value.
+_CMD_SLASH_ARG = re.compile(
+    r"""(?i)(?<![^\s"'])(?P<flag>/(?P<name>rp|p)[ \t]+)(?P<value>"[^"]*"|'[^']*'|(?![/-])[^\s"']+)"""
+)
+_CMD_SLASH_USER = re.compile(r"""(?i)(?<![^\s"'])/u[ \t]+\S""")
+#: Any text: PowerShell ``ConvertTo-SecureString 'X' -AsPlainText`` and
+#: ``ConvertTo-SecureString -String X``: the plain-text password literal (a ``$variable`` or a
+#: sub-expression is kept).
+_SECURESTRING = re.compile(
+    r"""(?i)\bConvertTo-SecureString\b(?P<pre>(?:[ \t]+-(?:AsPlainText|Force)\b)*[ \t]+(?:-String[ \t]+)?)"""
+    r"""(?P<value>'(?:''|[^'])*'|"(?:`.|[^"`])*"|(?![-$(])[^\s;|)'"]+)"""
+)
+#: Any text: ``net use [device] \\host\share PASSWORD /user:...`` and
+#: ``net user NAME PASSWORD``: positional passwords of the ``net`` command (``*`` prompts, kept).
+_NET_COMMAND = re.compile(
+    r"""(?i)(?<![A-Za-z0-9_.\-])net1?(?:\.exe)?["']?[ \t]+(?P<verb>use|user)\b(?P<rest>[^;&|\r\n]*)"""
+)
+_NET_TOKEN = re.compile(r"""\S+""")
+_NET_DEVICE = re.compile(r"""(?i)^(?:[A-Z]:|\*|LPT\d:|COM\d:)$""")
+#: Any text: ``scheme://user:password@host``.
+_URL_USERINFO = re.compile(r"(?P<head>[A-Za-z][A-Za-z0-9+.\-]*://[^\s/:@]+:)(?P<value>[^\s/@]+)(?=@)")
 #: Bare values after an authorization key that are only the auth scheme (the credential after the
 #: scheme is handled by ``_BEARER``).
 _AUTH_SCHEMES = frozenset({"bearer", "basic", "splunk", "apikey", "token", "digest", "negotiate"})
 _MIN_SECRET_LEN = 6
-#: An unlock code or passcode phrased in prose ("isolation unlock code: X", "unlock code X",
-#: "Device passcode X"): the key=value rule only sees the last word before the separator. The
-#: value must look like a code (a digit, or all upper case) so ordinary words are left alone.
+#: Labels of one-time and verification codes in prose (security notices, sign-in mails).
+_ONE_TIME_LABELS = (
+    r"(?:verification|security|sign[\s_-]?in|log[\s_-]?in|logon|one[\s_-]?time|reset|recovery|confirmation"
+    r"|2fa|mfa|otp|backup|single[\s_-]?use)[\s_-]*code|one[\s_-]?time[\s_-]*(?:password|pass[\s_-]?word|pin)"
+)
+#: Short or generic labels, recognised only right before the value (never across other words).
+_SHORT_CODE_LABELS = r"(?:access|auth|authentication|account|device|pairing)[\s_-]*code|otp|totp|pin"
+#: An unlock code, passcode or one-time code phrased in prose ("isolation unlock code: X", "unlock
+#: code X", "Device passcode X", "Your verification code is X"): the key=value rule only sees the
+#: last word before the separator. The value must look like a code (a digit, or all upper case) so
+#: ordinary words are left alone.
 _CODE_PROSE = re.compile(
-    r"(?i)\b(?P<label>unlock[\s_-]*code|pass[\s_-]?code|isolation[\s_-]*code)(?P<sep>\s*(?:[:=]|\bis\b)?\s*)"
+    r"(?i)\b(?P<label>unlock[\s_-]*code|pass[\s_-]?code|isolation[\s_-]*code|" + _ONE_TIME_LABELS + "|"
+    + _SHORT_CODE_LABELS + r")(?![A-Za-z0-9])"
+    r"(?P<sep>\s*(?:[:=]|\bis\b)?\s*)"
     r"(?P<q>[\"']?)(?P<value>[A-Za-z0-9][A-Za-z0-9-]{3,63})(?P=q)(?![A-Za-z0-9])"
 )
 #: The same with words between the label and the value, which then needs an explicit separator
 #: (``:`` / ``=`` / ``is``): "unlock code for TH-LT-1047 is X", "unlock code (TH-LT-1047): X",
 #: "the code to unlock TH-LT-1047 is X". The words in between stay on one line (at most 80 chars).
 _CODE_PROSE_LOOSE = re.compile(
-    r"(?i)\b(?P<label>unlock[\s_-]*code|pass[\s_-]?code|isolation[\s_-]*code|code\s+to\s+unlock)"
+    r"(?i)\b(?P<label>unlock[\s_-]*code|pass[\s_-]?code|isolation[\s_-]*code|code\s+to\s+unlock|"
+    + _ONE_TIME_LABELS + r")(?![A-Za-z0-9])"
     r"(?P<sep>[^\r\n:=]{0,80}?(?:\s*[:=]\s*|\s+is\s+))"
     r"(?P<q>[\"']?)(?P<value>[A-Za-z0-9][A-Za-z0-9-]{3,63})(?P=q)(?![A-Za-z0-9])"
 )
+
+#: The code first: "482913 is your verification code", "G-482913 is your sign-in code".
+_CODE_FIRST = re.compile(
+    r"(?i)(?<![A-Za-z0-9])(?P<value>(?:[A-Z]{1,3}-)?\d[A-Za-z0-9-]{3,15})(?P<rest>\s+is\s+your\b[^\r\n]{0,60}?"
+    r"\b(?:code|passcode|password|pin|otp))\b"
+)
+#: A password stated in prose: "new password is X", "temporary password: X", "password is X" and,
+#: after a qualifier only, "new password X". The value is kept when it is an ordinary status word.
+_PASSWORD_PROSE = re.compile(
+    r"(?i)\b(?P<label>(?P<qual>(?:new|temporary|temp|initial|default|one[\s_-]?time|generated|reset)[\s_-]+)?"
+    r"pass[\s_-]?word)(?P<sep>\s+is\s+|\s*[:=]\s*|[ \t]+)(?P<q>[\"']?)(?P<value>[^\s\"'<>]{3,128})(?P=q)"
+)
+_PASSWORD_STATUS_WORDS = frozenset({
+    "a", "about", "already", "an", "and", "at", "being", "been", "by", "change", "changed", "compromised",
+    "due", "empty", "expire", "expired", "expires", "expiring", "for", "from", "going", "has", "have",
+    "in", "incorrect", "invalid", "is", "locked", "missing", "must", "needed", "never", "no", "not", "now",
+    "of", "old", "on", "or", "out", "policy", "ready", "request", "requested", "required", "reset", "set",
+    "should", "soon", "still", "strong", "successfully", "the", "this", "to", "too", "unchanged", "updated",
+    "valid", "was", "weak", "will", "with", "wrong", "you", "your", "manager",
+})
+
+
+def _looks_like_credential(value: str) -> bool:
+    """A digit, a symbol or upper case after the first letter: never an ordinary prose word."""
+    bare = value.rstrip(".,;:!?")
+    return any(ch.isdigit() for ch in bare) or not bare.isalpha() or bare[1:] != bare[1:].lower()
+
+
+def _password_prose(match: re.Match[str]) -> str:
+    """Redact a password stated in prose.
+
+    ``password: X`` / ``password = X`` and ``new password is X`` (a qualifier and ``is``): the value
+    unless it is a status word. ``password is X`` (no qualifier) and ``new password X`` (no
+    separator): only a value that looks like a credential, so "the password is known" and "new
+    password manager" stay readable.
+    """
+    value = match.group("value")
+    if value.startswith("[REDACTED") or value.lower().rstrip(".,;:!?") in _PASSWORD_STATUS_WORDS:
+        return match.group(0)
+    sep = match.group("sep")
+    word = sep.strip().lower()
+    qualified = bool(match.group("qual"))
+    if word == "is" and not qualified and not _looks_like_credential(value):
+        return match.group(0)
+    if not word and not (qualified and _looks_like_credential(value)):
+        return match.group(0)
+    q = match.group("q")
+    return f"{match.group('label')}{sep}{q}{REDACTED}{q}"
 
 
 def normalize_key(key: str) -> str:
@@ -178,6 +314,8 @@ class Redactor:
             for k, v in value.items():
                 if isinstance(k, str) and self.is_sensitive_key(k) and v is not None:
                     out[k] = REDACTED
+                elif isinstance(k, str) and isinstance(v, str) and _is_command_line_key(k):
+                    out[k] = self.redact_command_line(v)
                 else:
                     out[k] = self._redact(v, depth + 1)
             return out
@@ -204,8 +342,51 @@ class Redactor:
         text = _KV_ESCAPED.sub(self._escaped_pair, text)
         text = _XML_ELEMENT.sub(self._xml_element, text)
         text = self._redact_pairs(text)
+        text = _FLAG_ARG.sub(self._flag_arg, text)
         text = _CODE_PROSE.sub(_code_prose, text)
-        return _CODE_PROSE_LOOSE.sub(_code_prose, text)
+        text = _CODE_PROSE_LOOSE.sub(_code_prose, text)
+        text = _CODE_FIRST.sub(_code_first, text)
+        text = _PASSWORD_PROSE.sub(_password_prose, text)
+        return self._redact_embedded_command_forms(text)
+
+    def _redact_embedded_command_forms(self, text: str) -> str:
+        """Credential forms of administrative commands that are unambiguous in any text (14.11.7):
+        URL userinfo passwords, Windows ``/pass:X`` style switches, ``/rp X`` and ``/u USER /p X``,
+        PowerShell ``ConvertTo-SecureString`` literals and the positional passwords of ``net use``
+        and ``net user``. A service ImagePath, a scheduled task action, a detection title, a script
+        block or an untyped vendor attribute quotes a command with its arguments just as a
+        ``command_line`` field does, so these rules are part of :meth:`redact_text`."""
+        text = _URL_USERINFO.sub(_replace_value, text)
+        text = _CMD_SLASH_SWITCH.sub(self._slash_switch, text)
+        has_slash_user = bool(_CMD_SLASH_USER.search(text))
+        text = _CMD_SLASH_ARG.sub(
+            lambda m: _replace_value(m) if m.group("name").lower() == "rp" or has_slash_user else m.group(0), text)
+        text = _SECURESTRING.sub(_replace_value, text)
+        return _NET_COMMAND.sub(_net_command, text)
+
+    def redact_command_line(self, text: str) -> str:
+        """:meth:`redact_text` (which already covers URL userinfo passwords, Windows ``/pass:X``
+        style switches, ``/rp X`` and ``/u USER /p X``, PowerShell ``ConvertTo-SecureString``
+        literals and the positional passwords of ``net use`` and ``net user``) plus the forms that
+        are credentials only by command-line convention: ``-p VALUE`` and ``-u user:password``."""
+        text = self.redact_text(text)
+        if not text:
+            return text
+        text = _CMD_P_FLAG.sub(_replace_value, text)
+        return _CMD_USER_PAIR.sub(
+            lambda m: m.group(0) if m.group("value").startswith("[REDACTED")
+            else f"{m.group('flag')}{m.group('q')}{m.group('user')}:{REDACTED}{m.group('q')}", text)
+
+    def _slash_switch(self, match: re.Match[str]) -> str:
+        key = match.group("key")
+        if key.lower() not in _CMD_SLASH_PASSWORD_NAMES and not self.is_sensitive_key(key):
+            return match.group(0)
+        return _replace_value(match)
+
+    def _flag_arg(self, match: re.Match[str]) -> str:
+        if not self.is_sensitive_key(match.group("key")):
+            return match.group(0)
+        return _replace_value(match)
 
     def _escaped_pair(self, match: re.Match[str]) -> str:
         if not self.is_sensitive_key(match.group("key")) or match.group("value").startswith("[REDACTED"):
@@ -311,12 +492,82 @@ class Redactor:
         }
 
 
+def _replace_value(match: re.Match[str]) -> str:
+    """``match`` with its ``value`` group replaced by :data:`REDACTED` (quotes kept)."""
+    value = match.group("value")
+    if value.strip("\"'").startswith("[REDACTED"):
+        return match.group(0)
+    replacement = f"{value[0]}{REDACTED}{value[0]}" if value[:1] in ("\"", "'") else REDACTED
+    start, end = match.span("value")
+    whole_start = match.start()
+    return match.group(0)[: start - whole_start] + replacement + match.group(0)[end - whole_start:]
+
+
+def _net_command(match: re.Match[str]) -> str:
+    """Redact the positional password of ``net use`` (after the share) and ``net user`` (after the
+    account name). Switches (``/user:...``), the device name and the ``*`` prompt are kept."""
+    rest = match.group("rest")
+    verb = match.group("verb").lower()
+    positional = 0
+    seen_share = False
+    spans: list[tuple[int, int]] = []
+    for token in _NET_TOKEN.finditer(rest):
+        value = token.group(0)
+        if value.startswith("/") or value.startswith("[REDACTED"):
+            continue
+        if verb == "use":
+            if not seen_share:
+                if value.lstrip("\"'").startswith("\\\\"):
+                    seen_share = True
+                elif not _NET_DEVICE.match(value):
+                    break  # not the documented form: leave the rest alone
+                continue
+            if value != "*":
+                spans.append(_token_span(token))
+            break  # only the first argument after the share is the password
+        else:
+            positional += 1
+            if positional == 2:
+                if value != "*":
+                    spans.append(_token_span(token))
+                break
+    if not spans:
+        return match.group(0)
+    out, cursor = [], 0
+    for start, end in spans:
+        out.append(rest[cursor:start])
+        out.append(REDACTED)
+        cursor = end
+    out.append(rest[cursor:])
+    head = match.group(0)[: match.start("rest") - match.start()]
+    return head + "".join(out)
+
+
+def _is_command_line_key(key: str) -> bool:
+    return bool(COMMAND_LINE_KEY_PATTERN.fullmatch(normalize_key(key)))
+
+
+def _token_span(token: re.Match[str]) -> tuple[int, int]:
+    """The span of a command-line token without a closing quote that belongs to an outer string."""
+    start, end = token.span()
+    value = token.group(0)
+    if value[-1:] in ("\"", "'") and value.count(value[-1]) % 2 == 1:
+        end -= 1
+    return start, end
+
+
 def _code_prose(match: re.Match[str]) -> str:
     value = match.group("value")
     if not (any(ch.isdigit() for ch in value) or (value.isupper() and value.isalpha())):
         return match.group(0)
     q = match.group("q")
     return f"{match.group('label')}{match.group('sep')}{q}{REDACTED}{q}"
+
+
+def _code_first(match: re.Match[str]) -> str:
+    if not any(ch.isdigit() for ch in match.group("value")):
+        return match.group(0)
+    return f"{REDACTED}{match.group('rest')}"
 
 
 def _decode_nested_json(value: Any, depth: int) -> Any:

@@ -57,6 +57,8 @@ KIND_TARGETS = {
 }
 CONTAINMENT_TYPES = [t for t, s in ACTION_CATALOG.items() if s.purpose is ApprovalPurpose.CONTAINMENT]
 KW = {"evidence": evidence(1), "risk_score": 90, "confidence_score": 80, "rationale": "rule matched"}
+#: Caller params a route needs: Defender for Office 365 takes one recipient per message (14.10.3).
+PARAMS = {"delete_malicious_email": {"recipient": "jsmith@example.com"}}
 
 
 def _build_everything(ctx) -> list[BuiltRecommendation]:
@@ -157,7 +159,7 @@ def test_simulated_lab_builders_never_reach_a_vendor(lab):
 
 def test_simulated_lab_routes(lab):
     ctx, _, _ = lab
-    routes = {name: builder(ctx, TARGETS[name], **KW).route.integration
+    routes = {name: builder(ctx, TARGETS[name], params=PARAMS.get(name), **KW).route.integration
               for name, builder in CONTAINMENT_BUILDERS.items()}
     assert routes == {
         "isolate_secure_endpoint": "secure_endpoint", "isolate_defender_endpoint": "defender_endpoint",
@@ -183,7 +185,8 @@ def test_real_adapters_route_without_any_http_request():
     registry = AdapterRegistry(settings, make_test_secrets(**FAKE_SECRETS), clock=FixedClock(FIXED_NOW),
                                transport_factory=lambda _name: httpx.MockTransport(refuse), sleep=lambda _s: None)
     ctx = make_context(ReadOnlyAdapters(registry), make_settings())
-    routes = {name: builder(ctx, TARGETS[name], **KW).route for name, builder in CONTAINMENT_BUILDERS.items()}
+    routes = {name: builder(ctx, TARGETS[name], params=PARAMS.get(name), **KW).route
+              for name, builder in CONTAINMENT_BUILDERS.items()}
     assert sent == []
     assert {name: route.integration for name, route in routes.items()} == {
         "isolate_secure_endpoint": "secure_endpoint", "isolate_defender_endpoint": "defender_endpoint",

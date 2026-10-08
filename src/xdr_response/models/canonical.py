@@ -28,6 +28,9 @@ __all__ = [
     "sha256_hex",
     "params_hash",
     "normalize_target",
+    "endpoint_names",
+    "same_endpoint",
+    "canonical_url",
     "make_idempotency_key",
     "format_datetime",
 ]
@@ -137,12 +140,90 @@ def normalize_target(kind: TargetKind | str, value: str) -> str:
         v = v.lower()
     elif kind is TargetKind.IP:
         try:
-            v = ipaddress.ip_address(v).compressed
+            ip = ipaddress.ip_address(v)
         except ValueError as exc:
             raise ValueError(f"invalid IP address target: {v!r}") from exc
+        # An IPv4-mapped IPv6 address (``::ffff:192.0.2.5``) is the IPv4 host itself: one canonical
+        # spelling, so allow-lists, critical-asset CIDRs and dedup see the same address.
+        mapped = ip.ipv4_mapped if isinstance(ip, ipaddress.IPv6Address) else None
+        v = (mapped or ip).compressed
     elif kind is TargetKind.ENDPOINT:
-        v = v.upper()
+        # One trailing dot is the DNS root ("TH-LT-1047.corp.example.com."): the same host.
+        v = v.upper().rstrip(".")
+        if not v:
+            raise ValueError("target must not be empty")
     return v
+
+
+def _is_ip_literal(value: str) -> bool:
+    text = value.strip()
+    if text.startswith("[") and text.endswith("]"):
+        text = text[1:-1]
+    try:
+        ipaddress.ip_address(text)
+    except ValueError:
+        return False
+    return True
+
+
+def endpoint_names(value: str) -> tuple[str, str | None]:
+    """``(full, short)`` upper-case identities of an endpoint name (trailing dot removed).
+
+    ``short`` is the first DNS label of a fully qualified host name (``TH-LT-1047`` for
+    ``TH-LT-1047.corp.example.com``) and ``None`` when ``value`` is a single-label name or an IP
+    address (an IP is never split at its dots). Endpoint agents report a host by its short name or
+    its FQDN; allow-lists and critical-asset classes treat a listed short name and the FQDN with
+    that first label as the same machine.
+    """
+    full = value.strip().upper().rstrip(".")
+    if not full or _is_ip_literal(full) or "." not in full:
+        return full, None
+    short = full.split(".", 1)[0]
+    return full, short or None
+
+
+def same_endpoint(first: str, second: str) -> bool:
+    """Two endpoint names denote one machine: equal (case and a trailing dot ignored), or one is a
+    single-label name equal to the other's FQDN first label."""
+    full_a, short_a = endpoint_names(first)
+    full_b, short_b = endpoint_names(second)
+    if not full_a or not full_b:
+        return False
+    return full_a == full_b or (short_a is None and full_a == short_b) or (short_b is None and full_b == short_a)
+
+
+_DEFAULT_PORTS = {"http": "80", "https": "443", "ftp": "21", "ws": "80", "wss": "443"}
+
+
+def canonical_url(value: str) -> str:
+    """One spelling of a URL for comparison (allow-list matching), never sent to a vendor.
+
+    The scheme and the host are lower-cased, a trailing dot on the host and the scheme's default port
+    are removed and an empty path becomes ``/``. Userinfo, the path, the query and the fragment are
+    kept as written (paths are case-sensitive). A value that does not parse is returned stripped.
+    """
+    text = value.strip()
+    scheme, sep, rest = text.partition("://")
+    if not sep or not scheme:
+        scheme, rest = "", text
+    scheme = scheme.lower()
+    cut = min((i for i in (rest.find("/"), rest.find("?"), rest.find("#")) if i >= 0), default=len(rest))
+    netloc, tail = rest[:cut], rest[cut:]
+    userinfo, at, hostport = netloc.rpartition("@")
+    host, port = hostport, ""
+    if hostport.startswith("["):
+        end = hostport.find("]")
+        if end >= 0:
+            host, port = hostport[:end + 1], hostport[end + 1:].lstrip(":")
+    elif hostport.count(":") == 1:
+        host, _, port = hostport.partition(":")
+    host = host.lower().rstrip(".")
+    if port and port == _DEFAULT_PORTS.get(scheme):
+        port = ""
+    if not tail or tail[0] in "?#":
+        tail = "/" + tail
+    rebuilt = f"{userinfo}{at}{host}{':' + port if port else ''}{tail}"
+    return f"{scheme}://{rebuilt}" if scheme else rebuilt
 
 
 def make_idempotency_key(incident_id: str, action_type: "ActionType | str", target: str) -> str:

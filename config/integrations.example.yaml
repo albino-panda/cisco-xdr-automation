@@ -57,6 +57,11 @@ integrations:
       client_id: ETD_CLIENT_ID
       client_secret: ETD_CLIENT_SECRET
       api_key: ETD_API_KEY
+    # The verdict sent with every message move (POST /v1/messages/move needs one). docs/integrations.md
+    # does not list the accepted values: use the one your tenant documents. Without it, quarantine and
+    # delete recommendations routed to Secure Email are reported unrouted (manual handling).
+    # options:
+    #   quarantine_verdict: <verdict value from your ETD tenant>
 
   secure_malware_analytics:
     enabled: true

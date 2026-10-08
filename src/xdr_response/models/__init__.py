@@ -29,10 +29,13 @@ from xdr_response.models.approval import (
 from xdr_response.models.audit import GENESIS_HASH, AuditRecord, ChainVerification
 from xdr_response.models.canonical import (
     canonical_json,
+    canonical_url,
+    endpoint_names,
     format_datetime,
     make_idempotency_key,
     normalize_target,
     params_hash,
+    same_endpoint,
     sha256_hex,
 )
 from xdr_response.models.catalog import (
@@ -80,7 +83,7 @@ from xdr_response.models.evidence import (
     number_evidence,
 )
 from xdr_response.models.health import IntegrationHealth
-from xdr_response.models.incident import Asset, Incident, StateTransition
+from xdr_response.models.incident import Asset, Incident, StateTransition, asset_addresses, merge_asset_context
 from xdr_response.models.investigation import InvestigationQuery, InvestigationResult
 from xdr_response.models.observable import EnrichmentResult, Observable
 from xdr_response.models.recommendation import (
@@ -116,7 +119,7 @@ __all__ = [
     "ControlStatus", "TargetState", "ErrorCode", "AuditEventType",
     # canonical
     "canonical_json", "sha256_hex", "params_hash", "normalize_target", "make_idempotency_key",
-    "format_datetime",
+    "format_datetime", "endpoint_names", "same_endpoint", "canonical_url",
     # catalog
     "ActionType", "ActionSpec", "ACTION_CATALOG", "BOOKKEEPING_OPERATIONS", "INTEGRATION_NAMES",
     "get_action_spec", "is_state_changing", "purpose_for", "rollback_for",
@@ -124,7 +127,7 @@ __all__ = [
     "Observable", "EnrichmentResult", "ALLOWED_NON_INTEGRATION_SOURCES", "EvidenceDraft", "Evidence",
     "number_evidence", "evidence_snapshot_hash",
     # incident
-    "Asset", "StateTransition", "Incident",
+    "Asset", "StateTransition", "Incident", "asset_addresses", "merge_asset_context",
     # recommendation
     "risk_band", "CriticalAssetWarning", "ExcludedTarget", "BlastRadius", "ProposedAction",
     "RecommendedAction", "ActionPackage", "ContainmentPackage", "ReleasePackage",

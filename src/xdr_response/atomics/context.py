@@ -166,7 +166,7 @@ def build_context(incident: Incident, registry: AdapterRegistry, settings: Setti
     """Build an :class:`AtomicContext` with the policies derived from ``settings``.
 
     ``DisclosurePolicy(settings.exclusions)``, ``CriticalAssetPolicy(settings.critical_assets)``,
-    ``AllowlistPolicy(settings.allowlists)`` and ``ReadOnlyAdapters(registry)``.
+    ``AllowlistPolicy(settings.allowlists, exclusions=settings.exclusions)`` and ``ReadOnlyAdapters(registry)``.
     """
     return _context(incident, ReadOnlyAdapters(registry), settings, clock=clock, dry_run=dry_run,
                     lookback=lookback)
@@ -184,6 +184,6 @@ def _context(incident: Incident, adapters: ReadOnlyAdapters, settings: Settings,
         incident=incident, adapters=adapters, settings=settings, clock=clock,
         disclosure=DisclosurePolicy(settings.exclusions),
         critical_assets=CriticalAssetPolicy(settings.critical_assets),
-        allowlists=AllowlistPolicy(settings.allowlists),
+        allowlists=AllowlistPolicy(settings.allowlists, exclusions=settings.exclusions),
         lookback=window, dry_run=bool(dry_run),
     )

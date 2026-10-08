@@ -239,7 +239,11 @@ def _lower(value: str) -> str:
 
 
 _Text = Annotated[str, _redact_cap(500)]
-_CommandLine = Annotated[str, _redact_cap(1024)]
+def _redact_command_line(value: str) -> str:
+    return get_redactor().redact_command_line(value)[:1024]
+
+
+_CommandLine = Annotated[str, AfterValidator(_redact_command_line)]
 _SubjectLine = Annotated[str, _redact_cap(200)]
 _Host = Annotated[str, _entity(TargetKind.ENDPOINT)]
 _User = Annotated[str, _entity(TargetKind.USER)]
@@ -478,6 +482,7 @@ class NetworkConnectionRecord(RecordBase):
     domain: _Domain | None = None
     url: str | None = None
     process_name: str | None = None
+    pid: _NonNegative | None = None  # process that owns the connection, when the source reports it (14.11.3)
     sha256: _Hash | None = None
     bytes_out: _NonNegative | None = None
     bytes_in: _NonNegative | None = None
@@ -536,7 +541,7 @@ class PersistenceItemRecord(RecordBase):
     endpoint: _Host
     item_id: str = Field(min_length=1)
     mechanism: Literal["run_key", "scheduled_task", "service", "wmi_subscription", "startup_folder",
-                       "launch_agent", "cron", "other"]
+                       "launch_agent", "cron", "browser_extension", "other"]
     name: str
     path: str | None = None
     sha256: _Hash | None = None

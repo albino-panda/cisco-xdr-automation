@@ -20,7 +20,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal
 
 from xdr_response.approval.critical_assets import find_incident_asset
-from xdr_response.atomics.containment.models import BuiltRecommendation
+from xdr_response.atomics.containment.models import BuiltRecommendation, RouteDecision
 from xdr_response.atomics.containment.routing import (
     _containment_spec,
     _normalize_containment_target,
@@ -32,7 +32,7 @@ from xdr_response.logs import get_redactor
 from xdr_response.models.catalog import ActionType
 from xdr_response.models.enums import TargetKind
 from xdr_response.models.evidence import EvidenceDraft
-from xdr_response.models.incident import Asset
+from xdr_response.models.incident import Asset, merge_asset_context
 from xdr_response.models.recommendation import ProposedAction
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -153,6 +153,50 @@ def _check_action_params(action_type: ActionType, params: Mapping[str, Any]) -> 
                              "a hard delete is never recommended")
 
 
+#: Email moves whose direct Secure Email route needs a ``verdict`` (POST /v1/messages/move, VERIFIED:
+#: ``folder`` and ``verdict`` are both mandatory; docs/integrations.md 2.3 does not list the values).
+_VERDICT_MOVES = frozenset({ActionType.QUARANTINE_EMAIL, ActionType.DELETE_EMAIL})
+#: Email actions whose direct Defender for Office 365 route needs ``params.recipient`` (one per message).
+_RECIPIENT_ACTIONS = frozenset({ActionType.QUARANTINE_EMAIL, ActionType.DELETE_EMAIL})
+#: ``integrations.secure_email.options`` key holding the tenant's verdict for message moves.
+SECURE_EMAIL_VERDICT_OPTION = "quarantine_verdict"
+
+
+def _route_params(ctx: "AtomicContext", route: RouteDecision, caller: Mapping[str, Any]) -> RouteDecision:
+    """Route-specific mandatory params (14.10.3): added from config, or the action is unrouted.
+
+    A direct Secure Email move carries ``verdict`` from ``integrations.secure_email.options
+    .quarantine_verdict`` (else the caller's ``verdict``); a direct Defender for Office 365 action
+    needs the caller's ``recipient``. Without them the write would fail after approval, so the
+    action is reported unrouted for manual handling now instead. Native routes are unchanged.
+    """
+    if route.integration is None or route.native:
+        return route
+    problem = ""
+    params = dict(route.params)
+    if route.integration == "secure_email" and route.action_type in _VERDICT_MOVES:
+        options = ctx.settings.integration("secure_email").options
+        configured = options.get(SECURE_EMAIL_VERDICT_OPTION) if isinstance(options, Mapping) else None
+        verdict = configured if isinstance(configured, str) and configured.strip() else caller.get("verdict")
+        if isinstance(verdict, str) and verdict.strip():
+            params["verdict"] = verdict.strip()
+        else:
+            problem = (f"secure_email needs a verdict for {route.action_type.value}: set integrations.secure_email."
+                       f"options.{SECURE_EMAIL_VERDICT_OPTION} to the value your tenant uses (docs/integrations.md "
+                       "does not list the accepted values), or handle it in the Secure Email console")
+    elif route.integration == "defender_o365" and route.action_type in _RECIPIENT_ACTIONS:
+        recipient = caller.get("recipient")
+        if not (isinstance(recipient, str) and recipient.strip()):
+            problem = (f"defender_o365 needs params.recipient (exactly one recipient per message) for "
+                       f"{route.action_type.value}; handle a message with several recipients in the console")
+    if problem:
+        return RouteDecision(action_type=route.action_type, integration=None, reason=problem,
+                             considered=(*route.considered, f"{route.integration}: {problem}"))
+    if params == route.params:
+        return route
+    return route.model_copy(update={"params": params})
+
+
 def _check_rationale(rationale: object) -> str:
     """A non-empty, redacted rationale (derived statements belong here, never in evidence)."""
     if not isinstance(rationale, str) or not rationale.strip():
@@ -162,15 +206,11 @@ def _check_rationale(rationale: object) -> str:
 
 # ---------------------------------------------------------------- preview --
 def _merge_assets(primary: Asset | None, extra: Asset | None) -> Asset | None:
-    """Union of two asset contexts (groups, tags, roles); ``primary`` wins for the IP."""
+    """Union of two asset contexts (groups, tags, roles, users, addresses, ``privileged``); ``primary``
+    wins for the first IP (:func:`~xdr_response.models.merge_asset_context`)."""
     if primary is None or extra is None:
         return primary or extra
-    return primary.model_copy(update={
-        "groups": tuple(dict.fromkeys((*primary.groups, *extra.groups))),
-        "tags": tuple(dict.fromkeys((*primary.tags, *extra.tags))),
-        "roles": tuple(dict.fromkeys((*primary.roles, *extra.roles))),
-        "ip": primary.ip or extra.ip,
-    })
+    return merge_asset_context(primary, extra)
 
 
 def _preview_asset(ctx: "AtomicContext", target: str, kind: TargetKind, asset: Asset | None) -> Asset | None:
@@ -208,7 +248,7 @@ def build_containment(ctx: "AtomicContext", action_type: ActionType, target: str
     if asset is not None and not isinstance(asset, Asset):
         raise ValueError("asset must be an Asset or None")
     normalized = _normalize_containment_target(spec.target_kind, target)
-    route = choose_route(ctx, spec.action_type, normalized, product=product)
+    route = _route_params(ctx, choose_route(ctx, spec.action_type, normalized, product=product), caller_params)
     preview = _preview_asset(ctx, normalized, spec.target_kind, asset)
     warnings = tuple(ctx.critical_assets.evaluate(spec.action_type, normalized, spec.target_kind, preview))
     excluded = ctx.allowlists.excluded_reason(spec.action_type, normalized, spec.target_kind)

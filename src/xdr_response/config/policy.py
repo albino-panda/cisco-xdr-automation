@@ -9,10 +9,12 @@ from xdr_response.config.schema import AllowlistsConfig, ExclusionsConfig
 from xdr_response.logs.redaction import get_redactor
 from xdr_response.models.catalog import ActionType, get_action_spec
 from xdr_response.models.enums import ApprovalPurpose, ObservableType, TargetKind
+from xdr_response.models.canonical import canonical_url, endpoint_names
 from xdr_response.models.observable import Observable
 
 __all__ = ["AllowlistPolicy", "DisclosurePolicy", "THIRD_PARTY_INTEGRATIONS", "DOCUMENTATION_NETWORKS",
-           "embedded_ipv4", "ends_in_number", "host_ip", "parse_ipv4_literal"]
+           "NON_PUBLIC_NETWORKS", "embedded_ipv4", "ends_in_number", "host_ip", "non_public_network",
+           "parse_ipv4_literal"]
 
 #: Integrations that send observables outside the organization.
 THIRD_PARTY_INTEGRATIONS = frozenset({"virustotal", "alienvault_otx", "hibp"})
@@ -23,6 +25,17 @@ DOCUMENTATION_NETWORKS = tuple(
 )
 
 _BUILTIN_INTERNAL_SUFFIXES = ("local", "localhost", "internal", "lan", "home.arpa", "intranet", "corp")
+
+#: Address ranges that are always the organisation's own (or nobody's) network, never edge-blockable
+#: attacker infrastructure: RFC 1918 private, carrier-grade NAT (RFC 6598, VPN pools), loopback,
+#: link-local, "this network", multicast and reserved, IPv6 unspecified, loopback, unique local,
+#: link-local, site-local and multicast. The RFC 5737 / 3849 documentation ranges are deliberately
+#: absent (lab and test data use them as public addresses).
+NON_PUBLIC_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = tuple(
+    ipaddress.ip_network(n) for n in (
+        "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
+        "0.0.0.0/8", "224.0.0.0/4", "240.0.0.0/4", "::/128", "::1/128", "fc00::/7", "fe80::/10", "fec0::/10",
+        "ff00::/8"))
 
 #: RFC 6052 NAT64 well-known prefix and RFC 8215 local-use prefix (the stdlib registry counts the
 #: first as global).
@@ -123,6 +136,24 @@ def host_ip(host: str) -> IPAddress | None:
     return parse_ipv4_literal(h) if ends_in_number(h) else None
 
 
+def non_public_network(value: str | IPAddress,
+                       extra: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = ()
+                       ) -> ipaddress.IPv4Network | ipaddress.IPv6Network | None:
+    """The non-public network (:data:`NON_PUBLIC_NETWORKS`, then ``extra``) containing ``value`` or an
+    IPv4 address it carries (IPv4-mapped, NAT64, 6to4, Teredo ...), else None (also for a non-IP)."""
+    if isinstance(value, str):
+        ip = host_ip(value)
+        if ip is None:
+            return None
+    else:
+        ip = value
+    for candidate in (ip, *embedded_ipv4(ip)):
+        for net in (*NON_PUBLIC_NETWORKS, *extra):
+            if candidate.version == net.version and candidate in net:
+                return net
+    return None
+
+
 def _domain_matches(domain: str, candidates: list[str] | tuple[str, ...]) -> str | None:
     d = domain.lower().rstrip(".")
     for c in candidates:
@@ -132,32 +163,150 @@ def _domain_matches(domain: str, candidates: list[str] | tuple[str, ...]) -> str
     return None
 
 
+def _signer_key(signer: object) -> str:
+    return " ".join(str(signer).split()).casefold() if isinstance(signer, str) else ""
+
+
 def _split_composite(target: str) -> tuple[str, str]:
     endpoint, _, rest = target.partition("/")
     return endpoint, rest
 
 
 class AllowlistPolicy:
-    """Decides whether a containment target is allow-listed (never blocked, shown as excluded)."""
+    """Decides whether a containment target is allow-listed (never blocked, shown as excluded).
 
-    def __init__(self, config: AllowlistsConfig) -> None:
+    Besides ``never_block`` and the approved tools, the organisation's own network is never blocked:
+    an IP target (or a URL whose host is an IP) in a non-public range (:data:`NON_PUBLIC_NETWORKS`,
+    plus ``exclusions.third_party_lookup.cidrs`` such as the VPN pool) and a domain target (or URL
+    host) under the configured ``exclusions.internal_domains`` / ``internal_domain_suffixes`` /
+    ``hostnames``, a built-in internal suffix (``local``, ``internal``, ...) or a single-label name
+    are excluded with the reason. Endpoint names match by host identity (a listed short name also
+    covers the FQDN with that first label, a listed FQDN its short name, a trailing dot is
+    ignored); URLs match in their canonical spelling
+    (:func:`~xdr_response.models.canonical.canonical_url`: case of scheme and host, default port,
+    trailing dot on the host).
+    """
+
+    def __init__(self, config: AllowlistsConfig, *, exclusions: ExclusionsConfig | None = None) -> None:
         nb = config.never_block
         self._domains = tuple(nb.get("domains", []))
-        self._urls = frozenset(u.strip() for u in nb.get("urls", []))
-        self._ips = frozenset(ipaddress.ip_address(i) for i in nb.get("ips", []))
+        self._urls = frozenset(canonical_url(u) for u in nb.get("urls", []) if u.strip())
+        tpl = exclusions.third_party_lookup if exclusions is not None else {}
+        self._internal_domains = tuple(exclusions.internal_domains) if exclusions is not None else ()
+        self._internal_suffixes = tuple(tpl.get("internal_domain_suffixes", [])) + _BUILTIN_INTERNAL_SUFFIXES
+        self._internal_hosts = frozenset(h.strip().lower().rstrip(".") for h in tpl.get("hostnames", []))
+        self._own_cidrs = tuple(ipaddress.ip_network(c, strict=False) for c in tpl.get("cidrs", []))
+        listed = [ipaddress.ip_address(i) for i in nb.get("ips", [])]
+        # An allow-listed IPv4-mapped spelling also lists the IPv4 address it denotes.
+        self._ips = frozenset([*listed, *(i.ipv4_mapped for i in listed
+                                          if isinstance(i, ipaddress.IPv6Address) and i.ipv4_mapped is not None)])
         self._cidrs = tuple(ipaddress.ip_network(c, strict=False) for c in nb.get("cidrs", []))
         self._hashes = frozenset(h.lower() for h in nb.get("hashes", []))
         self._users = frozenset(u.lower() for u in nb.get("users", []))
-        self._endpoints = frozenset(e.upper() for e in nb.get("endpoints", []))
+        self._endpoints = frozenset(endpoint_names(e)[0] for e in nb.get("endpoints", []) if e.strip())
         self._url_ok = tuple(config.url_block_allowed_domains)
         self._tools: list[tuple[str, str, dict]] = [
             ("approved_rmm", t["name"], t) for t in config.approved_rmm
         ] + [("approved_dns_tools", t["name"], t) for t in config.approved_dns_tools]
 
+    def _endpoint_reason(self, host: str) -> str | None:
+        """Reason when ``host`` is a listed endpoint: the same name, a listed short name of a reported
+        FQDN, or a reported short name of a listed FQDN (a trailing dot ignored)."""
+        full, short = endpoint_names(host)
+        if not full:
+            return None
+        if full in self._endpoints:
+            return f"allowlists.never_block.endpoints: {full}"
+        if short is not None and short in self._endpoints:
+            return f"allowlists.never_block.endpoints: {short} (reported as {full})"
+        if short is None:
+            for listed in sorted(self._endpoints):
+                if endpoint_names(listed)[1] == full:
+                    return f"allowlists.never_block.endpoints: {listed} (reported as {full})"
+        return None
+
+    def hash_reason(self, sha: str) -> str | None:
+        """Reason when a file hash is in ``never_block.hashes`` or belongs to an approved tool, else None."""
+        h = sha.strip().lower()
+        if not h:
+            return None
+        if h in self._hashes:
+            return f"allowlists.never_block.hashes: {h}"
+        return self._tool_hash(h)
+
+    def _ip_reason(self, ip: IPAddress) -> str | None:
+        # The address itself and every IPv4 address it carries (IPv4-mapped / translated /
+        # compatible, NAT64, 6to4, Teredo): ``::ffff:192.0.2.5`` is the allow-listed 192.0.2.5.
+        # The same expansion as DisclosurePolicy, so the two policies agree on what is internal.
+        listed = self._listed_ip_reason(ip)
+        if listed:
+            return listed
+        net = non_public_network(ip, self._own_cidrs)
+        if net is not None:
+            return (f"non-public address {ip.compressed} ({net}): the organisation's own network (private, "
+                    "loopback, link-local, carrier-grade NAT / VPN pool or exclusions cidrs), never blocked as "
+                    "attacker infrastructure")
+        return None
+
+    def address_reason(self, address: str) -> str | None:
+        """Reason when an address a host holds is allow-listed infrastructure, else None (14.11.7).
+
+        Only ``never_block.ips`` and ``never_block.cidrs`` count (the address itself and every IPv4
+        address it embeds), never the built-in non-public ranges: a workstation's private address is
+        not infrastructure. Used by the package builder for actions that take a host off the network
+        (isolation): the host carries the listed address, so the action is ELEVATED with a warning.
+        """
+        try:
+            ip = ipaddress.ip_address(str(address).strip())
+        except ValueError:
+            return None
+        return self._listed_ip_reason(ip)
+
+    def _listed_ip_reason(self, ip: IPAddress) -> str | None:
+        """``never_block.ips`` / ``never_block.cidrs`` match of the address or an IPv4 address it embeds."""
+        for candidate in (ip, *embedded_ipv4(ip)):
+            if candidate in self._ips:
+                return f"allowlists.never_block.ips: {candidate.compressed}"
+            for net in self._cidrs:
+                if candidate.version == net.version and candidate in net:
+                    return f"allowlists.never_block.cidrs: {net}"
+        return None
+
+    def _internal_domain_reason(self, domain: str) -> str | None:
+        d = domain.strip().lower().rstrip(".")
+        if not d:
+            return None
+        if d in self._internal_hosts:
+            return f"exclusions.third_party_lookup.hostnames: {d} (the organisation's own host)"
+        hit = _domain_matches(d, self._internal_domains)
+        if hit:
+            return f"exclusions.internal_domains: {hit} (the organisation's internal domain)"
+        hit = _domain_matches(d, self._internal_suffixes)
+        if hit:
+            return f"internal domain suffix {hit} (the organisation's internal names are never blocked)"
+        if "." not in d:
+            return f"single-label name {d} (an internal host name, never blocked)"
+        return None
+
     def _tool_hash(self, h: str) -> str | None:
         for section, name, tool in self._tools:
             if h.lower() in {x.lower() for x in tool.get("hashes", []) or []}:
                 return f"allowlists.{section}: {name}"
+        return None
+
+    def signer_reason(self, signer: str | None) -> str | None:
+        """Reason string when ``signer`` (a code-signing subject a vendor record reports for a file) is a
+        signer of an approved tool (``approved_rmm`` / ``approved_dns_tools`` ``signers``), else None.
+
+        Matching ignores case and runs of whitespace; it is exact otherwise (no substring match, so
+        "Example RMM Vendor Inc. Clone" is not the approved signer).
+        """
+        wanted = _signer_key(signer)
+        if not wanted:
+            return None
+        for section, name, tool in self._tools:
+            if wanted in {_signer_key(x) for x in tool.get("signers", []) or []}:
+                return f"allowlists.{section}: {name} (signer {' '.join(str(signer).split())})"
         return None
 
     def _tool_domain(self, domain: str) -> str | None:
@@ -170,7 +319,7 @@ class AllowlistPolicy:
         hit = _domain_matches(domain, self._domains)
         if hit:
             return f"allowlists.never_block.domains: {hit}"
-        return self._tool_domain(domain)
+        return self._tool_domain(domain) or self._internal_domain_reason(domain)
 
     def excluded_reason(self, action_type: ActionType, target: str, target_kind: TargetKind) -> str | None:
         """Reason string when the target is allow-listed for this containment action, else None.
@@ -185,11 +334,17 @@ class AllowlistPolicy:
         if kind is TargetKind.DOMAIN:
             return self._domain_reason(t)
         if kind is TargetKind.URL:
-            if t in self._urls:
+            if canonical_url(t) in self._urls:
                 return f"allowlists.never_block.urls: {t}"
-            host = (urlsplit(t if "://" in t else f"//{t}").hostname or "").lower()
+            try:
+                host = (urlsplit(t if "://" in t else f"//{t}").hostname or "").lower().rstrip(".")
+            except ValueError:
+                return None
             if not host:
                 return None
+            ip = host_ip(host)
+            if ip is not None:
+                return self._ip_reason(ip)
             reason = self._domain_reason(host)
             if reason and _domain_matches(host, self._url_ok):
                 return None  # URL-level blocks allowed on owned domains
@@ -199,31 +354,21 @@ class AllowlistPolicy:
                 ip = ipaddress.ip_address(t)
             except ValueError:
                 return None
-            if ip in self._ips:
-                return f"allowlists.never_block.ips: {t}"
-            for net in self._cidrs:
-                if ip.version == net.version and ip in net:
-                    return f"allowlists.never_block.cidrs: {net}"
-            return None
+            return self._ip_reason(ip)
         if kind is TargetKind.HASH:
-            if t.lower() in self._hashes:
-                return f"allowlists.never_block.hashes: {t.lower()}"
-            return self._tool_hash(t)
+            return self.hash_reason(t)
         if kind is TargetKind.USER:
             if t.lower() in self._users:
                 return f"allowlists.never_block.users: {t.lower()}"
             return None
         if kind is TargetKind.ENDPOINT:
-            if t.upper() in self._endpoints:
-                return f"allowlists.never_block.endpoints: {t.upper()}"
-            return None
-        if kind in (TargetKind.FILE, TargetKind.PROCESS):
+            return self._endpoint_reason(t)
+        if kind in (TargetKind.FILE, TargetKind.PROCESS, TargetKind.PERSISTENCE_ITEM):
             endpoint, rest = _split_composite(t)
-            if endpoint.upper() in self._endpoints:
-                return f"allowlists.never_block.endpoints: {endpoint.upper()}"
-            if rest and rest.lower() in self._hashes:
-                return f"allowlists.never_block.hashes: {rest.lower()}"
-            return self._tool_hash(rest) if rest else None
+            reason = self._endpoint_reason(endpoint)
+            if reason or kind is TargetKind.PERSISTENCE_ITEM:
+                return reason
+            return self.hash_reason(rest) if rest else None
         return None
 
 

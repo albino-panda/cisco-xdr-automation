@@ -6,6 +6,7 @@ import pytest
 from tests.fixtures.factories import make_incident
 from tests.unit.atomics.containment._support import (
     FAKE_SHA256,
+    TEST_VERDICT,
     FIXED_NOW,
     FakeAdapters,
     NativeAction,
@@ -74,6 +75,12 @@ ROLLBACK: dict[str, ActionType | None] = {
 }
 
 
+#: Caller params a route needs (Defender for Office 365: one recipient) and params the route adds from
+#: config (Secure Email: the tenant's move verdict), architecture 14.10.3.
+ROUTE_PARAMS: dict[str, dict[str, str]] = {"delete_malicious_email": {"recipient": "jsmith@example.com"}}
+ROUTE_ADDED: dict[str, dict[str, str]] = {"quarantine_email": {"verdict": TEST_VERDICT}}
+
+
 def _kwargs(**overrides):
     base = {"evidence": evidence(2), "risk_score": 85, "confidence_score": 70,
             "rationale": "rule matched: malicious verdict corroborated by two sources"}
@@ -94,7 +101,8 @@ def test_builder_table_has_the_fifteen_contract_names():
 @pytest.mark.parametrize("name", sorted(TABLE))
 def test_each_builder_fixes_action_type_product_and_normalizes(name):
     action, product, raw, normalized = TABLE[name]
-    built = CONTAINMENT_BUILDERS[name](_ctx(), raw, **_kwargs())
+    extra = ROUTE_PARAMS.get(name, {})
+    built = CONTAINMENT_BUILDERS[name](_ctx(), raw, **_kwargs(params=dict(extra) or None))
     assert isinstance(built, BuiltRecommendation)
     assert built.action_type is action and built.target == normalized
     spec = get_action_spec(action)
@@ -106,7 +114,7 @@ def test_each_builder_fixes_action_type_product_and_normalizes(name):
     proposal = built.proposal
     assert isinstance(proposal, ProposedAction)
     assert (proposal.action_type, proposal.target, proposal.target_kind) == (action, normalized, spec.target_kind)
-    assert proposal.params == {"integration": expected}
+    assert proposal.params == {"integration": expected, **extra, **ROUTE_ADDED.get(name, {})}
     assert (proposal.risk_score, proposal.confidence_score) == (85, 70)
     assert proposal.evidence == evidence(2) and built.unrouted_reason is None
 
@@ -231,7 +239,8 @@ def test_intune_only_lock_is_verified():
 def test_email_delete_is_never_hard():
     builder = CONTAINMENT_BUILDERS["delete_malicious_email"]
     for choice in ("softDelete", "moveToDeletedItems"):
-        assert builder(_ctx(), "msg-0001@example.test", params={"delete_action": choice}, **_kwargs()).proposal
+        params = {"delete_action": choice, "recipient": "jsmith@example.com"}
+        assert builder(_ctx(), "msg-0001@example.test", params=params, **_kwargs()).proposal
     for choice in ("hardDelete", "purge", 1):
         with pytest.raises(ValueError):
             builder(_ctx(), "msg-0001@example.test", params={"delete_action": choice}, **_kwargs())
@@ -317,3 +326,30 @@ def test_proposals_package_with_elevation_and_exclusion_decided_by_package_build
     assert [w.message for w in isolate.warnings] == [w.message for w in built[0].warnings]
     assert {e.data["record_id"] for e in package.evidence} == {record_id(1), record_id(2)}
     assert package.evidence[0].number == 1
+
+
+# ------------------------------------------------- route-specific params (14.10.3) --
+def test_email_routes_get_their_mandatory_params_or_are_reported_unrouted():
+    from tests.unit.atomics.containment._support import make_settings
+    from xdr_response.config import Settings
+
+    quarantine, delete = CONTAINMENT_BUILDERS["quarantine_email"], CONTAINMENT_BUILDERS["delete_malicious_email"]
+    built = quarantine(_ctx(), "msg-0001@example.test", **_kwargs(params={"verdict": "ignored"}))
+    assert built.proposal.params == {"integration": "secure_email", "verdict": TEST_VERDICT}  # config wins
+    data = make_settings().model_dump()
+    data["integrations"]["secure_email"]["options"] = {}
+    bare = Settings.model_validate(data)
+    built = quarantine(_ctx(settings=bare), "msg-0001@example.test", **_kwargs())
+    assert built.proposal is None and built.route.integration is None
+    assert "integrations.secure_email.options.quarantine_verdict" in built.unrouted_reason
+    assert any(c.startswith("secure_email: secure_email needs a verdict") for c in built.route.considered)
+    built = quarantine(_ctx(settings=bare), "msg-0001@example.test", **_kwargs(params={"verdict": "spam"}))
+    assert built.proposal.params["verdict"] == "spam"  # without config, the caller's value is used
+    built = delete(_ctx(), "msg-0001@example.test", **_kwargs(params={"recipient": ""}))
+    assert built.proposal is None and "defender_o365 needs params.recipient" in built.unrouted_reason
+    only_o365 = ("defender_o365",)
+    built = quarantine(_ctx(enabled=only_o365), "msg-0001@example.test", **_kwargs())
+    assert built.proposal is None and "defender_o365 needs params.recipient" in built.unrouted_reason
+    built = quarantine(_ctx(enabled=only_o365), "msg-0001@example.test",
+                       **_kwargs(params={"recipient": "jsmith@example.com"}))
+    assert built.proposal.params == {"integration": "defender_o365", "recipient": "jsmith@example.com"}

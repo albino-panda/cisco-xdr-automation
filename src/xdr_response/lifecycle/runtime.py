@@ -178,8 +178,8 @@ def build_runtime(settings: Settings, secrets: SecretProvider, *, authenticator:
     approval_settings = settings.thresholds.approval
     tokens = ApprovalTokenService(secrets, approval_settings, ledger=ledger, clock=clock, id_factory=id_factory)
     packages = PackageBuilder(settings, critical_assets=CriticalAssetPolicy(settings.critical_assets),
-                              allowlists=AllowlistPolicy(settings.allowlists), clock=clock,
-                              id_factory=id_factory)
+                              allowlists=AllowlistPolicy(settings.allowlists, exclusions=settings.exclusions),
+                              clock=clock, id_factory=id_factory)
 
     def level_policy(package: ActionPackage) -> list[str]:
         try:

@@ -88,12 +88,17 @@ def evidence(n: int = 1, source: str = "secure_endpoint") -> tuple[EvidenceDraft
                  for i in range(1, n + 1))
 
 
+TEST_VERDICT = "test-verdict"
+
+
 def make_settings(*, native_actions: Mapping[str, Any] | None = None, critical: Mapping[str, Any] | None = None,
                   allowlists: Mapping[str, Any] | None = None) -> Settings:
     """Settings with the test critical assets, allow-lists and an optional native action table."""
     options = {"native_actions": dict(native_actions)} if native_actions is not None else {}
     return Settings.model_validate({
-        "integrations": {"cisco_xdr": {"enabled": True, "options": options}},
+        "integrations": {"cisco_xdr": {"enabled": True, "options": options},
+                         # the tenant's Secure Email move verdict (14.10.3); a fake test value
+                         "secure_email": {"enabled": True, "options": {"quarantine_verdict": TEST_VERDICT}}},
         "critical_assets": dict(critical if critical is not None else CRITICAL_ASSETS),
         "allowlists": dict(allowlists if allowlists is not None else ALLOWLISTS),
     })

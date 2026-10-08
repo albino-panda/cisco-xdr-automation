@@ -82,6 +82,8 @@ def _reason(warning: CriticalAssetWarning) -> str | None:
         return None
     if warning.role.startswith(RELEASE_ROLE_PREFIX):  # restoration planner: elevated release
         return "the original control was approved at ELEVATED level, or the rollback is privileged"
+    if warning.role == "allow-listed infrastructure address":  # package builder (14.11.7)
+        return "the host holds an allow-listed infrastructure address (never_block ips / cidrs)"
     return "blast radius above the configured threshold"  # package builder (role "blast radius")
 
 

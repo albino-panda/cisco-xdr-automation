@@ -9,6 +9,15 @@ endpoint (or endpoint composite) named by an IP address is matched both as a hos
 IP, so an IP-named endpoint inside a critical CIDR is still ELEVATED. An IPv6 address that embeds
 an IPv4 address (IPv4-mapped, IPv4-translated, IPv4-compatible, NAT64, 6to4, Teredo) is matched
 by the embedded IPv4 address too.
+
+Endpoint names are compared as host identities: a trailing dot is ignored and a fully qualified
+name (``th-lt-1047.corp.example.com``) also matches an exact entry or pattern for its first label
+(``TH-LT-1047``), and a short reported name matches an exact FQDN entry with that first label.
+Endpoint agents report either spelling for the same machine. Users of an asset (``Asset.users``:
+an endpoint's users, a message's recipient mailboxes) are matched against the class ``users`` and
+``user_patterns`` of a class with ``match.used_by: true`` (``executive_endpoint``: "Endpoint,
+mailbox or account used by an executive"), so the endpoint or mailbox of an executive is ELEVATED
+too; a class about the account itself (``privileged_account``) matches the account only.
 """
 from __future__ import annotations
 
@@ -19,7 +28,17 @@ from fnmatch import fnmatchcase
 
 from xdr_response.config import AssetMatch, CriticalAssetClassConfig, CriticalAssetsConfig
 from xdr_response.config.policy import embedded_ipv4, host_ip
-from xdr_response.models import ActionType, Asset, CriticalAssetClass, CriticalAssetWarning, TargetKind
+from xdr_response.models import (
+    ActionType,
+    Asset,
+    CriticalAssetClass,
+    CriticalAssetWarning,
+    TargetKind,
+    asset_addresses,
+    endpoint_names,
+    merge_asset_context,
+    same_endpoint,
+)
 
 __all__ = ["CriticalAssetPolicy", "WARNING_PREFIX", "format_warning", "find_incident_asset"]
 
@@ -39,6 +58,8 @@ class _Subject:
     groups: set[str] = field(default_factory=set)
     tags: set[str] = field(default_factory=set)
     roles: set[str] = field(default_factory=set)
+    used_by: set[str] = field(default_factory=set)  # users of the asset (Asset.users), not its identity
+    privileged: bool = False  # the identity source marks the account privileged (Asset.privileged)
 
 
 def _add_ip(subject: _Subject, value: str | None) -> None:
@@ -62,7 +83,11 @@ def _add_name(subject: _Subject, value: str, kind: TargetKind) -> None:
         # Detections often name a host by its IP: an IP-shaped endpoint name is also matched
         # against the class CIDRs (it can only add a class, never remove one).
         host = v if kind is TargetKind.ENDPOINT else v.partition("/")[0].strip()
-        subject.hosts.add(host.lower())
+        full, short = endpoint_names(host)
+        if full:
+            subject.hosts.add(full.lower())
+        if short:
+            subject.hosts.add(short.lower())  # the FQDN's first label is the same machine
         _add_ip(subject, host)
     elif kind in _USER_KINDS:
         subject.users.add(v.lower())
@@ -77,10 +102,13 @@ def _subject(target: str, target_kind: TargetKind, asset: Asset | None) -> _Subj
     _add_name(subject, target, TargetKind(target_kind))
     if asset is not None:
         _add_name(subject, asset.name, asset.kind)
-        _add_ip(subject, asset.ip)
+        for address in asset_addresses(asset):  # every interface of the host, not only the first
+            _add_ip(subject, address)
+        subject.privileged = subject.privileged or asset.privileged
         subject.groups.update(g.lower() for g in asset.groups)
         subject.tags.update(t.lower() for t in asset.tags)
         subject.roles.update(" ".join(r.split()).lower() for r in asset.roles)
+        subject.used_by.update(u.strip().lower() for u in asset.users if u.strip())
     return subject
 
 
@@ -90,10 +118,21 @@ def _names_match(values: set[str], exact: list[str], patterns: list[str]) -> boo
     return any(v in exact_l or any(fnmatchcase(v, p) for p in pats) for v in values)
 
 
+def _hosts_match(hosts: set[str], exact: list[str], patterns: list[str]) -> bool:
+    """:func:`_names_match` for endpoint names, plus a short name against an exact FQDN entry."""
+    exact = [e.strip().rstrip(".") for e in exact]
+    if _names_match(hosts, exact, patterns):
+        return True
+    shorts = {short.lower() for short in (endpoint_names(e)[1] for e in exact) if short}
+    return any("." not in h and h in shorts for h in hosts)
+
+
 def _matches(match: AssetMatch, subject: _Subject) -> bool:
-    if _names_match(subject.hosts, match.hostnames, match.hostname_patterns):
+    if _hosts_match(subject.hosts, match.hostnames, match.hostname_patterns):
         return True
     if _names_match(subject.users, match.users, match.user_patterns):
+        return True
+    if match.used_by and _names_match(subject.used_by, match.users, match.user_patterns):
         return True
     if subject.groups & {g.lower() for g in match.groups} or subject.tags & {t.lower() for t in match.tags}:
         return True
@@ -106,23 +145,21 @@ def _matches(match: AssetMatch, subject: _Subject) -> bool:
 def find_incident_asset(assets: Iterable[Asset], name: str, kind: TargetKind) -> Asset | None:
     """The incident asset record(s) of kind ``kind`` for ``name``, merged (never shrinks).
 
-    An asset matches by name, or (for an ``ENDPOINT``) when ``name`` is an IP address equal to the
-    asset's ``ip``: detections often name a host by its IP, and the incident's own asset record
-    says what that host is. Several matches are unioned (groups, tags, roles; the first IP wins).
+    An asset matches by name, or (for an ``ENDPOINT``) by host identity (the short name and the FQDN
+    with that first label, :func:`~xdr_response.models.canonical.same_endpoint`) or when ``name`` is
+    an IP address equal to the asset's ``ip``: detections often name a host by its IP or FQDN, and
+    the incident's own asset record says what that host is. Several matches are unioned (groups,
+    tags, roles, users, addresses; the first IP stays ``ip``, the others go to ``ips``).
     """
     wanted_ip = host_ip(name) if kind is TargetKind.ENDPOINT else None
     found: Asset | None = None
     for asset in assets:
         if asset.kind is not kind:
             continue
-        same_ip = wanted_ip is not None and asset.ip is not None and host_ip(asset.ip) == wanted_ip
-        if asset.name == name or same_ip:
-            found = asset if found is None else found.model_copy(update={
-                "groups": tuple(dict.fromkeys((*found.groups, *asset.groups))),
-                "tags": tuple(dict.fromkeys((*found.tags, *asset.tags))),
-                "roles": tuple(dict.fromkeys((*found.roles, *asset.roles))),
-                "ip": found.ip or asset.ip,
-            })
+        same_ip = wanted_ip is not None and any(host_ip(a) == wanted_ip for a in asset_addresses(asset))
+        same_host = kind is TargetKind.ENDPOINT and same_endpoint(asset.name, name)
+        if asset.name == name or same_ip or same_host:
+            found = asset if found is None else merge_asset_context(found, asset)
     return found
 
 
@@ -144,9 +181,16 @@ class CriticalAssetPolicy:
 
     def classify(self, target: str, target_kind: TargetKind,
                  asset: Asset | None = None) -> list[CriticalAssetClass]:
-        """Every critical-asset class the target (and its optional asset context) belongs to."""
+        """Every critical-asset class the target (and its optional asset context) belongs to.
+
+        An account the identity source marks privileged (``Asset.privileged``) is in the
+        ``privileged_account`` class (when configured) whatever its role names are: the source's own
+        flag covers directory roles outside the static ``roles`` list.
+        """
         subject = _subject(target, target_kind, asset)
-        return [cls for cls, cfg in self._classes if _matches(cfg.match, subject)]
+        return [cls for cls, cfg in self._classes
+                if _matches(cfg.match, subject)
+                or (cls is CriticalAssetClass.PRIVILEGED_ACCOUNT and subject.privileged)]
 
     def evaluate(self, action_type: ActionType, target: str, target_kind: TargetKind,
                  asset: Asset | None = None) -> list[CriticalAssetWarning]:

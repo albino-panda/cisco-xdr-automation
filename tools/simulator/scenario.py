@@ -80,6 +80,12 @@ SIMULATION_SUITE: Mapping[str, tuple[str, ...]] = {
     "virustotal": ("intel",),
 }
 
+#: Lab-only integration options (fake values for simulated adapters). The Secure Email move verdict
+#: follows the vendor-test convention; a real tenant sets its own value (architecture 14.10.3).
+LAB_INTEGRATION_OPTIONS: Mapping[str, Mapping[str, Any]] = {
+    "secure_email": {"quarantine_verdict": "phishing"},
+}
+
 #: alias -> (principal id, kind, roles). Only HUMAN principals can ever approve.
 LAB_PRINCIPALS: Mapping[str, tuple[str, PrincipalKind, frozenset[str]]] = {
     "analyst": ("analyst.one@example.com", PrincipalKind.HUMAN, frozenset({"xdr-approver"})),
@@ -141,7 +147,8 @@ def simulation_settings(*, dry_run: bool, suite: Iterable[str], config_dir: Path
     data = base.model_dump()
     data["runtime"] = {**data["runtime"], "dry_run": dry_run, "environment": "lab"}
     enabled = set(suite)
-    data["integrations"] = {name: {"enabled": name in enabled} for name in data["integrations"]}
+    data["integrations"] = {name: {"enabled": name in enabled, "options": dict(LAB_INTEGRATION_OPTIONS.get(name, {}))}
+                            for name in data["integrations"]}
     data["thresholds"]["verification"] = {**data["thresholds"]["verification"],
                                           "poll_interval_seconds": 0.0}
     return Settings.model_validate(data)

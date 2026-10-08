@@ -860,7 +860,6 @@ def test_an_unverified_intune_device_action_is_refused():
 
 @pytest.mark.parametrize("target", [
     "::ffff:203.0.113.10",       # IPv4-mapped form of a production_server address (203.0.113.0/26)
-    "::ffff:192.0.2.5",          # IPv4-mapped form of a network_infrastructure address (192.0.2.0/28)
     "64:ff9b::cb00:710a",        # NAT64 (RFC 6052) form of 203.0.113.10
 ])
 def test_block_ip_on_an_ipv6_form_of_a_critical_ipv4_is_elevated(target):
@@ -875,6 +874,22 @@ def test_block_ip_on_an_ipv6_form_of_a_critical_ipv4_is_elevated(target):
     assert action.approval_level is ApprovalLevel.ELEVATED, (
         f"block_ip {target} embeds a critical IPv4 address but came out {action.approval_level.value}")
     assert action.warnings and all(w.message.startswith(WARNING_PREFIX) for w in action.warnings)
+
+
+def test_block_ip_on_an_ipv6_form_of_an_allowlisted_critical_ipv4_is_excluded_visibly():
+    """192.0.2.5 is both critical (network_infrastructure) and allow-listed in the repository config.
+
+    Since 14.10.7 the mapped spelling is the IPv4 host, and the allow-list wins over the critical-asset class
+    (as for 192.0.2.5 itself): the block is shown as excluded and never becomes an action."""
+    lab = _full_lab()
+    incident = _incident()
+    built = CONTAINMENT_BUILDERS["block_ip"](_ctx(lab, incident), "::ffff:192.0.2.5", **_builder_kwargs())
+    other = CONTAINMENT_BUILDERS["block_ip"](_ctx(lab, incident), "198.51.100.77", **_builder_kwargs())
+    assert built.proposal is not None and other.proposal is not None
+    package = _package(lab.settings, incident, [built.proposal, other.proposal])
+    excluded = {(e.action_type, e.target) for e in package.excluded_targets}
+    assert (ActionType.BLOCK_IP, "192.0.2.5") in excluded
+    assert all(a.target != "192.0.2.5" for a in package.actions)
 
 
 def test_an_endpoint_named_by_the_ip_of_a_critical_incident_asset_is_elevated():

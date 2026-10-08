@@ -252,6 +252,10 @@ class AssetMatch(_Model):
     tags: list[str] = []
     roles: list[str] = []  # directory roles (Asset.roles, e.g. "Global Administrator"), case-insensitive
     ip_cidrs: list[str] = []
+    #: True: ``users`` / ``user_patterns`` also match an asset *used by* such a user (``Asset.users``:
+    #: an endpoint's users, the recipient mailboxes of a message), for classes about what a person
+    #: uses (an executive's endpoint or mailbox). False: they match the account itself only.
+    used_by: bool = False
 
     @field_validator("ip_cidrs")
     @classmethod
