@@ -1,0 +1,78 @@
+# DNS tunneling scenario; fake lab data only.
+schema: 1
+name: partial-failure
+workflow: dns-tunneling
+description: >-
+  The same tunnel, everything approved, but Umbrella refuses the destination-list write: the domain
+  block FAILS while the termination and the isolation succeed. The overall result is PARTIALLY_CONTAINED
+  and the failed block is reported, never retried silently.
+tags: [partial_failure, true_positive, approve_all]
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-DNS-0006
+  title: DNS tunneling to cdn-update.test from TH-LT-1047
+  severity: HIGH
+  workflow_id: dns-tunneling
+  observables:
+    - {type: domain, value: cdn-update.test}
+    - {type: hostname, value: TH-LT-1047}
+  users: [jsmith@example.com]
+  trigger: {source: umbrella, mitre_techniques: [T1071.004]}
+environment:
+  reputations:
+    - {type: domain, value: cdn-update.test, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [virustotal, umbrella], summary: "DNS tunneling infrastructure"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, groups: [Workstations], tags: [], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: process_event, event_id: evt-dns-1047-1, endpoint: TH-LT-1047, timestamp: "2026-01-15T10:05:00Z",
+               event_type: process_start, process_name: updsvc.exe, pid: 4242, parent_process_name: explorer.exe,
+               parent_pid: 1180, sha256: "d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1", user: jsmith@example.com}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: process_event, event_id: evt-dns-1047-2, endpoint: TH-LT-1047, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: updsvc.exe, pid: 4242,
+               sha256: "d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1",
+               domain: 4f2a9c1e7b0d5e8a3c6f9b2d4e7a1c3f5b8d0e2a4c6f8b1d.a81c.cdn-update.test, count: 18432}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: process_event, event_id: evt-dns-1047-3, endpoint: TH-LT-1047, timestamp: "2026-01-15T10:07:00Z",
+               event_type: network, process_name: browser.exe, pid: 2210,
+               domain: intranet.example.com, count: 210}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: cdn-update.test
+      record: {kind: dns_query, endpoint: TH-LT-1047, domain: cdn-update.test, query_type: TXT, count: 18432,
+               unique_subdomains: 18432, max_label_length: 48,
+               categories: [DNS Tunneling VPN, Command and Control], action: allowed,
+               first_seen: "2026-01-15T10:06:00Z", last_seen: "2026-01-15T11:42:00Z"}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: "d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1"
+      record: {kind: hash_prevalence, sha256: "d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1",
+               file_name: updsvc.exe, prevalence: 1, endpoints: [TH-LT-1047]}
+  faults:
+    - {kind: FAIL, integration: umbrella, operation: block_domain, times: 10}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - block_domain:cdn-update.test
+    - terminate_process:TH-LT-1047/4242
+    - isolate_endpoint:TH-LT-1047
+  containment: PARTIALLY_CONTAINED
+  results:
+    block_domain:cdn-update.test: FAILED
+    terminate_process:TH-LT-1047/4242: SUCCESS
+    isolate_endpoint:TH-LT-1047: SUCCESS
+  controls: 1

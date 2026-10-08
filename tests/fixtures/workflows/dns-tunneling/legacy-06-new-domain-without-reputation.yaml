@@ -1,0 +1,71 @@
+# DNS tunneling scenario; fake lab data only.
+schema: 1
+name: legacy-06-new-domain-without-reputation
+workflow: dns-tunneling
+description: >-
+  Migrated legacy 06. Tunnel domains are often days old, so reputation is unknown. q7-sync.test has no
+  verdict but sits in the DNS Tunneling VPN category with high internal volume, so it is blocked and the
+  host whose unknown process queried it is isolated. remote-office-vpn.example is in the same category
+  and also unknown, but only 40 queries were seen, which fits a VPN client health check: it is not
+  blocked (listed as considered) and the host that only queried it is not isolated.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/dns-tunneling/scenarios/06-new-domain-without-reputation.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-DNS-0006
+  title: DNS tunneling category hits for two new domains
+  severity: HIGH
+  source: Cisco Umbrella
+  workflow_id: dns-tunneling
+  observables:
+    - {type: domain, value: q7-sync.test}
+    - {type: domain, value: remote-office-vpn.example}
+  trigger: {source: umbrella}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0388
+      record: {kind: endpoint, hostname: WS-0388, connector_guid: 3f6c1a2e-0000-4000-8000-000000000388,
+               os: Windows 11, groups: [Workstations], tags: [], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0388
+      record: {kind: process_event, event_id: evt-l06-1, endpoint: WS-0388, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: rundll32.exe,
+               domain: 3a7f.q7-sync.test, count: 9400}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0390
+      record: {kind: endpoint, hostname: WS-0390, connector_guid: 3f6c1a2e-0000-4000-8000-000000000390,
+               os: Windows 11, groups: [Workstations], tags: [], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0390
+      record: {kind: process_event, event_id: evt-l06-2, endpoint: WS-0390, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: officevpn.exe,
+               domain: hc.remote-office-vpn.example, count: 40}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: q7-sync.test
+      record: {kind: dns_query, endpoint: WS-0388, domain: q7-sync.test, count: 9400,
+               categories: [DNS Tunneling VPN, Newly Seen Domains], action: allowed,
+               first_seen: "2026-01-15T10:06:00Z", last_seen: "2026-01-15T11:42:00Z"}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: remote-office-vpn.example
+      record: {kind: dns_query, endpoint: WS-0390, domain: remote-office-vpn.example, count: 40,
+               categories: [DNS Tunneling VPN], action: allowed, first_seen: "2026-01-15T10:06:00Z",
+               last_seen: "2026-01-15T11:42:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions: [block_domain:q7-sync.test, isolate_endpoint:WS-0388]
+  elevated: []
+  considered: [block_domain:remote-office-vpn.example]
+  manual_steps: [remove tunnel client on WS-0388, assess data sent through q7-sync.test]
+  containment: CONTAINED
+  controls: 2

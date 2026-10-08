@@ -1,0 +1,61 @@
+# DNS tunneling scenario; fake lab data only.
+schema: 1
+name: legacy-01-confirmed-tunnel
+workflow: dns-tunneling
+description: >-
+  Migrated legacy 01. Umbrella flags thousands of unique high-entropy subdomains under one parent domain
+  that enrichment rates malicious and categorises as DNS Tunneling VPN. The workstation trajectory shows
+  an unknown process making the queries. The package blocks the parent domain once and isolates the
+  host, both waiting for human approval (the legacy event has no process id, so nothing is terminated).
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/dns-tunneling/scenarios/01-confirmed-tunnel.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-DNS-0001
+  title: DNS tunneling to cdn-update.test from a finance workstation
+  severity: HIGH
+  source: Cisco Umbrella
+  workflow_id: dns-tunneling
+  observables:
+    - {type: domain, value: cdn-update.test}
+    - {type: hostname, value: WS-FIN-0142}
+  trigger: {source: umbrella, unique_subdomains_24h: 18432, mean_label_entropy: 4.6}
+environment:
+  reputations:
+    - {type: domain, value: cdn-update.test, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [virustotal, umbrella], summary: "DNS tunneling infrastructure"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-0142
+      record: {kind: endpoint, hostname: WS-FIN-0142, connector_guid: 3f6c1a2e-0000-4000-8000-000000000142,
+               os: Windows 11, groups: [Finance], tags: [], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-0142
+      record: {kind: process_event, event_id: evt-l01-1, endpoint: WS-FIN-0142, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: updsvc.exe,
+               domain: 4f2a9c1e7b0d.a81c.cdn-update.test, count: 18432}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-0142
+      record: {kind: process_event, event_id: evt-l01-2, endpoint: WS-FIN-0142, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: chrome.exe,
+               domain: intranet.example.com, count: 210}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: cdn-update.test
+      record: {kind: dns_query, domain: cdn-update.test, count: 18432, unique_subdomains: 18432,
+               categories: [DNS Tunneling VPN, Command and Control], action: allowed,
+               first_seen: "2026-01-15T10:06:00Z", last_seen: "2026-01-15T11:42:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions: [block_domain:cdn-update.test, isolate_endpoint:WS-FIN-0142]
+  elevated: []
+  considered: []
+  manual_steps: [remove tunnel client on WS-FIN-0142, assess data sent through cdn-update.test]
+  containment: CONTAINED
+  controls: 2

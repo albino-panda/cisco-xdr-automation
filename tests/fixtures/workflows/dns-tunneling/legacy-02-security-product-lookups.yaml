@@ -1,0 +1,61 @@
+# DNS tunneling scenario; fake lab data only.
+schema: 1
+name: legacy-02-security-product-lookups
+workflow: dns-tunneling
+description: >-
+  Migrated legacy 02. An approved antivirus product queries its cloud reputation service through long
+  encoded DNS labels, which looks like tunneling and lands in the DNS Tunneling VPN category with high
+  volume. Reputation rates the domain clean, so nothing is proposed; the domain is listed as considered.
+  The legacy name-only allow-list becomes an approved_dns_tools entry with the product's hash, signer
+  and domain.
+tags: [legacy, benign]
+legacy_source: workflows/dns-tunneling/scenarios/02-security-product-lookups.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
+config:
+  allowlists:
+    approved_dns_tools:
+      - name: ExampleAV
+        hashes: ["3333333333333333333333333333333333333333333333333333333333333333"]
+        domains: [av-cloudlookup.example]
+        signers: [Example AV Vendor Ltd.]
+incident:
+  incident_id: INC-TEST-DNS-0002
+  title: High-volume encoded DNS queries to av-cloudlookup.example
+  severity: MEDIUM
+  source: Cisco Umbrella
+  workflow_id: dns-tunneling
+  observables:
+    - {type: domain, value: av-cloudlookup.example}
+    - {type: hostname, value: WS-ENG-0310}
+  trigger: {source: umbrella, unique_subdomains_24h: 52000, mean_label_entropy: 4.1}
+environment:
+  reputations:
+    - {type: domain, value: av-cloudlookup.example, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [virustotal, umbrella], summary: "Computer Security"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-ENG-0310
+      record: {kind: endpoint, hostname: WS-ENG-0310, connector_guid: 3f6c1a2e-0000-4000-8000-000000000310,
+               os: Windows 11, groups: [Engineering], tags: [], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-ENG-0310
+      record: {kind: process_event, event_id: evt-l02-1, endpoint: WS-ENG-0310, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: ExampleAV.exe, pid: 3120,
+               sha256: "3333333333333333333333333333333333333333333333333333333333333333",
+               domain: 0a9f3c.h.av-cloudlookup.example, count: 52000}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: av-cloudlookup.example
+      record: {kind: dns_query, domain: av-cloudlookup.example, count: 52000, unique_subdomains: 52000,
+               categories: [DNS Tunneling VPN, Computer Security], action: allowed,
+               first_seen: "2026-01-15T10:06:00Z", last_seen: "2026-01-15T11:42:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  considered: [block_domain:av-cloudlookup.example]
+  manual_steps: []

@@ -1,0 +1,155 @@
+# DNS tunneling scenario; fake lab data only.
+schema: 1
+name: legacy-04-blast-radius
+workflow: dns-tunneling
+description: >-
+  Migrated legacy 04. Six workstations run the same unknown process that tunnels through one malicious
+  parent domain, more than the blast-radius cap of 5 endpoints. The domain block stays STANDARD; every
+  isolation stays proposed with ELEVATED approval and a blast-radius warning (never split or dropped),
+  so the lead approves.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/dns-tunneling/scenarios/04-blast-radius.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-DNS-0004
+  title: DNS tunneling to relay-ns.test from six workstations
+  severity: CRITICAL
+  source: Cisco XDR
+  workflow_id: dns-tunneling
+  observables:
+    - {type: domain, value: relay-ns.test}
+  trigger: {source: cisco_xdr, querying_hosts: 6}
+environment:
+  reputations:
+    - {type: domain, value: relay-ns.test, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [virustotal, umbrella], summary: "DNS tunneling infrastructure"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0501
+      record: {kind: endpoint, hostname: WS-0501, connector_guid: 3f6c1a2e-0000-4000-8000-000000000501,
+               os: Windows 11, groups: [Workstations], tags: [], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0501
+      record: {kind: process_event, event_id: evt-l04-1, endpoint: WS-0501, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: printhelper.exe,
+               domain: a1.relay-ns.test, count: 10100}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0502
+      record: {kind: endpoint, hostname: WS-0502, connector_guid: 3f6c1a2e-0000-4000-8000-000000000502,
+               os: Windows 11, groups: [Workstations], tags: [], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0502
+      record: {kind: process_event, event_id: evt-l04-2, endpoint: WS-0502, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: printhelper.exe,
+               domain: b2.relay-ns.test, count: 10200}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0503
+      record: {kind: endpoint, hostname: WS-0503, connector_guid: 3f6c1a2e-0000-4000-8000-000000000503,
+               os: Windows 11, groups: [Workstations], tags: [], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0503
+      record: {kind: process_event, event_id: evt-l04-3, endpoint: WS-0503, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: printhelper.exe,
+               domain: c3.relay-ns.test, count: 10050}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0504
+      record: {kind: endpoint, hostname: WS-0504, connector_guid: 3f6c1a2e-0000-4000-8000-000000000504,
+               os: Windows 11, groups: [Workstations], tags: [], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0504
+      record: {kind: process_event, event_id: evt-l04-4, endpoint: WS-0504, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: printhelper.exe,
+               domain: d4.relay-ns.test, count: 10300}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0505
+      record: {kind: endpoint, hostname: WS-0505, connector_guid: 3f6c1a2e-0000-4000-8000-000000000505,
+               os: Windows 11, groups: [Workstations], tags: [], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0505
+      record: {kind: process_event, event_id: evt-l04-5, endpoint: WS-0505, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: printhelper.exe,
+               domain: e5.relay-ns.test, count: 10150}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0506
+      record: {kind: endpoint, hostname: WS-0506, connector_guid: 3f6c1a2e-0000-4000-8000-000000000506,
+               os: Windows 11, groups: [Workstations], tags: [], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0506
+      record: {kind: process_event, event_id: evt-l04-6, endpoint: WS-0506, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: printhelper.exe,
+               domain: f6.relay-ns.test, count: 10200}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: relay-ns.test
+      record: {kind: dns_query, domain: relay-ns.test, count: 61000,
+               categories: [DNS Tunneling VPN, Command and Control], action: allowed,
+               first_seen: "2026-01-15T10:06:00Z", last_seen: "2026-01-15T11:42:00Z"}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: relay-ns.test
+      record: {kind: dns_query, endpoint: WS-0501, domain: a1.relay-ns.test, count: 10100, action: allowed,
+               first_seen: "2026-01-15T10:06:00Z", last_seen: "2026-01-15T11:42:00Z"}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: relay-ns.test
+      record: {kind: dns_query, endpoint: WS-0502, domain: b2.relay-ns.test, count: 10200, action: allowed,
+               first_seen: "2026-01-15T10:06:00Z", last_seen: "2026-01-15T11:42:00Z"}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: relay-ns.test
+      record: {kind: dns_query, endpoint: WS-0503, domain: c3.relay-ns.test, count: 10050, action: allowed,
+               first_seen: "2026-01-15T10:06:00Z", last_seen: "2026-01-15T11:42:00Z"}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: relay-ns.test
+      record: {kind: dns_query, endpoint: WS-0504, domain: d4.relay-ns.test, count: 10300, action: allowed,
+               first_seen: "2026-01-15T10:06:00Z", last_seen: "2026-01-15T11:42:00Z"}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: relay-ns.test
+      record: {kind: dns_query, endpoint: WS-0505, domain: e5.relay-ns.test, count: 10150, action: allowed,
+               first_seen: "2026-01-15T10:06:00Z", last_seen: "2026-01-15T11:42:00Z"}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: relay-ns.test
+      record: {kind: dns_query, endpoint: WS-0506, domain: f6.relay-ns.test, count: 10200, action: allowed,
+               first_seen: "2026-01-15T10:06:00Z", last_seen: "2026-01-15T11:42:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - block_domain:relay-ns.test
+    - isolate_endpoint:WS-0501
+    - isolate_endpoint:WS-0502
+    - isolate_endpoint:WS-0503
+    - isolate_endpoint:WS-0504
+    - isolate_endpoint:WS-0505
+    - isolate_endpoint:WS-0506
+  elevated:
+    - isolate_endpoint:WS-0501
+    - isolate_endpoint:WS-0502
+    - isolate_endpoint:WS-0503
+    - isolate_endpoint:WS-0504
+    - isolate_endpoint:WS-0505
+    - isolate_endpoint:WS-0506
+  containment: CONTAINED
+  controls: 7

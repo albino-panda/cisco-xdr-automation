@@ -1,0 +1,64 @@
+# DNS tunneling scenario; fake lab data only.
+schema: 1
+name: critical-asset-elevated
+workflow: dns-tunneling
+description: >-
+  The tunnel client is a production application server (critical asset). The process termination and the
+  isolation on it need ELEVATED approval with a visible warning; an analyst alone cannot approve, the
+  lead does. The domain block stays STANDARD.
+tags: [critical_asset, true_positive, approve_all]
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-DNS-0008
+  title: DNS tunneling to sync-relay.test from PRD-APP-07
+  severity: HIGH
+  workflow_id: dns-tunneling
+  observables:
+    - {type: domain, value: sync-relay.test}
+    - {type: hostname, value: PRD-APP-07}
+  trigger: {source: umbrella, mitre_techniques: [T1572]}
+environment:
+  reputations:
+    - {type: domain, value: sync-relay.test, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [virustotal, umbrella], summary: "DNS tunneling infrastructure"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: PRD-APP-07
+      record: {kind: endpoint, hostname: PRD-APP-07, connector_guid: 00000000-0000-4000-8000-0000000000a7,
+               os: Windows 11, groups: [App Servers], tags: [production], users: [svc-app@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: PRD-APP-07
+      record: {kind: process_event, event_id: evt-dns-prd-1, endpoint: PRD-APP-07, timestamp: "2026-01-15T10:05:00Z",
+               event_type: process_start, process_name: telemetryd.exe, pid: 6120, parent_process_name: explorer.exe,
+               parent_pid: 1180, sha256: "c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6", user: jsmith@example.com}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: PRD-APP-07
+      record: {kind: process_event, event_id: evt-dns-prd-2, endpoint: PRD-APP-07, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: telemetryd.exe, pid: 6120,
+               sha256: "c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6",
+               domain: 4f2a9c1e7b0d5e8a3c6f9b2d4e7a1c3f5b8d0e2a4c6f8b1d.b7.sync-relay.test, count: 9600}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: sync-relay.test
+      record: {kind: dns_query, endpoint: PRD-APP-07, domain: sync-relay.test, query_type: TXT, count: 9600,
+               unique_subdomains: 9580, max_label_length: 48, categories: [DNS Tunneling VPN],
+               action: allowed, first_seen: "2026-01-15T10:06:00Z",
+               last_seen: "2026-01-15T11:42:00Z"}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: "c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6"
+      record: {kind: hash_prevalence, sha256: "c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6c4e8b2a6",
+               file_name: telemetryd.exe, prevalence: 1, endpoints: [PRD-APP-07]}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions: [block_domain:sync-relay.test, terminate_process:PRD-APP-07/6120, isolate_endpoint:PRD-APP-07]
+  elevated: [terminate_process:PRD-APP-07/6120, isolate_endpoint:PRD-APP-07]
+  warnings: [Production server]
+  containment: CONTAINED
+  controls: 2

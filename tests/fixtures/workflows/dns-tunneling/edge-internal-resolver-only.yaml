@@ -1,0 +1,56 @@
+# DNS tunneling scenario; fake lab data only.
+schema: 1
+name: edge-internal-resolver-only
+workflow: dns-tunneling
+description: >-
+  Internal resolver only. Umbrella attributes the tunnel queries to the internal resolver NS-02 because
+  it forwards every client query, and no resolver log names the real client yet. The parent domain is
+  blocked; the resolver's DNS server process is never terminated and the resolver is never isolated
+  (that would take DNS down for the site): it is listed as considered, and finding the client in the
+  resolver log is a manual step.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-DNS-0011
+  title: DNS tunneling category hit attributed to resolver NS-02
+  severity: HIGH
+  workflow_id: dns-tunneling
+  observables:
+    - {type: domain, value: img-relay.test}
+    - {type: hostname, value: NS-02}
+    - {type: ip, value: 192.0.2.53}
+  trigger: {source: umbrella, mitre_techniques: [T1071.004]}
+environment:
+  reputations:
+    - {type: domain, value: img-relay.test, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [virustotal, umbrella], summary: "DNS tunneling infrastructure"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: NS-02
+      record: {kind: endpoint, hostname: NS-02, connector_guid: 00000000-0000-4000-8000-0000000000d2,
+               os: Windows 11, groups: [DNS Servers], tags: [], users: [], ip_addresses: [192.0.2.53], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: NS-02
+      record: {kind: process_event, event_id: evt-dns-ns02-1, endpoint: NS-02, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: dns.exe, pid: 1880,
+               domain: 4f2a9c1e7b0d5e8a3c6f9b2d4e7a1c3f5b8d0e2a4c6f8b1d.img-relay.test, count: 11800}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: img-relay.test
+      record: {kind: dns_query, endpoint: NS-02, domain: img-relay.test, query_type: TXT, count: 11800,
+               unique_subdomains: 11750, max_label_length: 48,
+               categories: [DNS Tunneling VPN, Newly Seen Domains], action: allowed,
+               first_seen: "2026-01-15T10:06:00Z", last_seen: "2026-01-15T11:42:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions: [block_domain:img-relay.test]
+  elevated: []
+  considered: [isolate_endpoint:NS-02]
+  manual_steps: [assess data sent through img-relay.test, find the client behind NS-02]
+  containment: CONTAINED
+  controls: 1

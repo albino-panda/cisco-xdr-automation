@@ -1,0 +1,84 @@
+# DNS tunneling scenario; fake lab data only.
+schema: 1
+name: legacy-05-internal-resolver-forwarding
+workflow: dns-tunneling
+description: >-
+  Migrated legacy 05. Umbrella attributes the tunnel queries to the internal resolver NS-02 because it
+  forwards every client query; the resolver's own log (Splunk) names the real client WS-0217, which the
+  workflow investigates next. The resolver's dns.exe only forwards queries and is never isolated (listed
+  as considered); only the client is isolated, and the many subdomains still give one block.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/dns-tunneling/scenarios/05-internal-resolver-forwarding.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-DNS-0005
+  title: DNS tunneling category hit attributed to resolver ns-02
+  severity: HIGH
+  source: Cisco Umbrella
+  workflow_id: dns-tunneling
+  observables:
+    - {type: domain, value: img-cache.test}
+    - {type: hostname, value: NS-02}
+    - {type: ip, value: 192.0.2.53}
+  trigger: {source: umbrella, umbrella_identity: ns-02 (internal forwarder)}
+environment:
+  reputations:
+    - {type: domain, value: img-cache.test, verdict: SUSPICIOUS, risk_score: 55, confidence: 60,
+       integrations: [umbrella], summary: "Newly seen domain"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: NS-02
+      record: {kind: endpoint, hostname: NS-02, connector_guid: 3f6c1a2e-0000-4000-8000-0000000000d2,
+               os: Windows 11, groups: [DNS Servers], tags: [], users: [], ip_addresses: [192.0.2.53], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: NS-02
+      record: {kind: process_event, event_id: evt-l05-1, endpoint: NS-02, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: dns.exe,
+               domain: 7d1e44c0.img-cache.test, count: 12800}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0217
+      record: {kind: endpoint, hostname: WS-0217, connector_guid: 3f6c1a2e-0000-4000-8000-000000000217,
+               os: Windows 11, groups: [Workstations], tags: [], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0217
+      record: {kind: process_event, event_id: evt-l05-2, endpoint: WS-0217, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: svc-helper.exe,
+               domain: 7d1e44c0.img-cache.test, count: 6400}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0217
+      record: {kind: process_event, event_id: evt-l05-3, endpoint: WS-0217, timestamp: "2026-01-15T10:09:00Z",
+               event_type: network, process_name: svc-helper.exe,
+               domain: 0b93aa51.img-cache.test, count: 6400}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: img-cache.test
+      record: {kind: dns_query, endpoint: NS-02, domain: img-cache.test, count: 12800, unique_subdomains: 12800,
+               categories: [DNS Tunneling VPN, Newly Seen Domains], action: allowed,
+               first_seen: "2026-01-15T10:06:00Z", last_seen: "2026-01-15T11:42:00Z"}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: img-cache.test
+      record: {kind: dns_query, endpoint: WS-0217, domain: 7d1e44c0.img-cache.test, count: 6400, action: allowed,
+               first_seen: "2026-01-15T10:06:00Z", last_seen: "2026-01-15T11:42:00Z"}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: img-cache.test
+      record: {kind: dns_query, endpoint: WS-0217, domain: 0b93aa51.img-cache.test, count: 6400, action: allowed,
+               first_seen: "2026-01-15T10:09:00Z", last_seen: "2026-01-15T11:42:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions: [block_domain:img-cache.test, isolate_endpoint:WS-0217]
+  elevated: []
+  considered: [isolate_endpoint:NS-02]
+  manual_steps: [remove tunnel client on WS-0217, assess data sent through img-cache.test]
+  containment: CONTAINED
+  controls: 2

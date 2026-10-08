@@ -1,0 +1,118 @@
+# DNS tunneling scenario; fake lab data only.
+schema: 1
+name: edge-approved-dns-tool
+workflow: dns-tunneling
+description: >-
+  Approved DNS tool. The IT team's DNS diagnostics tool (allowlists.approved_dns_tools: Example DNS
+  diagnostics) encodes long probe labels under its vendor domain dnstools.example.net, which Umbrella
+  puts in the DNS Tunneling VPN category with high volume. One endpoint runs the listed build (approved
+  hash), another a new build known only by the approved signer. In the same incident a real tunnel
+  client queries q9-relay.test. The vendor domain is built and shown as excluded (never executed); the
+  isolations and terminations that rest only on the approved tool are withheld and shown as considered;
+  the real tunnel is contained.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-DNS-0010
+  title: DNS tunneling category hits for dnstools.example.net and q9-relay.test
+  severity: HIGH
+  workflow_id: dns-tunneling
+  observables:
+    - {type: domain, value: dnstools.example.net}
+    - {type: domain, value: q9-relay.test}
+    - {type: hostname, value: TH-LT-2050}
+    - {type: hostname, value: TH-LT-2052}
+    - {type: hostname, value: TH-LT-2051}
+  trigger: {source: umbrella, mitre_techniques: [T1071.004]}
+environment:
+  reputations:
+    - {type: domain, value: q9-relay.test, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [virustotal, umbrella], summary: "DNS tunneling infrastructure"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2050
+      record: {kind: endpoint, hostname: TH-LT-2050, connector_guid: 00000000-0000-4000-8000-000000002050,
+               os: Windows 11, groups: [IT Operations], tags: [], users: [mlopez@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2050
+      record: {kind: process_event, event_id: evt-dns-2050-1, endpoint: TH-LT-2050, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: dnsdiag.exe, pid: 5120,
+               sha256: "2222222222222222222222222222222222222222222222222222222222222222",
+               domain: 4f2a9c1e7b0d5e8a3c6f9b2d4e7a1c3f5b8d0e2a4c6f8b1d.probe.dnstools.example.net, count: 5200}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2052
+      record: {kind: endpoint, hostname: TH-LT-2052, connector_guid: 00000000-0000-4000-8000-000000002052,
+               os: Windows 11, groups: [IT Operations], tags: [], users: [mlopez@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2052
+      record: {kind: process_event, event_id: evt-dns-2052-1, endpoint: TH-LT-2052, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: dnsdiag.exe, pid: 5188,
+               sha256: "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+               domain: 4f2a9c1e7b0d5e8a3c6f9b2d4e7a1c3f5b8d0e2a.probe.dnstools.example.net, count: 1400}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2051
+      record: {kind: endpoint, hostname: TH-LT-2051, connector_guid: 00000000-0000-4000-8000-000000002051,
+               os: Windows 11, groups: [Workstations], tags: [], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2051
+      record: {kind: process_event, event_id: evt-dns-2051-1, endpoint: TH-LT-2051, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: svcupd.exe, pid: 3301,
+               sha256: "e5f1c7a3e5f1c7a3e5f1c7a3e5f1c7a3e5f1c7a3e5f1c7a3e5f1c7a3e5f1c7a3",
+               domain: 4f2a9c1e7b0d5e8a3c6f9b2d4e7a1c3f5b8d0e2a4c6f8b1d.q9-relay.test, count: 7300}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: dnstools.example.net
+      record: {kind: dns_query, domain: dnstools.example.net, query_type: TXT, count: 6600, unique_subdomains: 6100,
+               max_label_length: 48, categories: [DNS Tunneling VPN], action: allowed,
+               first_seen: "2026-01-15T10:06:00Z", last_seen: "2026-01-15T11:42:00Z"}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: q9-relay.test
+      record: {kind: dns_query, endpoint: TH-LT-2051, domain: q9-relay.test, query_type: TXT, count: 7300,
+               unique_subdomains: 7280, max_label_length: 48, categories: [DNS Tunneling VPN],
+               action: allowed, first_seen: "2026-01-15T10:06:00Z",
+               last_seen: "2026-01-15T11:42:00Z"}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: "2222222222222222222222222222222222222222222222222222222222222222"
+      record: {kind: hash_prevalence, sha256: "2222222222222222222222222222222222222222222222222222222222222222",
+               file_name: dnsdiag.exe, prevalence: 3, endpoints: [TH-LT-2050], signer: Example DNS Tools Ltd.}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a"
+      record: {kind: hash_prevalence, sha256: "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+               file_name: dnsdiag.exe, prevalence: 1, endpoints: [TH-LT-2052], signer: Example DNS Tools Ltd.}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: "e5f1c7a3e5f1c7a3e5f1c7a3e5f1c7a3e5f1c7a3e5f1c7a3e5f1c7a3e5f1c7a3"
+      record: {kind: hash_prevalence, sha256: "e5f1c7a3e5f1c7a3e5f1c7a3e5f1c7a3e5f1c7a3e5f1c7a3e5f1c7a3e5f1c7a3",
+               file_name: svcupd.exe, prevalence: 1, endpoints: [TH-LT-2051]}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions: [block_domain:q9-relay.test, terminate_process:TH-LT-2051/3301, isolate_endpoint:TH-LT-2051]
+  excluded: [block_domain:dnstools.example.net]
+  elevated: []
+  considered:
+    - terminate_process:TH-LT-2050/5120
+    - terminate_process:TH-LT-2052/5188
+    - isolate_endpoint:TH-LT-2050
+    - isolate_endpoint:TH-LT-2052
+  manual_steps:
+    - remove tunnel client on TH-LT-2050
+    - remove tunnel client on TH-LT-2051
+    - remove tunnel client on TH-LT-2052
+    - assess data sent through dnstools.example.net
+    - assess data sent through q9-relay.test
+  containment: CONTAINED
+  controls: 2

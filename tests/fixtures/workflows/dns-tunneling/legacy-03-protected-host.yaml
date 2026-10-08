@@ -1,0 +1,87 @@
+# DNS tunneling scenario; fake lab data only.
+schema: 1
+name: legacy-03-protected-host
+workflow: dns-tunneling
+description: >-
+  Migrated legacy 03. The same malicious parent domain is queried by a workstation and by the hypervisor
+  management host HV-03 (critical asset class hypervisor). Both isolations are proposed; the
+  hypervisor's needs ELEVATED approval with a warning, so the lead approves. KIOSK-07 reports that it
+  cannot be isolated: no isolation is proposed and it is listed as considered (the legacy plan dropped
+  it silently).
+tags: [legacy, critical_asset, true_positive, approve_all]
+legacy_source: workflows/dns-tunneling/scenarios/03-protected-host.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-DNS-0003
+  title: DNS tunneling to sync-telemetry.test from three hosts
+  severity: HIGH
+  source: Cisco XDR
+  workflow_id: dns-tunneling
+  observables:
+    - {type: domain, value: sync-telemetry.test}
+    - {type: hostname, value: WS-0201}
+    - {type: hostname, value: HV-03}
+    - {type: hostname, value: KIOSK-07}
+  trigger: {source: cisco_xdr}
+environment:
+  reputations:
+    - {type: domain, value: sync-telemetry.test, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [virustotal, umbrella], summary: "DNS tunneling infrastructure"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0201
+      record: {kind: endpoint, hostname: WS-0201, connector_guid: 3f6c1a2e-0000-4000-8000-000000000201,
+               os: Windows 11, groups: [Workstations], tags: [], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-0201
+      record: {kind: process_event, event_id: evt-l03-1, endpoint: WS-0201, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: svc-helper.exe,
+               domain: 9c2e7a.sync-telemetry.test, count: 3900}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: HV-03
+      record: {kind: endpoint, hostname: HV-03, connector_guid: 3f6c1a2e-0000-4000-8000-0000000000a3,
+               os: Windows 11, groups: [Hypervisors], tags: [], users: [], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: HV-03
+      record: {kind: process_event, event_id: evt-l03-2, endpoint: HV-03, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: vmupd.exe,
+               domain: 51bd0f.sync-telemetry.test, count: 3300}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: KIOSK-07
+      record: {kind: endpoint, hostname: KIOSK-07, connector_guid: 3f6c1a2e-0000-4000-8000-0000000000c7,
+               os: Windows 11, groups: [Kiosks], tags: [], users: [], isolation_capable: false,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: KIOSK-07
+      record: {kind: process_event, event_id: evt-l03-3, endpoint: KIOSK-07, timestamp: "2026-01-15T10:06:00Z",
+               event_type: network, process_name: svc-helper.exe,
+               domain: e04d.sync-telemetry.test, count: 200}
+    - integration: splunk
+      atomic: search_domain_enterprise
+      subject: sync-telemetry.test
+      record: {kind: dns_query, domain: sync-telemetry.test, count: 7400, unique_subdomains: 7400,
+               categories: [DNS Tunneling VPN], action: allowed, first_seen: "2026-01-15T10:06:00Z",
+               last_seen: "2026-01-15T11:42:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions: [block_domain:sync-telemetry.test, isolate_endpoint:WS-0201, isolate_endpoint:HV-03]
+  elevated: [isolate_endpoint:HV-03]
+  warnings: [Hypervisor]
+  considered: [isolate_endpoint:KIOSK-07]
+  manual_steps:
+    - remove tunnel client on WS-0201
+    - remove tunnel client on HV-03
+    - remove tunnel client on KIOSK-07
+    - assess data sent through sync-telemetry.test
+  containment: CONTAINED
+  controls: 3

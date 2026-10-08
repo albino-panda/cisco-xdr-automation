@@ -1,102 +1,330 @@
-# Workflow: DNS tunneling
+# DNS tunneling
 
-Respond to data or command traffic hidden in DNS queries.
+Phase 4 workflow `dns-tunneling` (definition version 2.0.0). Code:
+`src/xdr_response/workflows/dns_tunneling/` (`definition.py`, `hooks.py`). It replaces the legacy
+plan-rule spec (`workflow.yaml` and its six scenarios), which were migrated to typed simulation
+scenarios and deleted. The binding design is [docs/architecture.md](../../docs/architecture.md)
+sections 12 to 14.
 
-|  |  |
-|---|---|
-| Default severity | high |
-| Status | Specification. Not yet built in XDR Automation. |
-| Machine-readable spec | [`workflow.yaml`](workflow.yaml) |
-| Integrations | [Cisco XDR](../../integrations/cisco-xdr/README.md), [Cisco Umbrella / Secure Access](../../integrations/umbrella/README.md), [Cisco Secure Endpoint](../../integrations/secure-endpoint/README.md), [Cisco Meraki](../../integrations/meraki/README.md), [Splunk](../../integrations/splunk/README.md), [Cloudflare](../../integrations/cloudflare/README.md), [ServiceNow](../../integrations/servicenow/README.md) |
+## Purpose
 
-## Triggers
+Respond to data or command traffic hidden in DNS queries. A client process encodes data into long,
+random-looking labels under one parent domain that the operator controls, and reads the answers
+(often TXT records) back. The workflow automatically investigates:
 
-- **Incident rule** in XDR Automation matching the techniques below or the detection titles your sources produce.
-- **Pivot menu** on an incident or observable for manual runs.
-- **Playbook task** in the matching XDR incident response playbook.
+- the **parent domain**: reputation and the Umbrella "DNS Tunneling VPN" category;
+- the **DNS behaviour** under it: query volume and frequency, subdomain variation, the longest label
+  (query length), the Shannon entropy of the child labels and the record types that carry data back;
+- the **endpoints and processes** that issued the queries, including the real client behind an
+  internal resolver that only forwards queries;
+- the **querying binaries**: reputation, prevalence and code-signing subject;
+- the **transfer pattern**: queries, time window, rate and an upper-bound estimate of the encoded
+  bytes sent upstream.
 
-## Detection signals
+It then **recommends** a containment package with numbered evidence and separate risk and confidence
+scores:
 
-Typical alerts that should route to this workflow:
+- block the tunnel parent domain once (never each random subdomain);
+- terminate the querying process;
+- isolate the client endpoint.
 
-- Umbrella DNS tunneling category hit
-- High-entropy or high-volume subdomain queries to one parent domain
+Things that look like a tunnel but are not are never contained. A parent domain that reputation rates
+clean (a security, VPN or diagnostics product that encodes lookups in DNS) is listed as considered. A
+forwarding resolver is never isolated. The approved DNS tools of `allowlists.approved_dns_tools`
+(`config/allowlists.yaml`) are enforced by the framework on every proposal: the tool's domains are
+moved to the package's excluded targets (shown, never executed). The termination of an approved
+binary is withheld, and so is an isolation or an unrated domain block that rests only on approved
+binaries. Each of these is shown as considered.
 
-## MITRE ATT&CK
+The workflow never executes, approves or chooses an approval level. A human approves the package.
+Only then does the lifecycle orchestrator execute and verify it, and restoration needs a separate
+human release approval.
 
-| Technique | Name |
-|---|---|
-| [T1071.004](https://attack.mitre.org/techniques/T1071/004/) | Application Layer Protocol: DNS |
-| [T1572](https://attack.mitre.org/techniques/T1572/) | Protocol Tunneling |
+Default severity: HIGH. Related workflows: [c2](../c2/README.md) (other command and control
+channels), [exfiltration](../exfiltration/README.md) (data that left through the tunnel),
+[malware](../malware/README.md) (the client binary).
 
-## Response flow
+## Trigger
 
-1. **Intake.** Load the incident summary, observables and the guardrails file. A failure stops the run.
-2. **Enrich.** [`enrich-domain`](../../atomic/enrich-domain/README.md) on the tunneling parent domain named by the detection, not on each unique subdomain. A failure is recorded and the run continues.
-3. **Investigate.** [`investigate-host`](../../atomic/investigate-host/README.md) on every host that queried the parent domain, including clients found in internal resolver logs when Umbrella only sees the forwarding resolver. A failure is recorded and the run continues.
-4. **Decide.** Build a containment plan and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true. A failure escalates to a lead.
-5. **Contain.** Run the approved actions below. Each action records its result, even when skipped. A failure escalates to a lead.
-6. **Record.** Add an incident note with the rollback for every action, and [`create-ticket`](../../atomic/create-ticket/README.md).
-7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
-
-### Containment actions
-
-| Action | When | Approval |
+| Type | Matches | Priority |
 |---|---|---|
-| [`block-domain`](../../atomic/block-domain/README.md) | The parent domain is a confirmed tunnel. Enrichment rates it malicious, or rates it suspicious or unknown while Umbrella puts it in the DNS Tunneling VPN category with at least 1000 internal queries in the lookback window. Clean domains and failed enrichments are never blocked. | yes |
-| [`isolate-endpoint`](../../atomic/isolate-endpoint/README.md) | The host can be isolated and its trajectory shows a process that queried a confirmed tunnel parent domain or one of its subdomains. The process is not an approved security or VPN tool (`allowlist.approved_dns_tools`) and not a DNS server forwarding client queries (`dns.exe`, `named`, `unbound`, `dnsmasq`). | yes |
+| XDR incident rule | the incident reports one of the techniques of the MITRE mapping (DNS application-layer protocol or protocol tunneling) **and** carries a domain or a hostname | 170 |
+| XDR incident rule | the title matches `*dns tunnel*`, `*dns-tunnel*`, `*tunneling over dns*`, `*tunnelling over dns*` or `*dns tunneling vpn*` (for example an Umbrella "DNS Tunneling VPN" category hit) **and** the incident carries a domain or a hostname | 165 |
+| Manual | an analyst starts the workflow from an incident, a domain or an endpoint observable (never matches automatically) | n/a |
 
-### Containment rules
+An incident whose `workflow_id` is `dns-tunneling` always runs this workflow. When several workflows
+match, the highest priority wins, then the workflow id. A DNS-specific detection should come here
+rather than to a generic command and control workflow, hence the high priority.
 
-The `plan` rules in [`workflow.yaml`](workflow.yaml) are the exact form of the conditions above. The guardrails (protected hosts, allow-listed domains, blast-radius caps) run after each rule.
+## Required integrations
 
-| Rule id | Atomic | Condition |
-|---|---|---|
-| `block_tunnel_parent_domain` | `block-domain` | For each enriched domain without an error: the verdict is malicious, or the verdict is suspicious or unknown and the categories include DNS Tunneling VPN and internal queries are 1000 or more. Targets the parent domain in lower case, with expiry from `expiry_hours.block-domain` (default 720 hours). |
-| `isolate_tunnel_client_hosts` | `isolate-endpoint` | For each investigated host without an error that is isolation-capable: a trajectory event's process is neither in `allowlist.approved_dns_tools` nor a DNS server process, and it queried a domain that passes the block test above (the parent itself or any subdomain). Targets the connector GUID. |
+These are the expected sources: when one is disabled or failing, the run notes it and confidence
+drops, but a recommendation backed by other evidence is still made.
 
-## Scenarios
+- `umbrella`: domain status and categories of the tunnel parent domain (`enrich_domain`, VERIFIED
+  categorization endpoint; the "DNS Tunneling VPN" category), and the landing product for approved
+  domain blocks (destination lists, VERIFIED).
+- `secure_endpoint`: endpoint record, device trajectory (the process that issued the DNS queries),
+  hash prevalence and signer, and the isolation of the client endpoint (`investigate_endpoint`,
+  `search_hash_enterprise`). The computer and trajectory reads are VERIFIED, but trajectory events have
+  no documented field schema (see Known limitations).
 
-Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them with `PYTHONPATH=engine python -m xdr_plan check dns-tunneling`.
+## Optional integrations
 
-| File | What it proves |
-|---|---|
-| [`01-confirmed-tunnel.yaml`](scenarios/01-confirmed-tunnel.yaml) | True positive: a malicious tunnel parent domain is blocked once and the workstation whose unknown process queried it is isolated, both pending approval. |
-| [`02-security-product-lookups.yaml`](scenarios/02-security-product-lookups.yaml) | Benign: an approved antivirus product's encoded DNS lookups are high-volume and in the tunneling category, but the clean verdict and approved process produce no actions. |
-| [`03-protected-host.yaml`](scenarios/03-protected-host.yaml) | Guardrail: a protected `hv-*` host is planned with `elevated: true`, a host that cannot be isolated gets no action, and the other workstation is isolated. |
-| [`04-blast-radius.yaml`](scenarios/04-blast-radius.yaml) | Guardrail: six querying hosts exceed `max_hosts_isolated`, so every isolation stays planned with `elevated: true` and the plan escalates; the domain block stays planned. |
-| [`05-internal-resolver-forwarding.yaml`](scenarios/05-internal-resolver-forwarding.yaml) | DNS edge case: the internal resolver that forwards the queries (`dns.exe`) is never isolated even though it is not protected; only the real client is isolated, and many subdomains still give one block. |
-| [`06-new-domain-without-reputation.yaml`](scenarios/06-new-domain-without-reputation.yaml) | DNS edge case: a new domain with an unknown verdict is blocked on category and volume, while a low-volume VPN health-check domain in the same category is not. |
+- `splunk`: internal resolver and DNS security logs (`search_domain_enterprise`): query volume,
+  subdomain variation, label length, record types and the real client behind a forwarding resolver.
+- `defender_endpoint`: second endpoint source (machine, alerts, timeline, prevalence), DNS activity
+  rows, and isolation or process termination for the endpoints it manages.
+- `cisco_xdr`: platform verdicts and sightings for the parent domain and the querying binaries, and the
+  native response actions (`respond/observables`, `respond/trigger`) the router prefers when
+  configured.
+- `virustotal`: public reputation of the parent domain and the querying binaries (disclosure policy
+  applies: internal domains are never sent).
+- `alienvault_otx`: independent reputation (OTX pulses, passive DNS) for the parent domain and the
+  querying binaries.
 
-## Inputs
+## Input data
 
-| Variable | Type | Required | Description |
+Incident observables of type `domain` (the tunnel parent the detection names), `hostname`, `ip` and
+`sha256`, and `trigger.mitre_techniques` / `trigger.source` for routing. Values found by earlier steps
+feed later steps: the endpoints a DNS source names as querying clients are investigated next, and the
+hashes of the querying processes are enriched. Free text such as a vendor's "mean label entropy" stays
+in `incident.trigger` as data; it is never evidence on its own (the workflow computes its own entropy
+from the names the records report). All test data is fake.
+
+## Investigation steps
+
+All steps are read-only atomics; a failing step or source is noted and the run continues.
+
+| # | Step | Atomic | Subjects | Sources |
+|---|---|---|---|---|
+| 1 | `endpoint_triage` | `investigate_endpoint` | incident hostnames | Secure Endpoint, Defender, Cisco XDR |
+| 2 | `dns_activity` | `search_domain_enterprise` | the tunnel parents: incident domains and domains a DNS source aggregates over subdomains (at most 10) | Splunk, Cisco XDR, Defender |
+| 3 | `tunnel_clients` | `investigate_endpoint` | incident hostnames and every endpoint a DNS record names as a querying client | Secure Endpoint, Defender, Cisco XDR |
+| 4 | `parent_reputation` | `enrich_domain` | the tunnel parents (never each random child name; at most 10) | every enricher, disclosure policy applies |
+| 5 | `querying_binary_reputation` | `enrich_hash` | hashes of processes that issued DNS queries and of detections (at most 10) | every enricher |
+| 6 | `querying_binary_prevalence` | `search_hash_enterprise` | the same hashes (prevalence, endpoints, code-signing subject) | Secure Endpoint, Defender, Cisco XDR |
+
+The hooks (`hooks.py`) then derive facts from the run's own records, each with the record ids it was
+computed from:
+
+- **tunnels**, one per parent domain. Child names are grouped under the shortest known parent
+  (incident domain, aggregated or enriched domain), else under the registrable domain. Each tunnel
+  carries the five indicators, the category, the reputation and record verdicts, the client and
+  resolver hosts and the transfer pattern. The five indicators are:
+  - volume: at least 1000 queries;
+  - subdomain variation: at least 200 distinct child names;
+  - long labels: at least 40 characters;
+  - label entropy: at least 3.5 bits per character over child labels of 12 characters or more;
+  - data record types: TXT or NULL.
+- **clients**: endpoints whose process (not a DNS server process) queried a confirmed tunnel, with the
+  querying processes, their binaries and the endpoint identity for isolation.
+- **processes**: those querying processes that were not seen ending (termination targets
+  `<ENDPOINT>/<pid>`).
+
+## Correlation logic
+
+- Child names are grouped under their parent domain, so thousands of random subdomains give one tunnel
+  and at most one block.
+- Framework links: the same domain, hash or IP on two or more endpoints (one tunnel parent or one
+  client binary across the estate); the same endpoint or user across sources; process lineage. Window
+  120 minutes.
+- Workflow links (hooks, kind `workflow`): a tunnel client, meaning the endpoint, the querying binary
+  and the parent domain its process queried.
+- A parent is a **confirmed tunnel** only when reputation does not rate it CLEAN **and** one of these
+  holds:
+  - reputation rates it MALICIOUS, or a DNS or process record of it is MALICIOUS;
+  - a detection that names DNS tunneling (the techniques of the MITRE mapping or the words "DNS
+    tunnel") is tied to a process that queried it on the same endpoint;
+  - it is in the DNS tunneling category with at least 1000 queries (the legacy rule: new tunnel
+    domains often have no reputation yet);
+  - it shows a behaviour profile: at least 3 of the 5 indicators, one of them volume or subdomain
+    variation.
+- A host whose only queries come from DNS server software is a **forwarding resolver**: dns.exe,
+  named, unbound, dnsmasq, pdns_recursor, pdns_server, coredns and kresd. The real client comes from
+  the resolver's own log.
+- Links shape the clusters, the blast radius and the decision card. They are never evidence on their
+  own and never change an approval level.
+
+## Risk calculation
+
+Each target is scored by the scoring engine (docs/threat-scoring.md) from the records its rule cites
+plus the target's enrichment:
+
+- reputation answers from Umbrella, Cisco XDR, VirusTotal and OTX are vendor verdicts, capped by the
+  engine. One vendor alone is never an aggregate MALICIOUS verdict.
+- DNS and network records with a verdict, and malicious or suspicious process events, count as
+  `network_behaviour` or `endpoint_detection`.
+- The tunnel pattern itself is a hook-derived `network_behaviour` signal (SUSPICIOUS, severity 70,
+  confidence 60): the DNS tunneling category with high volume, or the behaviour profile. It cites the
+  DNS and process records it was computed from and is attributed to the source of those records, so
+  two sources that both saw the pattern corroborate each other. The same pattern scores the client
+  endpoint and the querying process from their own process records.
+- A critical asset adds the engine's critical-asset bonus (only with malicious or suspicious
+  evidence).
+
+Risk and confidence are separate integers. The expected sources are Umbrella and Secure Endpoint: a
+failed one costs confidence once and is listed as degraded. Rule thresholds: a domain block needs risk
+40, a termination or an isolation risk 50. Below them the action is "considered, not proposed" and is
+listed in the notes, never hidden.
+
+## Containment recommendations
+
+| Rule | Action (builder) | Proposed when | Evidence cited |
 |---|---|---|---|
-| `incident_id` | string | no | Cisco XDR incident ID, used for notes and audit. |
-| `dry_run` | boolean | no | When true, report the planned change without making it. Default true for containment. |
-| `observables` | list | no | Overrides the incident observables. |
+| `block_tunnel_parent_domain` | `block_domain` (catalog order: native, Umbrella, Defender) | the parent is a confirmed tunnel | the DNS records and process events under the parent, connection records, tied detections, the reputation answers that rate it |
+| `terminate_tunnel_process` | `terminate_process` (target `<ENDPOINT>/<pid>`, or `<ENDPOINT>/<sha256>` without a pid) | a client process queried a confirmed tunnel and no `process_end` was seen | the process's query events, the records that make the parent a tunnel |
+| `isolate_tunnel_client_secure_endpoint` | `isolate_endpoint` (`isolate_secure_endpoint`, `connector_guid` param) | the client endpoint has a Secure Endpoint connector and isolation is not known to be impossible | the client's query events and DNS records, the records that make the parent a tunnel, the endpoint record |
+| `isolate_tunnel_client_defender_endpoint` | `isolate_endpoint` (`isolate_defender_endpoint`) | the same, for an endpoint with a Defender machine id (a duplicate of the Secure Endpoint proposal is merged) | the same |
 
-## Guardrails
+Approved DNS tools (`allowlists.approved_dns_tools`) are handled by the framework, never by the
+workflow:
 
-- `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
-- Blast-radius limits cap how many hosts, users or indicators a single run may touch.
-- Every containment action is reversible except session revocation, and the rollback is written into the incident note.
+- the tool's domains are built and shown as excluded with the reason;
+- a termination of a process whose binary is an approved hash, or is reported signed by an approved
+  signer, is withheld (`ALLOWLISTED`, shown as considered);
+- an isolation whose querying binaries are all approved is withheld the same way (rule `binaries`,
+  architecture 14.11.6);
+- an unrated tunnel whose clients all run approved binaries is not blocked on their behaviour alone.
 
-## Notes
+A process known only by name is never treated as approved.
 
-- Some security and VPN products legitimately use DNS-based lookups; check the allow-list first. Add their domains to `allowlist.domains` and their process names to `allowlist.approved_dns_tools` in the guardrails file. The rules read `approved_dns_tools` with an empty default, because the key is not yet in `guardrails.example.yaml`.
-- The isolation rule reads `process` and `domain` from each `investigate-host` trajectory event. The atomic declares `trajectory` as a list without an entry schema, so the built atomic must return DNS events in that shape.
-- Umbrella only sees the resolver that forwards a query. When the incident names an internal resolver, find the real clients in the resolver logs (Splunk) and investigate them too.
-- The isolation rollback endpoint (`DELETE /v1/computers/{guid}/isolation`) is taken from the atomic spec and has not been verified against Secure Endpoint documentation.
+### Items not proposed and manual steps
 
-## Related workflows
+- Not proposed, and listed as considered:
+  - a parent with tunnel indications that is not a confirmed tunnel (for example a VPN health check in
+    the tunneling category with 40 queries, or a CDN with two of the five indicators);
+  - a parent that reputation rates CLEAN although it looks like a tunnel;
+  - the isolation of a forwarding resolver;
+  - the isolation of an endpoint that reports it cannot be isolated, or that has no Secure Endpoint
+    connector or Defender machine id;
+  - the isolation of a host named only by DNS logs, with no endpoint record of the querying process;
+  - from the framework, the termination, isolation and block that rest only on an approved DNS tool.
+- Manual steps (no VERIFIED write or read):
+  - remove the tunnel client binary on each client endpoint through the endpoint console;
+  - assess the data that may have left through each confirmed tunnel (the transfer pattern is cited);
+  - find the client behind a resolver when only the resolver is seen.
 
-[`c2`](../c2/README.md), [`exfiltration`](../exfiltration/README.md)
+They appear in the run notes and in the analyst summary ("Considered, deliberately not proposed",
+"Manual steps"), each with the record ids that show it (architecture 14.10.1). This workflow declares
+no hand-offs; it never starts another workflow.
 
-## Building it in XDR Automation
+## Approval requirements
 
-1. Import the Cisco-managed atomics this workflow needs from the Exchange, plus the custom atomics in [`atomic/`](../../atomic/README.md).
-2. Create the workflow from [`workflow.yaml`](workflow.yaml): variables from `inputs`, one group per `phase`, conditions from `when`.
-3. Test with `dry_run = true` against a test incident (see [docs/testing](../../docs/testing/README.md)).
-4. Export the workflow JSON and commit it here as `workflow.export.json`.
+- Every action in the package needs human approval before it runs: domain block, process
+  termination, isolation, and later every release. AI and automation principals can never approve,
+  and nothing in the workflow can switch approval off.
+- ELEVATED approval applies, with a visible warning on the decision card, in two cases. It needs a
+  human holding the elevated approver role, for example the SOC lead.
+  - A target is a critical asset: for example a hypervisor, a production server or a domain
+    controller, also for the endpoint part of a process target, or a host holding an allow-listed
+    infrastructure address.
+  - A blast-radius cap is exceeded: for example a tunnel client on more than 5 endpoints.
+- ELEVATED is decided by `PackageBuilder` from the investigated asset context. The workflow never sets
+  it, and a critical asset is never skipped silently.
+- Before approving, the analyst checks that no listed domain or process belongs to a sanctioned
+  security, VPN or diagnostics product. If one does, it is added to `allowlists.approved_dns_tools`
+  with its hashes, signers and domains.
+- The analyst may approve all, approve a selection, reject, or ask for more investigation.
+
+## Containment execution
+
+After approval the orchestrator executes the approved actions automatically, through the guard and
+the approval token. It tries the native route first (Cisco XDR `respond/trigger` when
+`native_actions` is configured), then the direct one:
+
+| Action | Route with the real adapters |
+|---|---|
+| block domain | Umbrella destination lists (VERIFIED), Defender indicators, or the native action |
+| isolate endpoint | Secure Endpoint `PUT /v1/computers/{connector_guid}/isolation` (VERIFIED) or Defender `POST /api/machines/{id}/isolate` (VERIFIED), or the native action |
+| terminate process | no VERIFIED vendor endpoint: reported UNROUTED, with a manual step in the endpoint console |
+
+An UNROUTED action is listed on the decision card and in the notes for manual handling; it is never
+dropped. Unlock codes for isolated endpoints stay in the Secure Endpoint console and are never copied
+into notes, notifications or reports.
+
+## Verification
+
+Verification is automatic after execution and reads the target state back:
+
+- Umbrella destination lists are read back;
+- Defender machine actions are VERIFIED or NOT_VERIFIED;
+- Secure Endpoint isolation is UNABLE_TO_VERIFY until its isolation-state read is VERIFIED
+  (docs/integrations.md section 3).
+
+The result table shows every action with its execution and verification status: SUCCESS,
+ALREADY_CONTAINED, FAILED, SKIPPED or REJECTED_BY_ANALYST.
+
+## Rollback
+
+Every reversible action registers a temporary control: isolation (release endpoint) and the domain
+block (unblock). Process termination is not reversible and registers no control. Restoration needs
+its own human release approval of a release package built from the registry. Closing the incident
+never removes a control by itself, and a block has a release-review reminder, never an automatic
+expiry. Removing the client binary is a manual step and has no automated rollback.
+
+## Failure handling
+
+- A failed or degraded source (for example Umbrella unavailable) is listed as degraded and lowers
+  confidence once. It never blocks a recommendation that other evidence supports: the resolver logs
+  still show the category and the behaviour profile.
+- A step, rule or hook that fails is noted and skipped; the rest of the run still recommends.
+- A rule with no citable record proposes nothing (no invented evidence).
+- An approved action that fails at the vendor is reported FAILED and never retried silently. The
+  overall result is then PARTIALLY_CONTAINED or CONTAINMENT_FAILED.
+
+## MITRE mapping
+
+| Tactic | Technique | Sub-technique | Why this workflow responds |
+|---|---|---|---|
+| TA0011 Command and Control | T1071 Application Layer Protocol | T1071.004 DNS | command or data traffic carried in DNS queries and answers: the workflow blocks the parent domain the client queries, terminates the querying process and isolates the client endpoint |
+| TA0011 Command and Control | T1572 Protocol Tunneling | none | DNS tunneling wraps another protocol or a data stream inside DNS: the workflow measures that pattern (volume, subdomain variation, label length and entropy, record types) and contains both ends of the tunnel |
+
+No other technique is mapped. Data that leaves through the tunnel is assessed as a manual step and
+belongs to the exfiltration workflow; it is not mapped here (no forced mappings).
+
+## Testing instructions
+
+- Simulation scenarios: `tests/fixtures/workflows/dns-tunneling/`. They hold the minimum set of 14.5.3,
+  three edge cases and the six migrated legacy scenarios `legacy-01` to `legacy-06`. The edge cases are
+  an approved DNS tool, a resolver with no known client, and a behaviour profile on a Defender-managed
+  endpoint. The scenarios run automatically, in dry run and simulated live, in
+  `tests/simulation/test_workflow_scenarios.py`.
+- Unit and lifecycle tests: `tests/workflows/dns_tunneling/`.
+- Commands (from the repository root):
+  - `python -m pytest -q -p no:cacheprovider tests/workflows/dns_tunneling tests/simulation/test_workflow_scenarios.py -k "dns-tunneling or dns_tunneling"`
+  - `python tools/validation/check_workflow_readmes.py --workflow dns-tunneling`
+  - `python tools/simulator/simulate.py --workflow dns-tunneling --scenario tp-approve-all --check` (add `--live` for the simulated live run)
+
+## Known limitations
+
+- Hooks and rule expressions cannot read `allowlists.approved_dns_tools`: the framework enforces it on
+  the proposals (excluded domains; withheld terminations, isolations and unrated blocks for approved
+  binaries and signers). An entry that lists only a name protects nothing; list the tool's hashes,
+  signers and domains.
+- No DNS activity endpoint is VERIFIED in docs/integrations.md (Umbrella reporting is not listed).
+  Real Splunk rows, Cisco XDR sightings, Defender hunting rows and Secure Endpoint trajectory events
+  have no documented field schema, so they stay generic records: citable, never scored. Query volume,
+  subdomain variation, label length, record types and the querying process come only from typed
+  sources. Until a schema is VERIFIED, a real tenant gets a block proposal only when reputation rates
+  the parent malicious or a typed source reports the pattern.
+- Label entropy is computed from the child names the records report. A source that reports only an
+  aggregate (count and unique subdomains) gives no entropy, and entropy is never used alone.
+- Parent domains are the incident's domains and the domains a DNS source aggregates over subdomains.
+  Other names are grouped by a two-label heuristic, or three labels under a known second-level public
+  suffix. A tunnel under a deeper delegated zone of a shared provider may be grouped too broadly, so
+  the analyst checks the block target before approving. Only enriched parents carry a reputation.
+- Terminate process has no VERIFIED vendor endpoint: with the real adapters it is UNROUTED and handled
+  manually in the endpoint console; only the simulated lab executes it.
+- Removing the tunnel client binary and assessing what data left through the tunnel have no VERIFIED
+  write or read: both are manual steps.
+- A host whose only queries come from DNS server software is treated as a forwarding resolver and never
+  isolated; the real client must come from resolver logs. A tunnel client that renames itself to a DNS
+  server process name on a non-resolver host is shown as a resolver (considered), never silently
+  skipped.
+- A host named only by DNS logs, with no endpoint record of the querying process, is not isolated (it
+  may be another forwarder); it is listed as considered.
+- Secure Endpoint isolation verifies as UNABLE_TO_VERIFY (its isolation-state read is UNVERIFIED);
+  Umbrella destination-list blocks are read back.
+- Third-party reputation is limited by the disclosure policy and the VirusTotal public quota: internal
+  domains are never sent, and a withheld or failed source lowers confidence and is listed as degraded.
