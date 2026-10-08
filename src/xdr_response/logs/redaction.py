@@ -35,7 +35,13 @@ argument too (``tool.exe --password VALUE``, ``-token VALUE``), not only in the 
 form. :meth:`Redactor.redact_command_line` (used for recorded process command lines) adds the
 forms that are credentials only by command-line convention: ``-p VALUE`` (the conventional
 password flag of database clients) and ``-u user:password`` / ``--user user:password`` (the
-password part of a basic-auth pair).
+password part of a basic-auth pair). Archive, transfer and database tools add more forms (14.12.7):
+an attached password (``7z a -pVALUE``, ``rar a -hpVALUE``, ``mysqldump -pVALUE``; always for a
+known archive or database tool, otherwise when the value looks like a credential and is not a
+path or a ``name:value`` / ``name=value`` parameter), ``-P VALUE`` of the zip family and
+``-pw VALUE`` / ``-pwd VALUE`` / ``-pass VALUE`` (PuTTY ``pscp`` / ``plink`` / ``psftp``, OpenSSL).
+Connection-string keys (``AccountKey=``, ``SharedAccessKey=``) and environment passwords
+(``set PGPASSWORD=VALUE``, ``MYSQL_PWD=VALUE``) are sensitive keys in every text.
 
 Every text (not only command lines, 14.11.7) gets the password in URL userinfo
 (``https://user:password@host``) and the forms in which Windows and PowerShell administrative
@@ -74,14 +80,19 @@ REDACTED = "[REDACTED]"
 #: session_key / sessionKey (Splunk), session_id, signing_key (APPROVAL_SIGNING_KEY),
 #: recovery_key / recovery_password (BitLocker), secret_access_key, api_key / apikey / api-key
 #: (covers x-apikey, x-api-key, hibp-api-key, x-otx-api-key, x-cisco-meraki-api-key), private_key,
-#: approval_token, unlock_code, passcode / pass_code. "idempotency_key", "control_key", "token_id", "params_hash" are NOT
-#: sensitive.
+#: approval_token, unlock_code, passcode / pass_code, account_key / shared_access_key /
+#: storage_key / storage_account_key (Azure connection strings ``AccountKey=``,
+#: ``SharedAccessKey=``, 14.12.7). A password word glued to a prefix is sensitive too (environment
+#: variables ``PGPASSWORD``, ``DBPASSWORD``, ``MYSQL_PWD``). "idempotency_key", "control_key",
+#: "token_id", "params_hash" are NOT sensitive.
 SENSITIVE_KEY_PATTERN: re.Pattern[str] = re.compile(
     r"(?:authorization|proxy[-_]authorization|cookie|set[-_]cookie|key|session|credentials?|signature|sig"
     r"|x[-_][a-z0-9]+[-_]credentials?"
+    r"|[a-z0-9]*(?:password|passwd)|mysql[-_]pwd"
     r"|(?:.*[-_.])?(?:password|passwd|passphrase|secret|client[-_]secret|secret[-_]key|token|signature"
     r"|access[-_]token|refresh[-_]token|id[-_]token|session[-_]token|session[-_]?(?:key|id)"
     r"|signing[-_]key|recovery[-_](?:key|password)|secret[-_]access[-_]key|api[-_]?key|private[-_]key"
+    r"|account[-_]?key|shared[-_]?access[-_]?key|storage[-_]?(?:account[-_]?)?key"
     r"|approval[-_]token|unlock[-_]code|pass[-_]?code))",
     re.IGNORECASE,
 )
@@ -130,6 +141,30 @@ _FLAG_ARG = re.compile(
 #: Command lines only: ``-p VALUE`` (conventional password flag, for example database clients).
 _CMD_P_FLAG = re.compile(
     r"""(?<![A-Za-z0-9_.\-])(?P<flag>-p[ \t]+)(?P<value>"[^"]*"|'[^']*'|(?!-)[^\s"']+)"""
+)
+#: Command lines only: an attached password ``-pVALUE`` / ``-hpVALUE`` (7-Zip, RAR, MySQL clients).
+_CMD_P_ATTACHED = re.compile(
+    r"""(?<![A-Za-z0-9_.\-])(?P<flag>-h?p)(?P<value>"[^"]*"|'[^']*'|[^\s"'\-][^\s"']*)"""
+)
+#: Tools whose attached ``-p`` / ``-hp`` is always the password (archive and database clients).
+_CMD_P_ATTACHED_TOOLS = re.compile(
+    r"""(?i)(?:^|[\s"'\\/&|;(])(?:7z|7za|7zr|7zg|7zz|7-zip|rar|winrar|unrar|mysql|mysqldump|mysqladmin|mysqlimport"""
+    r"""|mysqlcheck|mysqlshow|mysqlpump|mysqlsh|mariadb|mariadb-dump|mariadb-admin)(?:\.exe)?(?=$|[\s"'&|;)])"""
+)
+#: Command lines only: ``-P VALUE`` of the zip family (``zip -P X``, ``unzip -P X``).
+_CMD_UPPER_P_FLAG = re.compile(
+    r"""(?<![A-Za-z0-9_.\-])(?P<flag>-P[ \t]+)(?P<value>"[^"]*"|'[^']*'|(?!-)[^\s"']+)"""
+)
+_CMD_ZIP_TOOLS = re.compile(
+    r"""(?i)(?:^|[\s"'\\/&|;(])(?:zip|unzip|zipcloak|funzip|pkzip|pkzipc|pkunzip|wzzip|wzunzip)(?:\.exe)?"""
+    r"""(?=$|[\s"'&|;)])"""
+)
+#: Command lines only: password flags that are not sensitive keys in general text: ``-pw VALUE``
+#: (PuTTY ``pscp`` / ``plink`` / ``psftp``), ``-pwd VALUE``, ``-pass VALUE`` / ``-passin`` /
+#: ``-passout`` (OpenSSL), also with ``=`` or ``:`` before the value.
+_CMD_PW_FLAG = re.compile(
+    r"""(?i)(?<![A-Za-z0-9_.\-])(?P<flag>-{1,2}(?:pw|pwd|pass|passin|passout)(?:[ \t]+|[=:]))"""
+    r"""(?P<value>"[^"]*"|'[^']*'|(?!-)[^\s"']+)"""
 )
 #: Command lines only: ``-u user:password`` / ``--user user:password`` / ``--user=user:password``.
 _CMD_USER_PAIR = re.compile(
@@ -368,11 +403,18 @@ class Redactor:
         """:meth:`redact_text` (which already covers URL userinfo passwords, Windows ``/pass:X``
         style switches, ``/rp X`` and ``/u USER /p X``, PowerShell ``ConvertTo-SecureString``
         literals and the positional passwords of ``net use`` and ``net user``) plus the forms that
-        are credentials only by command-line convention: ``-p VALUE`` and ``-u user:password``."""
+        are credentials only by command-line convention: ``-p VALUE``, ``-u user:password``,
+        ``-pw`` / ``-pwd`` / ``-pass VALUE``, ``-P VALUE`` of the zip family and an attached
+        ``-pVALUE`` / ``-hpVALUE`` (14.12.7)."""
         text = self.redact_text(text)
         if not text:
             return text
         text = _CMD_P_FLAG.sub(_replace_value, text)
+        text = _CMD_PW_FLAG.sub(_replace_value, text)
+        if _CMD_ZIP_TOOLS.search(text):
+            text = _CMD_UPPER_P_FLAG.sub(_replace_value, text)
+        known_tool = bool(_CMD_P_ATTACHED_TOOLS.search(text))
+        text = _CMD_P_ATTACHED.sub(lambda m: _attached_password(m, known_tool), text)
         return _CMD_USER_PAIR.sub(
             lambda m: m.group(0) if m.group("value").startswith("[REDACTED")
             else f"{m.group('flag')}{m.group('q')}{m.group('user')}:{REDACTED}{m.group('q')}", text)
@@ -501,6 +543,20 @@ def _replace_value(match: re.Match[str]) -> str:
     start, end = match.span("value")
     whole_start = match.start()
     return match.group(0)[: start - whole_start] + replacement + match.group(0)[end - whole_start:]
+
+
+def _attached_password(match: re.Match[str], known_tool: bool) -> str:
+    """``-pVALUE`` / ``-hpVALUE``: always the password for a known archive or database tool;
+    otherwise only a value that looks like a credential and is not a path or a ``name:value`` /
+    ``name=value`` parameter (``-pthread``, ``-print``, ``-priority:high`` are kept)."""
+    value = match.group("value")
+    if value.strip("\"'").startswith("[REDACTED"):
+        return match.group(0)
+    if not known_tool:
+        bare = value.strip("\"'")
+        if not bare or any(ch in bare for ch in ":=/\\") or not _looks_like_credential(bare):
+            return match.group(0)
+    return _replace_value(match)
 
 
 def _net_command(match: re.Match[str]) -> str:
