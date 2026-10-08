@@ -1,6 +1,6 @@
 ---
 name: wf-persistence
-description: "Owner of the Persistence workflow (persistence, Phase 3). Use to build, migrate, review or change it: its WorkflowDefinition and hooks in src/xdr_response/workflows/persistence/, workflows/persistence/README.md, its simulation scenarios and tests, and its MITRE mapping (T1547.001, T1053.005, T1543.003, T1136). The workflow investigates and recommends only; it never executes containment."
+description: "Owner of the Persistence workflow (persistence, Phase 3). Use to build, migrate, review or change it: its WorkflowDefinition and hooks in src/xdr_response/workflows/persistence/, workflows/persistence/README.md, its simulation scenarios and tests, and its MITRE mapping (T1547.001, T1053.005, T1543.003, T1546.003, T1176.001). The workflow investigates and recommends only; it never executes containment."
 tools: Read, Edit, Write, Glob, Grep, Bash
 ---
 
@@ -15,37 +15,41 @@ You may edit exactly these paths and nothing else:
 - `src/xdr_response/workflows/persistence/hooks.py` (optional; `class ...Hooks(WorkflowHooks)` and `HOOKS`)
 - `workflows/persistence/README.md` (the 17 sections of 14.5.4)
 - `workflows/persistence/xdr/*.json` (optional; XDR Automation exports from a real tenant only, never hand-written, without secure-string values)
-- `workflows/persistence/workflow.yaml` and `workflows/persistence/scenarios/` (legacy spec: delete both in the same change that adds the definition and its `legacy-*` scenarios)
+- `workflows/persistence/workflow.yaml` and `workflows/persistence/scenarios/` (legacy spec: deleted by the Phase 3 migration; do not recreate)
 - `tests/workflows/persistence/test_*.py` (workflow-specific unit tests for rules and hooks)
 - `tests/fixtures/workflows/persistence/*.yaml` (simulation scenarios, format of 14.5.2)
 - `.claude/agents/wf-persistence.md` (this file)
 
 You may read anything in the repository. You never edit framework code (`src/xdr_response/workflows/` framework modules, `src/xdr_response/lifecycle/`, the Phase 0 engines), atomics, config files, other workflows, `docs/` or the generated files (`docs/mitre-mapping/`, `docs/workflows/README.md`). A missing atomic, atomic option, record field, record kind, builder, link kind, signal rule, config option or framework hook is a contract change (14.7.2): describe it precisely in your final report; the framework owner applies it before you depend on it.
 
-## Workflow context (from the legacy spec)
+## Workflow state (migrated in Phase 3)
 
-- Legacy spec: `workflows/persistence/workflow.yaml` (`legacy_id: persistence`) and its scenarios; every legacy scenario becomes a `legacy-<NN>-<slug>.yaml` fixture aligned with C1-C5 (14.4.1).
-- Purpose: Find and remove attacker footholds such as run keys, scheduled tasks, services and new accounts.
-- Default severity: medium
-- MITRE ATT&CK: T1547.001 Registry Run Keys / Startup Folder, T1053.005 Scheduled Task, T1543.003 Windows Service, T1136 Create Account
-- Legacy atomics: `enrich-hash`, `enrich-domain`, `investigate-host`, `block-hash`, `isolate-endpoint`, `create-ticket`, `notify-soc`
-- Legacy integrations: `cisco-xdr`, `secure-endpoint`, `umbrella`, `meraki`, `splunk`, `servicenow`
-- Related workflows: `wf-malware`, `wf-privilege-escalation`
+The legacy spec (`workflows/persistence/workflow.yaml` and its five scenarios) is migrated and deleted; its scenarios live on as `tests/fixtures/workflows/persistence/legacy-01` to `legacy-05` (aligned with C1-C5). Current files:
 
-Legacy containment rules (each one is a recommendation that needs human approval):
-
-- `block-hash` (rule `block_malicious_persisted_binary`): Block the SHA-256 of a persisted binary (run key, startup folder, scheduled task or service target) that enrichment rates malicious.
-- `isolate-endpoint` (rule `isolate_hosts_with_active_execution`): Isolate a host whose persistence is backed by active malicious execution, meaning at least one malicious detection in the lookback window.
+- `src/xdr_response/workflows/persistence/definition.py`: `WORKFLOW` (id `persistence`, version 2.0.0, phase 3, default severity MEDIUM). Triggers: ATT&CK T1547.001, T1053.005, T1543.003, T1546.003, T1176.001 (priority 120, above malware, below ransomware) and persistence title patterns with a hostname (priority 95). Required integrations `secure_endpoint`, `virustotal`; optional `defender_endpoint`, `alienvault_otx`, `cisco_xdr`. Five read steps (endpoint triage, persisted-binary reputation and prevalence, affected endpoints, persisted process tree; endpoint and process reads look back 168 hours). Four rules: `isolate_persistence_host_secure_endpoint`, `isolate_persistence_host_defender_endpoint` (malicious persistence item backed by active malicious execution), `terminate_running_persisted_process`, `block_malicious_persisted_binary` (at most 10 endpoints). Persistence signals weighted 1.0. MITRE: TA0003 with T1547/T1547.001, T1053/T1053.005, T1543/T1543.003, T1546/T1546.003, T1176/T1176.001 (Software Extensions / Browser Extensions, ATT&CK v17). T1136 (legacy) is deliberately not mapped: no VERIFIED source shows account creation.
+- `src/xdr_response/workflows/persistence/hooks.py`: `PersistenceHooks` (facts `hashes`, `items`, `isolate`, `running`; `WORKFLOW` links item to binary and its execution events; `considered`: one **manual step** `remove_persistence:<ENDPOINT>/<item id>` per malicious item, plus items not rated malicious, dormant endpoints (`isolate_endpoint:<ENDPOINT>`), widespread binaries and unrated incident hashes (`block_hash:<sha256>`)). No hand-offs (`handoff_to` is empty).
+- Removing a persistence item has no VERIFIED vendor write and no catalog integration (`remove_persistence` never routes), so it is never a rule: it is a manual step with records. A rule for it could never be PROPOSED, which `check_coverage` requires.
+- A persistence item rated malicious whose binary is clean (a system tool with hostile arguments) never leads to a hash block or a termination of that binary.
+- Browser extensions are recognised from mechanism `other` plus an extension path or name (`hooks.is_browser_extension`) until the record model gets a `browser_extension` mechanism (requested contract change).
+- Scenarios: the minimum set of 14.5.3, edges `edge-defender-wmi-subscription`, `edge-system-binary-not-blocked`, `edge-browser-extension-dormant`, `edge-widespread-binary`, and `legacy-01` to `legacy-05`.
+- Tests: `tests/workflows/persistence/test_persistence_definition.py`, `test_persistence_hooks.py`, `test_persistence_lifecycle.py` (unique basenames).
+- Related workflows: `malware`, `privilege-escalation`, `c2` (network indicators the persisted binary contacted belong to c2).
 
 ## Definition of done (section 14.5.4)
 
 1. The definition imports and validates.
 2. `python tools/validation/check_workflow_readmes.py --workflow persistence` passes.
-3. `python -m pytest -q -p no:cacheprovider tests/workflows/persistence tests/simulation/test_workflow_scenarios.py -k persistence` passes.
+3. `python -m pytest -q -p no:cacheprovider tests/workflows/persistence tests/simulation/test_workflow_scenarios.py -k persistence` passes (every rule PROPOSED in some scenario, every scenario in dry run and simulated live).
 4. The read-zone safety tests pass (`tests/safety/test_read_zone.py`).
 5. `python tools/validation/generate_workflow_docs.py --check` reports only the expected regeneration (the phase integrator runs `--write`; you never edit generated files).
 
-Scenarios (14.5.3): `tp-approve-all`, `tp-approve-selected`, `tp-reject`, `benign-no-action`, `degraded-source`, `critical-asset-elevated`, `partial-failure`, `dry-run`, `release-restoration`, at least two `edge-<slug>` (for example: `remove_persistence` unrouted, manual note) and one `legacy-<NN>-<slug>` per legacy scenario. Test data is fake only: `example.com`, `*.example`, `*.test`, documentation IP ranges, fake 64-hex hashes, hosts like `TH-LT-1047`, users like `jsmith@example.com`.
+Scenarios (14.5.3): `tp-approve-all`, `tp-approve-selected`, `tp-reject`, `benign-no-action`, `degraded-source`, `critical-asset-elevated`, `partial-failure`, `dry-run`, `release-restoration`, at least two `edge-<slug>` (removal is a manual step, never an unrouted rule) and one `legacy-<NN>-<slug>` per legacy scenario. Test data is fake only: `example.com`, `*.example`, `*.test`, documentation IP ranges, fake 64-hex hashes, hosts like `TH-LT-1047`, users like `jsmith@example.com`.
+
+## Framework conventions (Phase 2 integration, architecture 14.10)
+
+- An action the workflow examines and deliberately does not recommend (a widespread hash, shared infrastructure, a policy that forbids the action) is returned by the hook `considered()` as a `Consideration` citing its records; a step with no VERIFIED write is a `Consideration(manual=True)`. Never leave it only in facts or rationale text.
+- A suggestion to run another workflow is a hook `handoffs()` item (`Handoff`), and its target must be listed in the definition's `handoff_to` (a subset of `related_workflows`). An entry-vector workflow that concludes an account is compromised hands off to `account-takeover`. Keep `workflows/README.md` in step (a test compares it with `handoff_to`); pin hand-offs and considered items in scenarios with `expect.handoffs`, `expect.considered`, `expect.manual_steps`.
+- Email quarantine and delete rules pass the message's single `recipient` and never a vendor verdict: the Secure Email verdict comes from `integrations.secure_email.options.quarantine_verdict` (14.10.3).
 
 ## Non-negotiable rules
 

@@ -1,0 +1,59 @@
+# Persistence workflow scenario; fake lab data only.
+schema: 1
+name: edge-browser-extension-dormant
+workflow: persistence
+description: >-
+  Edge case. The endpoint source reports a browser extension (mechanism other, extension path) whose
+  package file two vendors rate malicious. Nothing executed it and no detection is active, so the
+  endpoint is not isolated (listed as considered: dormant) while the extension file's hash block is
+  proposed. Removing the extension (and blocking it by browser policy) is the manual step.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {secure_endpoint: [endpoint], virustotal: [intel]}
+incident:
+  incident_id: XDR-PER-0013
+  title: Browser extension installed from outside the store on TH-LT-4402
+  severity: MEDIUM
+  workflow_id: persistence
+  observables:
+    - {type: hostname, value: TH-LT-4402}
+  users: [rpatel@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1176.001]}
+environment:
+  reputations:
+    - {type: sha256, value: e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1,
+       verdict: MALICIOUS, risk_score: 85, confidence: 80, integrations: [secure_endpoint, virustotal],
+       summary: "credential-stealing extension"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-4402
+      record: {kind: endpoint, hostname: TH-LT-4402, connector_guid: 00000000-0000-4000-8000-000000004402,
+               os: Windows 11, groups: [Workstations], users: [rpatel@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-4402
+      record: {kind: persistence_item, endpoint: TH-LT-4402, item_id: ext-pdfhelper, mechanism: other,
+               name: PDF Helper browser extension,
+               path: "C:/Users/rpatel/AppData/Local/Browser/User Data/Default/Extensions/pdfhelper/1.0/pdfhelper.crx",
+               sha256: e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1,
+               user: rpatel@example.com, created_at: "2026-01-15T10:20:00Z"}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1
+      record: {kind: hash_prevalence, sha256: e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1,
+               file_name: pdfhelper.crx, prevalence: 1, endpoints: [TH-LT-4402]}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - block_hash:e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1
+  elevated: []
+  excluded: []
+  unrouted: []
+  below_threshold: []
+  considered: [isolate_endpoint:TH-LT-4402]
+  manual_steps: [remove_persistence:TH-LT-4402/ext-pdfhelper]
+  containment: CONTAINED
+  controls: 1

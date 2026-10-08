@@ -1,0 +1,72 @@
+# Persistence workflow scenario; fake lab data only.
+schema: 1
+name: edge-system-binary-not-blocked
+workflow: persistence
+description: >-
+  Edge case. A scheduled task that the endpoint source rates malicious starts a legitimate, widely
+  deployed system scripting host with hostile arguments, and the agent reports an active malicious
+  detection on the host. The endpoint is isolated, but the binary's hash is never blocked (it is
+  rated clean and present on thousands of endpoints) and its process is not terminated: blocking a
+  system tool would break the estate. Deleting the task is the manual step.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {secure_endpoint: [endpoint], virustotal: [intel]}
+incident:
+  incident_id: XDR-PER-0012
+  title: Scheduled task registered with script host arguments on TH-LT-3301
+  severity: HIGH
+  workflow_id: persistence
+  observables:
+    - {type: hostname, value: TH-LT-3301}
+  users: [akim@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1053.005]}
+environment:
+  reputations:
+    - {type: sha256, value: 5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e,
+       verdict: CLEAN, risk_score: 0, confidence: 90, integrations: [secure_endpoint, virustotal],
+       summary: "signed operating system component"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3301
+      record: {kind: endpoint, hostname: TH-LT-3301, connector_guid: 00000000-0000-4000-8000-000000003301,
+               os: Windows 11, groups: [Workstations], users: [akim@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3301
+      record: {kind: persistence_item, endpoint: TH-LT-3301, item_id: task-syncprofile, mechanism: scheduled_task,
+               name: SyncProfileDaily, path: "C:/Windows/System32/scripthost.exe",
+               sha256: 5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e, verdict: MALICIOUS,
+               user: akim@example.com, created_at: "2026-01-15T07:45:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3301
+      record: {kind: detection, detection_id: det-per-3301-1, name: Sample.ScriptLauncher.Behavior, verdict: MALICIOUS,
+               severity: HIGH, endpoint: TH-LT-3301, user: akim@example.com, status: active,
+               first_seen: "2026-01-15T08:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3301
+      record: {kind: process_event, event_id: evt-per-3301-1, endpoint: TH-LT-3301, timestamp: "2026-01-15T08:00:00Z",
+               event_type: process_start, process_name: scripthost.exe, pid: 6120,
+               parent_process_name: taskhost.exe, parent_pid: 900, sha256: 5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e
+      record: {kind: hash_prevalence, sha256: 5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e,
+               file_name: scripthost.exe, verdict: CLEAN, prevalence: 4200, truncated: true,
+               endpoints: [TH-LT-3301, TH-LT-1047]}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:TH-LT-3301
+  elevated: []
+  excluded: []
+  unrouted: []
+  below_threshold: []
+  considered: []
+  manual_steps: [remove_persistence:TH-LT-3301/task-syncprofile]
+  containment: CONTAINED
+  controls: 1

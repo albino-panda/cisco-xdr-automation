@@ -1,0 +1,160 @@
+# Persistence workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-05-fleet-wide-service
+workflow: persistence
+description: >-
+  Migrated legacy scenario 05 (blast radius, aligned with C5). The same malicious service binary was
+  installed and is running on six workstations within minutes, which points at a compromised
+  deployment channel. Six endpoints exceed the max_endpoints cap (5), so every isolation stays proposed
+  with ELEVATED approval and a blast-radius warning, and the lead approves. The single hash block
+  (prevalence 6) is proposed behind normal approval. Removing the service is a manual step per host.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/persistence/scenarios/05-fleet-wide-service.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-3005
+  title: Same new service installed on six workstations within ten minutes
+  severity: CRITICAL
+  workflow_id: persistence
+  source: Cisco XDR
+  observables:
+    - {type: sha256, value: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6}
+    - {type: hostname, value: ws-ops-101}
+    - {type: hostname, value: ws-ops-102}
+    - {type: hostname, value: ws-ops-103}
+    - {type: hostname, value: ws-ops-104}
+    - {type: hostname, value: ws-ops-105}
+    - {type: hostname, value: ws-ops-106}
+  trigger: {source: cisco_xdr, mitre_techniques: [T1543.003]}
+environment:
+  reputations:
+    - {type: sha256, value: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6,
+       verdict: MALICIOUS, risk_score: 95, confidence: 85, integrations: [secure_endpoint, virustotal],
+       summary: "disposition malicious"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-101
+      record: {kind: endpoint, hostname: WS-OPS-101, connector_guid: 00000000-0000-4000-8000-000000000101,
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-101
+      record: {kind: persistence_item, endpoint: WS-OPS-101, item_id: svc-wintelemetryhost, mechanism: service,
+               name: WinTelemetryHost, sha256: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-101
+      record: {kind: detection, name: Trojan.ServiceHost, verdict: MALICIOUS, severity: HIGH, endpoint: WS-OPS-101,
+               status: active, sha256: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-102
+      record: {kind: endpoint, hostname: WS-OPS-102, connector_guid: 00000000-0000-4000-8000-000000000102,
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-102
+      record: {kind: persistence_item, endpoint: WS-OPS-102, item_id: svc-wintelemetryhost, mechanism: service,
+               name: WinTelemetryHost, sha256: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-102
+      record: {kind: detection, name: Trojan.ServiceHost, verdict: MALICIOUS, severity: HIGH, endpoint: WS-OPS-102,
+               status: active, sha256: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-103
+      record: {kind: endpoint, hostname: WS-OPS-103, connector_guid: 00000000-0000-4000-8000-000000000103,
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-103
+      record: {kind: persistence_item, endpoint: WS-OPS-103, item_id: svc-wintelemetryhost, mechanism: service,
+               name: WinTelemetryHost, sha256: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-103
+      record: {kind: detection, name: Trojan.ServiceHost, verdict: MALICIOUS, severity: HIGH, endpoint: WS-OPS-103,
+               status: active, sha256: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-104
+      record: {kind: endpoint, hostname: WS-OPS-104, connector_guid: 00000000-0000-4000-8000-000000000104,
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-104
+      record: {kind: persistence_item, endpoint: WS-OPS-104, item_id: svc-wintelemetryhost, mechanism: service,
+               name: WinTelemetryHost, sha256: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-104
+      record: {kind: detection, name: Trojan.ServiceHost, verdict: MALICIOUS, severity: HIGH, endpoint: WS-OPS-104,
+               status: active, sha256: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-105
+      record: {kind: endpoint, hostname: WS-OPS-105, connector_guid: 00000000-0000-4000-8000-000000000105,
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-105
+      record: {kind: persistence_item, endpoint: WS-OPS-105, item_id: svc-wintelemetryhost, mechanism: service,
+               name: WinTelemetryHost, sha256: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-105
+      record: {kind: detection, name: Trojan.ServiceHost, verdict: MALICIOUS, severity: HIGH, endpoint: WS-OPS-105,
+               status: active, sha256: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-106
+      record: {kind: endpoint, hostname: WS-OPS-106, connector_guid: 00000000-0000-4000-8000-000000000106,
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-106
+      record: {kind: persistence_item, endpoint: WS-OPS-106, item_id: svc-wintelemetryhost, mechanism: service,
+               name: WinTelemetryHost, sha256: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-106
+      record: {kind: detection, name: Trojan.ServiceHost, verdict: MALICIOUS, severity: HIGH, endpoint: WS-OPS-106,
+               status: active, sha256: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6
+      record: {kind: hash_prevalence, sha256: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6, verdict: MALICIOUS, prevalence: 6,
+               endpoints: [WS-OPS-101, WS-OPS-102, WS-OPS-103, WS-OPS-104, WS-OPS-105, WS-OPS-106]}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - block_hash:6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6
+    - isolate_endpoint:WS-OPS-101
+    - isolate_endpoint:WS-OPS-102
+    - isolate_endpoint:WS-OPS-103
+    - isolate_endpoint:WS-OPS-104
+    - isolate_endpoint:WS-OPS-105
+    - isolate_endpoint:WS-OPS-106
+  elevated:
+    - isolate_endpoint:WS-OPS-101
+    - isolate_endpoint:WS-OPS-102
+    - isolate_endpoint:WS-OPS-103
+    - isolate_endpoint:WS-OPS-104
+    - isolate_endpoint:WS-OPS-105
+    - isolate_endpoint:WS-OPS-106
+  excluded: []
+  warnings: [ELEVATED APPROVAL REQUIRED, exceeds the blast-radius cap of 5]
+  manual_steps:
+    - remove_persistence:WS-OPS-101/svc-wintelemetryhost
+    - remove_persistence:WS-OPS-102/svc-wintelemetryhost
+    - remove_persistence:WS-OPS-103/svc-wintelemetryhost
+    - remove_persistence:WS-OPS-104/svc-wintelemetryhost
+    - remove_persistence:WS-OPS-105/svc-wintelemetryhost
+    - remove_persistence:WS-OPS-106/svc-wintelemetryhost
+  considered: []
+  containment: CONTAINED
+  controls: 7

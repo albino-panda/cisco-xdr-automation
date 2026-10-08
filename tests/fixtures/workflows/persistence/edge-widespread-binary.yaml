@@ -1,0 +1,70 @@
+# Persistence workflow scenario; fake lab data only.
+schema: 1
+name: edge-widespread-binary
+workflow: persistence
+description: >-
+  Edge case. A malicious service binary is running on TH-LT-5501, but the estate search sees the same
+  binary on 40 endpoints. The endpoint is isolated and the service process terminated; the hash is
+  not proposed for a fleet-wide block (more than 10 endpoints) and is listed as considered with its
+  prevalence record, so a human decides. Removing the service is the manual step.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {secure_endpoint: [endpoint], virustotal: [intel]}
+incident:
+  incident_id: XDR-PER-0014
+  title: New service installed on TH-LT-5501
+  severity: HIGH
+  workflow_id: persistence
+  observables:
+    - {type: hostname, value: TH-LT-5501}
+  users: []
+  trigger: {source: secure_endpoint, mitre_techniques: [T1543.003]}
+environment:
+  reputations:
+    - {type: sha256, value: d15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5ed,
+       verdict: MALICIOUS, risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal],
+       summary: "service backdoor"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-5501
+      record: {kind: endpoint, hostname: TH-LT-5501, connector_guid: 00000000-0000-4000-8000-000000005501,
+               os: Windows 11, groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-5501
+      record: {kind: persistence_item, endpoint: TH-LT-5501, item_id: svc-wintelemetryhost, mechanism: service,
+               name: WinTelemetryHost, path: "C:/ProgramData/wth/wthost.exe",
+               sha256: d15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5ed, created_at: "2026-01-15T06:10:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-5501
+      record: {kind: detection, detection_id: det-per-5501-1, name: Sample.ServiceHost.Backdoor, verdict: MALICIOUS,
+               severity: HIGH, endpoint: TH-LT-5501, status: active,
+               sha256: d15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5ed, first_seen: "2026-01-15T06:12:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-5501
+      record: {kind: process_event, event_id: evt-per-5501-1, endpoint: TH-LT-5501, timestamp: "2026-01-15T06:11:00Z",
+               event_type: process_start, process_name: wthost.exe, pid: 5150,
+               parent_process_name: services.exe, parent_pid: 640, sha256: d15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5ed}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: d15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5ed
+      record: {kind: hash_prevalence, sha256: d15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5ed,
+               file_name: wthost.exe, verdict: MALICIOUS, prevalence: 40, truncated: true,
+               endpoints: [TH-LT-5501]}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:TH-LT-5501
+    - terminate_process:TH-LT-5501/5150
+  elevated: []
+  excluded: []
+  unrouted: []
+  below_threshold: []
+  considered: [block_hash:d15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5ed]
+  manual_steps: [remove_persistence:TH-LT-5501/svc-wintelemetryhost]
+  containment: CONTAINED
+  controls: 1

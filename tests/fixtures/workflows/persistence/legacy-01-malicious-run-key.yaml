@@ -1,0 +1,74 @@
+# Persistence workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-01-malicious-run-key
+workflow: persistence
+description: >-
+  Migrated legacy scenario 01 (true positive). A new HKCU Run value on WS-FIN-014 points at a binary
+  that Secure Endpoint and VirusTotal rate malicious; the agent reports an active malicious detection
+  and the trajectory shows the binary starting and connecting to cdn-update.test. The package blocks
+  the hash and isolates the host, both behind approval; the trajectory names no hash or pid for the
+  process, so no termination is proposed. Removing the Run value is the manual step. The callback
+  domain is context only (the c2 workflow blocks network indicators).
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/persistence/scenarios/01-malicious-run-key.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-3001
+  title: New Run key value launching unknown binary on ws-fin-014
+  severity: HIGH
+  workflow_id: persistence
+  source: Cisco Secure Endpoint
+  observables:
+    - {type: sha256, value: 1f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a7980}
+    - {type: domain, value: cdn-update.test}
+    - {type: hostname, value: ws-fin-014}
+  trigger: {source: secure_endpoint, mitre_techniques: [T1547.001]}
+environment:
+  reputations:
+    - {type: sha256, value: 1f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a7980,
+       verdict: MALICIOUS, risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal],
+       summary: "disposition malicious"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-014
+      record: {kind: endpoint, hostname: WS-FIN-014, connector_guid: 00000000-0000-4000-8000-000000003014,
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-014
+      record: {kind: persistence_item, endpoint: WS-FIN-014, item_id: run-onedrivesync, mechanism: run_key,
+               name: HKCU Run value OneDriveSync, sha256: 1f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a7980}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-014
+      record: {kind: detection, name: W32.GenericKD.Persist, verdict: MALICIOUS, severity: HIGH, endpoint: WS-FIN-014,
+               status: active, sha256: 1f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a7980}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-014
+      record: {kind: process_event, endpoint: WS-FIN-014, timestamp: "2026-01-15T11:40:00Z", event_type: process_start,
+               process_name: odsync.exe}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-014
+      record: {kind: network_connection, endpoint: WS-FIN-014, domain: cdn-update.test, direction: outbound,
+               process_name: odsync.exe, first_seen: "2026-01-15T11:41:00Z"}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 1f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a7980
+      record: {kind: hash_prevalence, sha256: 1f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a7980, verdict: MALICIOUS, prevalence: 1,
+               endpoints: [WS-FIN-014]}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:WS-FIN-014
+    - block_hash:1f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a7980
+  elevated: []
+  excluded: []
+  manual_steps: [remove_persistence:WS-FIN-014/run-onedrivesync]
+  considered: []
+  containment: CONTAINED
+  controls: 2

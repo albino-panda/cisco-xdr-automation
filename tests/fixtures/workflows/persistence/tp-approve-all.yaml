@@ -1,0 +1,82 @@
+# Persistence workflow scenario; fake lab data only.
+schema: 1
+name: tp-approve-all
+workflow: persistence
+description: >-
+  True positive on one workstation. A new HKCU Run value launches a binary that Secure Endpoint and
+  VirusTotal rate malicious; the agent reports an active detection and the binary is still running.
+  The package isolates the workstation, terminates the running persisted process and blocks the
+  binary's hash. Removing the Run value has no VERIFIED vendor write and is listed as a manual step.
+  The analyst approves everything; every action executes and the reversible ones are registered.
+tags: [true_positive, approve_all]
+mode: both
+suite: {secure_endpoint: [endpoint], virustotal: [intel]}
+incident:
+  incident_id: XDR-PER-0001
+  title: New Run key value launching unknown binary on TH-LT-1047
+  severity: HIGH
+  workflow_id: persistence
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+    - {type: sha256, value: 0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5}
+  users: [jsmith@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1547.001]}
+environment:
+  reputations:
+    - {type: sha256, value: 0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5,
+       verdict: MALICIOUS, risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal],
+       summary: "persistence backdoor"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, groups: [Workstations], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: persistence_item, endpoint: TH-LT-1047, item_id: run-onedrivesync, mechanism: run_key,
+               name: HKCU Run value OneDriveSync, path: "C:/Users/jsmith/AppData/Roaming/odsync.exe",
+               sha256: 0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5,
+               user: jsmith@example.com, created_at: "2026-01-15T11:30:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-per-1047-1, name: Sample.Backdoor.Persist, verdict: MALICIOUS,
+               severity: HIGH, endpoint: TH-LT-1047, user: jsmith@example.com, status: active,
+               sha256: 0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5,
+               process_name: odsync.exe, first_seen: "2026-01-15T11:41:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: process_event, event_id: evt-per-1047-1, endpoint: TH-LT-1047, timestamp: "2026-01-15T11:40:00Z",
+               event_type: process_start, process_name: odsync.exe, pid: 4242, parent_process_name: explorer.exe,
+               parent_pid: 1180, sha256: 0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5,
+               user: jsmith@example.com}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5
+      record: {kind: hash_prevalence, sha256: 0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5,
+               file_name: odsync.exe, verdict: MALICIOUS, prevalence: 1, endpoints: [TH-LT-1047]}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - terminate_process:TH-LT-1047/4242
+    - block_hash:0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5
+  elevated: []
+  excluded: []
+  unrouted: []
+  below_threshold: []
+  risk: {min: 80, max: 100}
+  confidence: {min: 60, max: 100}
+  degraded_sources: []
+  considered: []
+  manual_steps: [remove_persistence:TH-LT-1047/run-onedrivesync]
+  handoffs: []
+  evidence_min: 1
+  containment: CONTAINED
+  controls: 2
+  notifications: [incident_note, soc_notification, analyst_summary]

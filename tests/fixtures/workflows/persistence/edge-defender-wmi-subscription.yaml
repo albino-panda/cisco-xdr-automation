@@ -1,0 +1,66 @@
+# Persistence workflow scenario; fake lab data only.
+schema: 1
+name: edge-defender-wmi-subscription
+workflow: persistence
+description: >-
+  Edge case. A WMI event subscription on an endpoint managed by Defender for Endpoint (no Secure
+  Endpoint connector) launches a malicious consumer binary that is running. Isolation goes through
+  the Defender builder, the hash block and the termination route to Defender too. Secure Endpoint
+  (a required integration) is not enabled in this tenant: the run notes it and still recommends from
+  the Defender and VirusTotal evidence. Removing the filter, consumer and binding is a manual step.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {defender_endpoint: [endpoint, network], virustotal: [intel]}
+incident:
+  incident_id: XDR-PER-0011
+  title: WMI event subscription created on TH-LT-2210
+  severity: HIGH
+  workflow_id: persistence
+  observables:
+    - {type: hostname, value: TH-LT-2210}
+  users: [mlee@example.com]
+  trigger: {source: defender_endpoint, mitre_techniques: [T1546.003]}
+environment:
+  reputations:
+    - {type: sha256, value: 3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e,
+       verdict: MALICIOUS, risk_score: 90, confidence: 85, integrations: [defender_endpoint, virustotal],
+       summary: "WMI consumer backdoor"}
+  records:
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: endpoint, hostname: TH-LT-2210, mde_machine_id: 0f0e0d0c0b0a09080706050403020100aabbccdd,
+               os: Windows 11, groups: [Workstations], users: [mlee@example.com],
+               isolation_state: not_isolated}
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: persistence_item, endpoint: TH-LT-2210, item_id: wmi-updconsumer, mechanism: wmi_subscription,
+               name: UpdConsumer event subscription, path: "C:/ProgramData/upd/wmihost.exe",
+               sha256: 3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e, created_at: "2026-01-15T08:55:00Z"}
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: detection, detection_id: det-per-2210-1, name: Sample.WmiPersistence, verdict: MALICIOUS,
+               severity: HIGH, endpoint: TH-LT-2210, status: active, category: Persistence,
+               sha256: 3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e, first_seen: "2026-01-15T09:02:00Z"}
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: process_event, event_id: evt-per-2210-1, endpoint: TH-LT-2210, timestamp: "2026-01-15T09:00:00Z",
+               event_type: process_start, process_name: wmihost.exe, pid: 7310,
+               parent_process_name: wmiprvse.exe, parent_pid: 2204, sha256: 3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:TH-LT-2210
+    - terminate_process:TH-LT-2210/7310
+    - block_hash:3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e
+  elevated: []
+  excluded: []
+  unrouted: []
+  manual_steps: [remove_persistence:TH-LT-2210/wmi-updconsumer]
+  considered: []
+  containment: CONTAINED
+  controls: 2

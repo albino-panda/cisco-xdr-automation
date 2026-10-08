@@ -1,0 +1,56 @@
+# Persistence workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-02-legit-updater-service
+workflow: persistence
+description: >-
+  Migrated legacy scenario 02 (benign). A software rollout installed a signed vendor updater as a
+  Windows service. The binary is clean and widespread, its update domain is clean and the host has no
+  malicious detection, so nothing is proposed and the run only records the review.
+tags: [legacy, benign]
+legacy_source: workflows/persistence/scenarios/02-legit-updater-service.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-3002
+  title: New service installed on ws-eng-201
+  severity: LOW
+  workflow_id: persistence
+  source: Cisco XDR
+  observables:
+    - {type: sha256, value: 2a3b4c5d6e7f80912a3b4c5d6e7f80912a3b4c5d6e7f80912a3b4c5d6e7f8091}
+    - {type: domain, value: updates.example.com}
+    - {type: hostname, value: ws-eng-201}
+  trigger: {source: cisco_xdr, change_ticket: CHG-TEST-0412}
+environment:
+  reputations:
+    - {type: sha256, value: 2a3b4c5d6e7f80912a3b4c5d6e7f80912a3b4c5d6e7f80912a3b4c5d6e7f8091,
+       verdict: CLEAN, risk_score: 0, confidence: 80, integrations: [secure_endpoint, virustotal],
+       summary: "disposition clean"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-ENG-201
+      record: {kind: endpoint, hostname: WS-ENG-201, connector_guid: 00000000-0000-4000-8000-000000003201,
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-ENG-201
+      record: {kind: persistence_item, endpoint: WS-ENG-201, item_id: svc-examplevendorupdatesvc, mechanism: service,
+               name: ExampleVendorUpdateSvc, sha256: 2a3b4c5d6e7f80912a3b4c5d6e7f80912a3b4c5d6e7f80912a3b4c5d6e7f8091}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-ENG-201
+      record: {kind: process_event, endpoint: WS-ENG-201, timestamp: "2026-01-15T09:00:00Z", event_type: service,
+               process_name: ExampleVendorUpdateSvc}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 2a3b4c5d6e7f80912a3b4c5d6e7f80912a3b4c5d6e7f80912a3b4c5d6e7f8091
+      record: {kind: hash_prevalence, sha256: 2a3b4c5d6e7f80912a3b4c5d6e7f80912a3b4c5d6e7f80912a3b4c5d6e7f8091, verdict: CLEAN, prevalence: 812,
+               truncated: true, endpoints: [WS-ENG-201, WS-ENG-202, WS-FIN-014]}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  considered: []
+  manual_steps: []
+  notifications: [incident_note]

@@ -1,0 +1,72 @@
+# Persistence workflow scenario; fake lab data only.
+schema: 1
+name: critical-asset-elevated
+workflow: persistence
+description: >-
+  An hourly scheduled task on a production application server (critical asset) launches a
+  malicious agent that is running. Isolation and process termination on the server need ELEVATED
+  approval with a visible warning; an analyst alone cannot approve, the lead does. The hash block
+  stays STANDARD. The manual removal step names the critical asset.
+tags: [critical_asset, true_positive, approve_all]
+mode: both
+suite: {secure_endpoint: [endpoint], virustotal: [intel]}
+incident:
+  incident_id: XDR-PER-0006
+  title: Scheduled task created on PRD-APP-03 running unknown binary
+  severity: HIGH
+  workflow_id: persistence
+  observables:
+    - {type: hostname, value: PRD-APP-03}
+    - {type: sha256, value: 5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e}
+  users: []
+  trigger: {source: secure_endpoint, mitre_techniques: [T1053.005]}
+environment:
+  reputations:
+    - {type: sha256, value: 5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e,
+       verdict: MALICIOUS, risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal],
+       summary: "remote access agent"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: PRD-APP-03
+      record: {kind: endpoint, hostname: PRD-APP-03, connector_guid: 00000000-0000-4000-8000-0000000000a3,
+               os: Windows Server 2022, groups: [Servers], tags: [production], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: PRD-APP-03
+      record: {kind: persistence_item, endpoint: PRD-APP-03, item_id: task-updatecheck, mechanism: scheduled_task,
+               name: UpdateCheckHourly, path: "C:/ProgramData/updchk/updchk.exe",
+               sha256: 5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e,
+               user: svc-app@example.com, created_at: "2026-01-15T10:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: PRD-APP-03
+      record: {kind: detection, detection_id: det-per-prd-app-03-1, name: Sample.Agent.Persist, verdict: MALICIOUS,
+               severity: HIGH, endpoint: PRD-APP-03, status: active,
+               sha256: 5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e,
+               process_name: updchk.exe, first_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: PRD-APP-03
+      record: {kind: process_event, event_id: evt-per-prd-app-03-1, endpoint: PRD-APP-03, timestamp: "2026-01-15T11:00:00Z",
+               event_type: process_start, process_name: updchk.exe, pid: 3100, parent_process_name: svchost.exe,
+               parent_pid: 880, sha256: 5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e
+      record: {kind: hash_prevalence, sha256: 5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e,
+               file_name: updchk.exe, verdict: MALICIOUS, prevalence: 1, endpoints: [PRD-APP-03]}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - isolate_endpoint:PRD-APP-03
+    - terminate_process:PRD-APP-03/3100
+    - block_hash:5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e
+  elevated:
+    - isolate_endpoint:PRD-APP-03
+    - terminate_process:PRD-APP-03/3100
+  warnings: [ELEVATED APPROVAL REQUIRED, Production server]
+  manual_steps: [remove_persistence:PRD-APP-03/task-updatecheck]
+  containment: CONTAINED
+  controls: 2

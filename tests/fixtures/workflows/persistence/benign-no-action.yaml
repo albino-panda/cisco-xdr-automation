@@ -1,0 +1,60 @@
+# Persistence workflow scenario; fake lab data only.
+schema: 1
+name: benign-no-action
+workflow: persistence
+description: >-
+  Benign. A software rollout installed a signed vendor updater as a Windows service, which fired the
+  new-service detection. Secure Endpoint and VirusTotal rate the binary clean, it is on 812
+  endpoints and the host has no malicious detection, so nothing is proposed, no manual step is
+  listed and the incident stays NOT_STARTED.
+tags: [benign]
+mode: both
+suite: {secure_endpoint: [endpoint], virustotal: [intel]}
+incident:
+  incident_id: XDR-PER-0004
+  title: New service installed on TH-LT-2201
+  severity: LOW
+  workflow_id: persistence
+  observables:
+    - {type: hostname, value: TH-LT-2201}
+    - {type: sha256, value: b0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafe}
+  users: []
+  trigger: {source: cisco_xdr, mitre_techniques: [T1543.003]}
+environment:
+  reputations:
+    - {type: sha256, value: b0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafe,
+       verdict: CLEAN, risk_score: 0, confidence: 80, integrations: [secure_endpoint, virustotal],
+       summary: "signed vendor updater"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2201
+      record: {kind: endpoint, hostname: TH-LT-2201, connector_guid: 00000000-0000-4000-8000-000000002201,
+               os: Windows 11, groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2201
+      record: {kind: persistence_item, endpoint: TH-LT-2201, item_id: svc-examplevendorupdate, mechanism: service,
+               name: ExampleVendorUpdateSvc, path: "C:/Program Files/ExampleVendor/update.exe",
+               sha256: b0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafe, created_at: "2026-01-15T09:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2201
+      record: {kind: process_event, event_id: evt-per-2201-1, endpoint: TH-LT-2201, timestamp: "2026-01-15T09:00:00Z",
+               event_type: service, process_name: services.exe}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: b0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafe
+      record: {kind: hash_prevalence, sha256: b0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafe,
+               file_name: update.exe, verdict: CLEAN, prevalence: 812, truncated: true,
+               endpoints: [TH-LT-2201, TH-LT-2202, TH-LT-1047], signer: Example Vendor Inc.}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  unrouted: []
+  below_threshold: []
+  degraded_sources: []
+  considered: []
+  manual_steps: []
+  notifications: [incident_note]
