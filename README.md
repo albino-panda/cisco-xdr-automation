@@ -135,9 +135,9 @@ Copy [`config/integrations.example.yaml`](config/integrations.example.yaml) to `
 What Phase 0 does not do yet:
 
 - No production identity provider. `InMemoryApproverAuthenticator` is for tests and the lab only. Plug in your own `ApproverAuthenticator` before live use.
-- No scoring engine. `RuleBasedRecommender` takes risk and confidence from the enrichment verdicts (kept as two separate numbers). The scoring design is in [`scoring/README.md`](src/xdr_response/scoring/README.md).
+- Scoring: the deterministic scoring engine ([`scoring/README.md`](src/xdr_response/scoring/README.md), [docs/threat-scoring.md](docs/threat-scoring.md)) scores workflow recommendations with separate risk and confidence. Incidents that no migrated workflow handles take the Phase 0 `RuleBasedRecommender` path.
 - An adapter implements an endpoint only if [docs/integrations.md](docs/integrations.md) lists it as VERIFIED with a source. Other operations raise `UnverifiedEndpointError` ("unverified endpoint").
-- Not yet wired to live XDR triggers or the workflow specs (Phase 1).
+- No HTTP intake ships with the repository: a deployment exposes one that receives only the XDR incident ID (see [tools/deployment/xdr-trigger-workflow.md](tools/deployment/xdr-trigger-workflow.md)). No production workflow is migrated yet (Phases 2 to 5); the 19 legacy specs replay through the runtime in dry run.
 
 Phases 1 to 5 are in [architecture section 12](docs/architecture.md#12-recommended-development-phases).
 
@@ -161,9 +161,9 @@ PYTHONPATH=engine python -m xdr_plan plan ransomware workflows/ransomware/scenar
 
 How this feeds later phases:
 
-- **Phase 1** adds a bridge that wraps each planned action as a proposal for `PackageBuilder`, which adds numbered evidence, risk and confidence, the idempotency key and the approval level. The 105 scenarios become simulation fixtures.
-- Spec guardrails become config: protected assets become `config/critical-assets.yaml` (ELEVATED, never silently skipped), allow-lists become `config/allowlists.yaml`, blast-radius caps become `config/thresholds.yaml`.
-- Some specs still conflict with the lifecycle: `revoke-session` has `requires_approval: false` and the example guardrails contain `auto_approve`. The runtime ignores spec approval flags and refuses `auto_approve`. Phase 1 fixes the specs (conflicts C1 to C5 in [architecture section 1.3](docs/architecture.md#13-conflicts-with-the-non-negotiable-lifecycle)).
+- **Phase 1** (done) added `plan_bridge`: each planned action becomes a proposal for `PackageBuilder`, which adds numbered evidence, the idempotency key and the approval level. All 105 scenarios replay through the runtime in dry run (`tests/simulation/test_legacy_replay.py`, `python tools/simulator/simulate.py --legacy <workflow> [<scenario>]`).
+- In the replay, spec guardrails become runtime policy: protected assets become critical assets (ELEVATED, never silently skipped), allow-lists become never-block lists, blast-radius caps become `thresholds` caps.
+- The specs were aligned with the lifecycle (conflicts C1 to C5 in [architecture section 1.3](docs/architecture.md#13-conflicts-with-the-non-negotiable-lifecycle)): every containment atomic, `revoke-session` included, requires approval; `auto_approve` is gone and refused; protected and over-limit actions stay planned as ELEVATED; unlock codes are never copied.
 - **Phases 2 to 5** turn each workflow into data for the framework: rules, scoring weights, MITRE mapping, scenarios. Workflows never hold vendor HTTP code or approval logic.
 
 ## Documentation

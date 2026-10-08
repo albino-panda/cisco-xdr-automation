@@ -6,6 +6,89 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+Phase 1: shared atomic workflows and the workflow framework. Investigation and recommendation
+are automatic; every state-changing action still goes through the Phase 0 human approval, approved
+containment executes automatically, and a release needs its own human approval. Exit criteria:
+architecture 14.7.1 and 14.9.5.
+
+### Added
+- `xdr_response.atomics.context`: `ReadOnlyAdapters` (the only door from the read zone to the
+  adapters: reads, health, manifests and names; never an adapter object), `AtomicContext` and
+  `build_context`; `xdr_response.atomics` composes the read-atomic and containment-builder tables.
+- `xdr_response.workflows`: declarative `WorkflowDefinition` with import-time validators (no
+  approval switch anywhere, expressions parsed against the whitelist, builders matching actions,
+  MITRE ids mapped), the canonical safe rule-expression evaluator (`ids`, `flatten`, `distinct`,
+  `within_minutes`, `in_cidr`, dict literals), pure hooks, discovery and routing (no registry file;
+  a broken workflow fails loudly) and the `WorkflowRunner` (deterministic, never raises for a source,
+  rule or hook; evidence cites the run's records; separate risk and confidence per target).
+- Lifecycle: `WorkflowInvestigator` / `WorkflowRecommender` (Phase 0 generic path as fallback, with
+  a "not migrated yet" note), lifecycle observers and `LifecycleEvent`s from the orchestrator;
+  `build_runtime(workflows=..., observers=...)`, `bootstrap(workflows=True, notifications_path=...)`;
+  incidents are stored with the resolved workflow id and version.
+- Simulator: workflow scenario fixtures (`tools/simulator/workflow_scenario.py`: model, loader,
+  discovery, coverage check, `WorkflowScenarioRun` with implicit safety assertions) and
+  `simulate.py --list-workflows / --workflow <id> [--scenario <name>]`.
+- Validation: `check_workflow_readmes.py`, `validate_config.py`, `check_endpoints.py` and
+  `tools/validation/README.md`.
+- Tests: framework unit tests, a tests-only sample workflow with the full scenario set, the
+  read-zone AST lint and runtime checks (`tests/safety/test_read_zone.py`); CI runs Python 3.12 and
+  3.13 and the new validation tools.
+- Scoring engine (`xdr_response.scoring`, `models/scoring.py`): deterministic, record-backed signals,
+  separate risk and confidence, reputation caps, corroboration, failed-source penalty, configurable
+  weights and bands (`config/thresholds.yaml`), `aggregate_verdict` (one vendor alone is never
+  MALICIOUS); docs/threat-scoring.md is binding.
+- Atomic library: normalized records with deterministic ids (`atomics/records.py`), enrichment and
+  investigation atomics over `ReadOnlyAdapters` (a failing source never blocks the others; the
+  disclosure policy withholds internal data from third parties), correlation and blast radius,
+  the evidence builder (evidence can only cite records of the run), 15 containment recommendation
+  builders (native Cisco XDR first, data only) and notifications (SOC notification, incident note,
+  analyst summary; JSONL outbox).
+- `lifecycle/plan_bridge.py` and `tools/simulator/legacy_replay.py`: all 105 legacy scenarios replay
+  through the runtime in dry run (`tests/simulation/test_legacy_replay.py`,
+  `simulate.py --legacy <workflow> [<scenario>]`).
+- `tools/deployment/xdr-trigger-workflow.md`: the XDR trigger sends only the incident ID.
+- `tests/integration/test_atomics_scoring_evidence.py`: atomics, scoring, evidence and a workflow
+  through the production lifecycle over real adapters and fake vendor APIs.
+
+### Changed
+- Legacy specs aligned with the lifecycle (C1-C5): every containment atomic requires approval
+  (`revoke-session` included), `auto_approve` is removed and refused, protected and over-limit
+  actions stay planned as ELEVATED, unlock codes are never copied; `powershell` and `rmm` renamed to
+  `malicious-powershell` and `unauthorized-rmm`; MITRE mapping and workflow index generated.
+- Block "auto-expiry" wording in legacy specs replaced: `expires_hours` is a release-review
+  reminder, and removal needs a separate human release approval.
+- `simulate.py` runs each scenario in its own process when several are selected (the execution guard
+  allows one runtime per process).
+- CI also replays every legacy workflow and the sample workflow scenarios.
+
+### Fixed
+- The redactor now scrubs command-line flags such as `--password=...` (process and persistence
+  command lines).
+- `WorkflowRun.health` no longer reports a source as `UNKNOWN` because the disclosure policy withheld
+  one observable from it; the runner no longer repeats an identical read in one run.
+- Tests start with a fresh process-wide redactor (secrets registered by one test no longer affect
+  another).
+- Phase 1 safety round 1 (architecture 14.9.6): an endpoint named by its IP inside a critical CIDR
+  is ELEVATED; a duplicate rule merge keeps every rule's asset context and warnings; approval-marker
+  params are refused at any depth; hook signals must be attributed to a source of a cited record;
+  one vendor's enrichment verdict is never an aggregate MALICIOUS or CRITICAL on its own; a source
+  never corroborates itself; a failed source is penalised once; HIBP never receives internal
+  mailboxes; URLs with credentials or secret query values and NAT64/6to4/Teredo-embedded private
+  IPv4 are never disclosed; evidence data is redacted; the same fact from two atomics no longer
+  discards the second result; prose unlock codes are redacted; the legacy bridge carries a legacy
+  protected-asset verdict as a protected tag.
+- Phase 1 safety round 2 (architecture 14.9.7): an unrouted duplicate rule's asset context reaches
+  the routed proposal, and a routable duplicate replaces an unrouted entry instead of being dropped;
+  IPv6 forms of a critical IPv4 address and holders of privileged directory roles
+  (`AssetMatch.roles`, `config/critical-assets.yaml`) are ELEVATED; the incident asset is found by
+  IP for an IP-named endpoint; long incident titles can no longer truncate the ELEVATED warning or
+  the DRY RUN notice out of a notification; a hook cannot launder a vendor verdict as behaviour by
+  citing another source's record; a negligible second source no longer lifts the single-source cap;
+  fragment secrets, signed-URL signatures and credentials, mailbox addresses in URLs, IPv4 literals
+  in any spelling and IPv4-compatible / IPv4-translated / site-local IPv6 are never disclosed;
+  signed-URL signatures and unlock codes phrased with the host name are redacted; the workflow
+  recommender verifies proposal evidence against the run's records.
+
 ## [0.2.0] - 2026-10-06
 
 Phase 0: the `xdr_response` framework foundation. Investigation and recommendation are

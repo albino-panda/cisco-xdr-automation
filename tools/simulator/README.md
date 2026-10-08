@@ -45,3 +45,49 @@ A scenario has `incident`, `environment` (`reputations` with optional `integrati
 
 Exit codes: 0 completed (and expectations met with `--check`), 1 expectations not met or a decision
 refused, 2 usage error.
+
+## Workflow scenarios (Phase 1)
+
+Workflow scenarios live in `tests/fixtures/workflows/<workflow id>/<name>.yaml` (format and minimum
+set: `docs/architecture.md` 14.5.2 and 14.5.3). They run through the workflow framework: the incident
+is routed to its workflow, investigated with typed records that the simulated adapters serve, scored
+and recommended; the analyst decision and the release are played from the scenario.
+
+```
+python tools/simulator/simulate.py --list-workflows
+python tools/simulator/simulate.py --workflow ransomware                      # every scenario, dry run
+python tools/simulator/simulate.py --workflow ransomware --scenario tp-approve-all --live --check
+```
+
+`--check` asserts the scenario's `expect` block plus the implicit assertions every scenario gets:
+zero state-changing calls and zero guard denials before the analyst decision, evidence that cites
+the run's records, separate risk and confidence, ELEVATED with a warning for every critical asset
+(and an analyst alone refused on a `critical_asset` scenario), AI and automation principals refused,
+an intact audit chain and no rule or hook error. A scenario whose `mode` excludes the chosen mode is
+skipped.
+
+Modules: `workflow_scenario.py` (`WorkflowScenario`, `load_workflow_scenario`,
+`discover_workflow_scenarios`, `WorkflowScenarioRun`, `check_coverage`). `ScenarioRun` accepts
+`workflows=` (a `WorkflowCatalog`) and `observers=` (lifecycle observers) for the runtime. The
+tests-only sample workflow and its scenarios are in `tests/fixtures/sample_workflows/`.
+
+When several scenarios are selected (no `--scenario`), each one runs in its own child process: the
+execution guard allows one runtime per process because its approval verifier slot is sealed.
+
+## Legacy replay (Phase 1)
+
+The legacy specs (`workflows/<id>/scenarios/*.yaml`) replay through the runtime in **dry run only**
+(`docs/architecture.md` 14.3.8 and 14.9.1). The legacy plan is built by `engine/xdr_plan`, bridged to
+proposals by `xdr_response.lifecycle.plan_bridge` (evidence cites the legacy results), packaged by
+`PackageBuilder` (allow-lists, ELEVATED for protected assets, blast-radius caps from the scenario's
+guardrails) and simulated. Nothing is approved and nothing is executed.
+
+```
+python tools/simulator/simulate.py --legacy malware                         # every scenario of the workflow
+python tools/simulator/simulate.py --legacy malware 01-executed-payload --check
+```
+
+`--check` compares the package with the scenario's `expect` block (planned actions in the package,
+`elevated: true` as ELEVATED with a warning, skipped actions absent, `escalate` as a blast-radius
+warning) and fails on any state-changing call or guard denial. `tests/simulation/test_legacy_replay.py`
+replays all of them.

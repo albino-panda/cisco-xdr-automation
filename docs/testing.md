@@ -43,14 +43,15 @@ CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs on every pus
 1. `python -m pytest` (the whole suite).
 2. `PYTHONPATH=engine python -m xdr_plan check` (workflow specs and their scenarios).
 3. The simulator for each bundled scenario, live and dry run, with `--check`.
+4. The validation tools (`generate_workflow_docs.py --check`, `check_workflow_readmes.py`, `validate_config.py`, `check_endpoints.py`) and the legacy replay of every workflow (`simulate.py --legacy <id> --check`).
 
 ## 3. Test layers
 
 | Layer | Location | What it proves |
 |---|---|---|
-| Unit | `tests/unit/<component>/` | Each module in isolation. Folders: `approval`, `audit`, `core` (models, config, secrets, redaction, guard, states), `dryrun`, `execution`, `integrations` (HTTP client, auth, health, registry), `lifecycle`, `reporting`, `restoration`, `vendors` (the 16 adapters), `verification` |
-| Integration | `tests/integration/` | The production runtime (`build_runtime`) with real Umbrella, Entra and VirusTotal adapters against stateful fake vendor APIs (`_fake_vendors.py`): detect, approve, contain, verify, release; token refresh; auth failure and outage on the write path; failed enrichment not blocking a recommendation |
-| Simulation | `tests/simulation/` | Every fixture incident through the whole lifecycle with simulated adapters. Dry run never reaches a state change. Live runs meet each scenario's expectations |
+| Unit | `tests/unit/<component>/` | Each module in isolation. Folders: `approval`, `atomics` (records, enrichment, investigation, correlation, evidence, containment builders, notifications, context), `audit`, `core` (models, config, secrets, redaction, guard, states), `dryrun`, `execution`, `integrations` (HTTP client, auth, health, registry), `legacy` (the aligned `xdr_plan` engine), `lifecycle` (including `plan_bridge` and the workflow adapter), `reporting`, `restoration`, `scoring`, `vendors` (the 16 adapters), `verification`, `workflows` (definitions, expressions, discovery, runner, scenario format, validation CLIs) |
+| Integration | `tests/integration/` | The production runtime (`build_runtime`) with real Umbrella, Entra and VirusTotal adapters against stateful fake vendor APIs (`_fake_vendors.py`): detect, approve, contain, verify, release; token refresh; auth failure and outage on the write path; failed enrichment not blocking a recommendation. `test_atomics_scoring_evidence.py` runs the Phase 1 read zone end to end (enrichment and investigation atomics, scoring, correlation, evidence, containment builders) and a workflow through the lifecycle up to the human decision |
+| Simulation | `tests/simulation/` | Every fixture incident through the whole lifecycle with simulated adapters. Dry run never reaches a state change. Live runs meet each scenario's expectations. Every workflow scenario (`test_workflow_scenarios.py`) and every legacy scenario replayed through `plan_bridge` in dry run (`test_legacy_replay.py`) |
 | Safety | `tests/safety/` | Adversarial tests. Each one tries a real way to bypass approval, forge authority, leak a secret or rewrite history, and asserts that it is refused (section 4) |
 | Legacy spec tests | `tests/test_engine.py`, `tests/test_repo.py`, `tests/test_workflows.py` | The 69 original tests: plan-rule engine, repository consistency (YAML parses, relative Markdown links resolve, MITRE mapping in sync), workflow scenarios |
 
@@ -154,7 +155,11 @@ The workflow specs under `workflows/` have their own scenarios, replayed by the 
 PYTHONPATH=engine python -m xdr_plan check
 ```
 
-`tests/test_workflows.py` runs the same scenarios inside pytest. Phase 1 replays them through the `xdr_response` runtime in dry run ([architecture.md](architecture.md) section 12).
+`tests/test_workflows.py` runs the same scenarios inside pytest. `tests/simulation/test_legacy_replay.py` replays every one of them through the `xdr_response` runtime in dry run (`plan_bridge`, `PackageBuilder`, the DRY RUN simulator) and checks the `expect` block, zero state-changing calls and zero guard denials ([architecture.md](architecture.md) sections 12 and 14.3.8). One scenario from the command line:
+
+```bash
+python tools/simulator/simulate.py --legacy malware 01-executed-payload --check
+```
 
 ## 7. Before you merge
 
