@@ -1,0 +1,72 @@
+# Unauthorised remote access tool scenario; fake lab data only.
+schema: 1
+name: edge-defender-managed-endpoint
+workflow: unauthorized-rmm
+description: >-
+  Edge case: the endpoint is managed by Defender for Endpoint only (machine id, no Secure Endpoint
+  connector), and the RustDesk client talks directly to a self-hosted relay IP that Defender's own
+  network telemetry rates MALICIOUS (no relay domain). Isolation is proposed through Defender (the
+  Secure Endpoint rule does not apply); the process termination, the binary block and the peer IP
+  block land on Defender too. Secure Endpoint and Umbrella (both required) are not enabled in this
+  tenant: the run notes it and confidence drops, but the recommendation stands on the other evidence.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {defender_endpoint: [endpoint, network], virustotal: [intel], entra: [identity]}
+incident:
+  incident_id: XDR-RMM-0014
+  title: Remote access tool RustDesk on TH-LT-3301
+  severity: HIGH
+  workflow_id: unauthorized-rmm
+  observables:
+    - {type: hostname, value: TH-LT-3301}
+  users: [akim@example.com]
+  trigger: {source: defender_endpoint, mitre_techniques: [T1219.002]}
+environment:
+  records:
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3301
+      record: {kind: endpoint, hostname: TH-LT-3301, mde_machine_id: 0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f,
+               os: Windows 11, groups: [Workstations], users: [akim@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3301
+      record: {kind: detection, detection_id: da-rmm-3301-1, name: RemoteAccess.RustDesk, category: RemoteAccessTool,
+               verdict: SUSPICIOUS, severity: HIGH, endpoint: TH-LT-3301, user: akim@example.com, status: active,
+               sha256: 7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d,
+               process_name: rustdesk.exe, mitre_techniques: [T1219.002], first_seen: "2026-01-15T10:20:00Z"}
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3301
+      record: {kind: process_event, event_id: tl-rmm-3301-1, endpoint: TH-LT-3301, timestamp: "2026-01-15T10:20:00Z",
+               event_type: process_start, process_name: rustdesk.exe, pid: 6610, parent_process_name: explorer.exe,
+               sha256: 7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d, user: akim@example.com}
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3301
+      record: {kind: network_connection, endpoint: TH-LT-3301, user: akim@example.com, remote_ip: 198.51.100.140,
+               remote_port: 21116, protocol: tcp, direction: outbound, process_name: rustdesk.exe,
+               sha256: 7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d,
+               first_seen: "2026-01-15T10:21:00Z", last_seen: "2026-01-15T10:59:00Z", count: 18, action: allowed,
+               verdict: MALICIOUS}
+    - integration: defender_endpoint
+      atomic: search_hash_enterprise
+      subject: 7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d
+      record: {kind: hash_prevalence, sha256: 7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d,
+               file_name: rustdesk.exe, prevalence: 1, endpoints: [TH-LT-3301]}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - terminate_process:TH-LT-3301/6610
+    - block_hash:7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d
+    - block_ip:198.51.100.140
+    - isolate_endpoint:TH-LT-3301
+  elevated: []
+  excluded: []
+  unrouted: []
+  considered: []
+  manual_steps: [uninstall RustDesk on TH-LT-3301]
+  containment: CONTAINED
+  controls: 3

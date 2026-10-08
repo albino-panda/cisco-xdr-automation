@@ -1,0 +1,194 @@
+# Unauthorised remote access tool scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-05-helpdesk-campaign-blast-radius
+workflow: unauthorized-rmm
+description: >-
+  Migrated legacy scenario 05 (blast radius, aligned with C5). The same fake help-desk caller reaches
+  six users in one morning and each gets an active FictiDesk session to the suspicious relay. The relay
+  domain and installer hash blocks are proposed once (duplicates collapse), but the per-host actions
+  touch six endpoints, over blast_radius.max_endpoints (5): every isolation and process termination
+  stays in the package with ELEVATED approval and a blast-radius warning instead of containing part of
+  the group, and the lead approves.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/unauthorized-rmm/scenarios/05-helpdesk-campaign-blast-radius.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
+incident:
+  incident_id: INC-TEST-RMM-0005
+  title: FictiDesk sessions on six workstations after help-desk impersonation calls
+  severity: CRITICAL
+  workflow_id: unauthorized-rmm
+  source: Cisco XDR
+  observables:
+    - {type: domain, value: relay.fictidesk.example}
+    - {type: sha256, value: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57}
+    - {type: hostname, value: WS-OPS-101}
+    - {type: hostname, value: WS-OPS-102}
+    - {type: hostname, value: WS-OPS-103}
+    - {type: hostname, value: WS-OPS-104}
+    - {type: hostname, value: WS-OPS-105}
+    - {type: hostname, value: WS-OPS-106}
+  trigger: {source: cisco_xdr, mitre_techniques: [T1219]}
+environment:
+  reputations:
+    - {type: domain, value: relay.fictidesk.example, verdict: SUSPICIOUS, risk_score: 60, confidence: 60,
+       integrations: [umbrella], summary: "category Remote Access, first seen 2026-03-02"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-101
+      record: {kind: detection, detection_id: det-rmm-ops1-1, name: Unapproved remote access tool FictiDesk,
+               category: RemoteAccessTool, verdict: SUSPICIOUS, severity: HIGH, endpoint: WS-OPS-101, status: active,
+               process_name: FictiDesk.exe, sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57,
+               mitre_techniques: [T1219], first_seen: "2026-01-15T09:11:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-101
+      record: {kind: endpoint, hostname: WS-OPS-101, connector_guid: 00000000-0000-4000-8000-000000000101,
+               groups: [Operations Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-101
+      record: {kind: process_event, event_id: evt-rmm-ops1-1, endpoint: WS-OPS-101, timestamp: "2026-01-15T09:11:00Z",
+               event_type: process_start, process_name: FictiDesk.exe, pid: 5101, parent_process_name: explorer.exe,
+               sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-101
+      record: {kind: network_connection, endpoint: WS-OPS-101, domain: relay.fictidesk.example, remote_port: 443, protocol: tcp,
+               direction: outbound, process_name: FictiDesk.exe,
+               sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57,
+               first_seen: "2026-01-15T09:12:00Z", last_seen: "2026-01-15T10:30:00Z", count: 30, action: allowed}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-102
+      record: {kind: endpoint, hostname: WS-OPS-102, connector_guid: 00000000-0000-4000-8000-000000000102,
+               groups: [Operations Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-102
+      record: {kind: process_event, event_id: evt-rmm-ops2-1, endpoint: WS-OPS-102, timestamp: "2026-01-15T09:12:00Z",
+               event_type: process_start, process_name: FictiDesk.exe, pid: 5102, parent_process_name: explorer.exe,
+               sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-102
+      record: {kind: network_connection, endpoint: WS-OPS-102, domain: relay.fictidesk.example, remote_port: 443, protocol: tcp,
+               direction: outbound, process_name: FictiDesk.exe,
+               sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57,
+               first_seen: "2026-01-15T09:13:00Z", last_seen: "2026-01-15T10:30:00Z", count: 30, action: allowed}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-103
+      record: {kind: endpoint, hostname: WS-OPS-103, connector_guid: 00000000-0000-4000-8000-000000000103,
+               groups: [Operations Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-103
+      record: {kind: process_event, event_id: evt-rmm-ops3-1, endpoint: WS-OPS-103, timestamp: "2026-01-15T09:13:00Z",
+               event_type: process_start, process_name: FictiDesk.exe, pid: 5103, parent_process_name: explorer.exe,
+               sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-103
+      record: {kind: network_connection, endpoint: WS-OPS-103, domain: relay.fictidesk.example, remote_port: 443, protocol: tcp,
+               direction: outbound, process_name: FictiDesk.exe,
+               sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57,
+               first_seen: "2026-01-15T09:14:00Z", last_seen: "2026-01-15T10:30:00Z", count: 30, action: allowed}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-104
+      record: {kind: endpoint, hostname: WS-OPS-104, connector_guid: 00000000-0000-4000-8000-000000000104,
+               groups: [Operations Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-104
+      record: {kind: process_event, event_id: evt-rmm-ops4-1, endpoint: WS-OPS-104, timestamp: "2026-01-15T09:14:00Z",
+               event_type: process_start, process_name: FictiDesk.exe, pid: 5104, parent_process_name: explorer.exe,
+               sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-104
+      record: {kind: network_connection, endpoint: WS-OPS-104, domain: relay.fictidesk.example, remote_port: 443, protocol: tcp,
+               direction: outbound, process_name: FictiDesk.exe,
+               sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57,
+               first_seen: "2026-01-15T09:15:00Z", last_seen: "2026-01-15T10:30:00Z", count: 30, action: allowed}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-105
+      record: {kind: endpoint, hostname: WS-OPS-105, connector_guid: 00000000-0000-4000-8000-000000000105,
+               groups: [Operations Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-105
+      record: {kind: process_event, event_id: evt-rmm-ops5-1, endpoint: WS-OPS-105, timestamp: "2026-01-15T09:15:00Z",
+               event_type: process_start, process_name: FictiDesk.exe, pid: 5105, parent_process_name: explorer.exe,
+               sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-105
+      record: {kind: network_connection, endpoint: WS-OPS-105, domain: relay.fictidesk.example, remote_port: 443, protocol: tcp,
+               direction: outbound, process_name: FictiDesk.exe,
+               sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57,
+               first_seen: "2026-01-15T09:16:00Z", last_seen: "2026-01-15T10:30:00Z", count: 30, action: allowed}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-106
+      record: {kind: endpoint, hostname: WS-OPS-106, connector_guid: 00000000-0000-4000-8000-000000000106,
+               groups: [Operations Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-106
+      record: {kind: process_event, event_id: evt-rmm-ops6-1, endpoint: WS-OPS-106, timestamp: "2026-01-15T09:16:00Z",
+               event_type: process_start, process_name: FictiDesk.exe, pid: 5106, parent_process_name: explorer.exe,
+               sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-OPS-106
+      record: {kind: network_connection, endpoint: WS-OPS-106, domain: relay.fictidesk.example, remote_port: 443, protocol: tcp,
+               direction: outbound, process_name: FictiDesk.exe,
+               sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57,
+               first_seen: "2026-01-15T09:17:00Z", last_seen: "2026-01-15T10:30:00Z", count: 30, action: allowed}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57
+      record: {kind: hash_prevalence, sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57,
+               file_name: FictiDesk.exe, prevalence: 6, endpoints: [WS-OPS-101, WS-OPS-102, WS-OPS-103, WS-OPS-104, WS-OPS-105, WS-OPS-106]}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - block_domain:relay.fictidesk.example
+    - block_hash:7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57
+    - terminate_process:WS-OPS-101/5101
+    - terminate_process:WS-OPS-102/5102
+    - terminate_process:WS-OPS-103/5103
+    - terminate_process:WS-OPS-104/5104
+    - terminate_process:WS-OPS-105/5105
+    - terminate_process:WS-OPS-106/5106
+    - isolate_endpoint:WS-OPS-101
+    - isolate_endpoint:WS-OPS-102
+    - isolate_endpoint:WS-OPS-103
+    - isolate_endpoint:WS-OPS-104
+    - isolate_endpoint:WS-OPS-105
+    - isolate_endpoint:WS-OPS-106
+  elevated:
+    - terminate_process:WS-OPS-101/5101
+    - terminate_process:WS-OPS-102/5102
+    - terminate_process:WS-OPS-103/5103
+    - terminate_process:WS-OPS-104/5104
+    - terminate_process:WS-OPS-105/5105
+    - terminate_process:WS-OPS-106/5106
+    - isolate_endpoint:WS-OPS-101
+    - isolate_endpoint:WS-OPS-102
+    - isolate_endpoint:WS-OPS-103
+    - isolate_endpoint:WS-OPS-104
+    - isolate_endpoint:WS-OPS-105
+    - isolate_endpoint:WS-OPS-106
+  excluded: []
+  considered: []
+  manual_steps: [uninstall fictidesk.exe on WS-OPS-101, uninstall fictidesk.exe on WS-OPS-102, uninstall fictidesk.exe on WS-OPS-103, uninstall fictidesk.exe on WS-OPS-104, uninstall fictidesk.exe on WS-OPS-105, uninstall fictidesk.exe on WS-OPS-106]
+  handoffs: []
+  warnings: [ELEVATED APPROVAL REQUIRED]
+  containment: CONTAINED
+  controls: 8

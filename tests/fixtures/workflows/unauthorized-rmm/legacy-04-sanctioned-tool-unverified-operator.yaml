@@ -1,0 +1,94 @@
+# Unauthorised remote access tool scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-04-sanctioned-tool-unverified-operator
+workflow: unauthorized-rmm
+description: >-
+  Migrated legacy scenario 04 (RMM-specific edge case). A caller posing as the help desk has the user
+  join a session of the sanctioned tool ExampleRMM from an account outside IT, with no matching service
+  desk ticket; Secure Endpoint rates the session MALICIOUS. Blocking the relay domain or the binary
+  would break IT's own remote support fleet-wide, so both are shown as excluded targets
+  (allowlists.approved_rmm) and terminating the approved binary is withheld (ALLOWLISTED). The live
+  session by an unverified operator is what matters, so the host is isolated anyway.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/unauthorized-rmm/scenarios/04-sanctioned-tool-unverified-operator.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
+config:
+  allowlists:
+    approved_rmm:
+      - name: ExampleRMM
+        hashes: [e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1]
+        domains: [relay.examplermm.example]
+incident:
+  incident_id: INC-TEST-RMM-0004
+  title: ExampleRMM session from unverified operator on ws-sales-031 after help-desk call
+  severity: HIGH
+  workflow_id: unauthorized-rmm
+  source: Cisco XDR
+  observables:
+    - {type: domain, value: relay.examplermm.example}
+    - {type: sha256, value: e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1}
+    - {type: hostname, value: WS-SALES-031}
+  users: [user03@example.com]
+  trigger: {source: cisco_xdr, mitre_techniques: [T1219],
+            initial_contact: "Phone call from a caller posing as the IT help desk; no matching service desk ticket"}
+environment:
+  reputations:
+    - {type: domain, value: relay.examplermm.example, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [umbrella], summary: "category Remote Access, first seen 2019-05-14"}
+    - {type: sha256, value: e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1, verdict: CLEAN,
+       risk_score: 0, confidence: 80, integrations: [virustotal], summary: "signed remote management agent"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-SALES-031
+      record: {kind: endpoint, hostname: WS-SALES-031, connector_guid: 00000000-0000-4000-8000-00000000c031,
+               groups: [Sales Workstations], users: [user03@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-SALES-031
+      record: {kind: detection, detection_id: det-rmm-c031-1, name: RemoteAccess.SessionFromUnverifiedOperator,
+               category: RemoteAccessTool, verdict: MALICIOUS, severity: HIGH, endpoint: WS-SALES-031,
+               user: user03@example.com, status: active, process_name: ExampleRMM.exe,
+               sha256: e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1,
+               mitre_techniques: [T1219], first_seen: "2026-01-15T11:02:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-SALES-031
+      record: {kind: process_event, event_id: evt-rmm-c031-1, endpoint: WS-SALES-031, timestamp: "2026-01-15T11:00:00Z",
+               event_type: process_start, process_name: ExampleRMM.exe, pid: 3131, parent_process_name: services.exe,
+               sha256: e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-SALES-031
+      record: {kind: network_connection, endpoint: WS-SALES-031, user: user03@example.com,
+               domain: relay.examplermm.example, remote_ip: 192.0.2.77, remote_port: 443, protocol: tcp,
+               direction: outbound, process_name: ExampleRMM.exe,
+               sha256: e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1,
+               first_seen: "2026-01-15T11:01:00Z", last_seen: "2026-01-15T11:30:00Z", count: 22, action: allowed}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1
+      record: {kind: hash_prevalence, sha256: e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1,
+               file_name: ExampleRMM.exe, verdict: CLEAN, prevalence: 1480, endpoints: [WS-SALES-031], truncated: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: user03@example.com
+      record: {kind: user_profile, user: user03@example.com, department: Sales, risk_level: medium,
+               account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions: [isolate_endpoint:WS-SALES-031]
+  elevated: []
+  excluded: []
+  considered:
+    - terminate_process:WS-SALES-031/3131
+    - block_ip:192.0.2.77
+    - block_hash:e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1
+    - block_domain:relay.examplermm.example
+  manual_steps: [uninstall examplermm.exe on WS-SALES-031]
+  handoffs: []
+  containment: CONTAINED
+  controls: 1

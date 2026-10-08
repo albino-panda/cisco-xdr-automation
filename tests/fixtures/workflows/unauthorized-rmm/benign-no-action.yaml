@@ -1,0 +1,74 @@
+# Unauthorised remote access tool scenario; fake lab data only.
+schema: 1
+name: benign-no-action
+workflow: unauthorized-rmm
+description: >-
+  Benign. The corporate RMM agent (Example RMM, sanctioned in the repository's allowlists.approved_rmm)
+  is observed on a workstation: the endpoint product reports it as allowed by policy (CLEAN, INFO),
+  VirusTotal rates the binary clean, it runs on 640 endpoints, and its session goes to the vendor
+  relay that Umbrella rates clean. Nothing flags the tool, so nothing is proposed and the incident
+  stays NOT_STARTED; the tool is listed as considered with its records so the analyst can confirm
+  the approved_rmm entry. A sanctioned tool is never treated as malicious.
+tags: [benign]
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
+incident:
+  incident_id: XDR-RMM-0010
+  title: Remote access tool observed on TH-LT-2210
+  severity: LOW
+  workflow_id: unauthorized-rmm
+  observables:
+    - {type: hostname, value: TH-LT-2210}
+    - {type: sha256, value: "1111111111111111111111111111111111111111111111111111111111111111"}
+  users: [akim@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1219]}
+environment:
+  reputations:
+    - {type: sha256, value: "1111111111111111111111111111111111111111111111111111111111111111", verdict: CLEAN,
+       risk_score: 0, confidence: 80, integrations: [virustotal], summary: "signed remote management agent"}
+    - {type: domain, value: rmm.example.net, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [umbrella], summary: "category Remote Access"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: endpoint, hostname: TH-LT-2210, connector_guid: 00000000-0000-4000-8000-000000002210,
+               os: Windows 11, groups: [Workstations], users: [akim@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: detection, detection_id: det-rmm-2210-1, name: RemoteAccess.ExampleRMM.Observed,
+               category: RemoteAccessTool, verdict: CLEAN, severity: INFO, endpoint: TH-LT-2210, status: active,
+               sha256: "1111111111111111111111111111111111111111111111111111111111111111",
+               process_name: ExampleRmmAgent.exe, mitre_techniques: [T1219], first_seen: "2026-01-15T09:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: process_event, event_id: evt-rmm-2210-1, endpoint: TH-LT-2210, timestamp: "2026-01-15T09:00:00Z",
+               event_type: process_start, process_name: ExampleRmmAgent.exe, pid: 2210, parent_process_name: services.exe,
+               sha256: "1111111111111111111111111111111111111111111111111111111111111111"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: network_connection, endpoint: TH-LT-2210, domain: rmm.example.net, remote_ip: 198.51.100.120,
+               remote_port: 443, protocol: tcp, direction: outbound, process_name: ExampleRmmAgent.exe,
+               sha256: "1111111111111111111111111111111111111111111111111111111111111111",
+               first_seen: "2026-01-15T09:01:00Z", last_seen: "2026-01-15T11:30:00Z", count: 300, action: allowed}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: "1111111111111111111111111111111111111111111111111111111111111111"
+      record: {kind: hash_prevalence, sha256: "1111111111111111111111111111111111111111111111111111111111111111",
+               file_name: ExampleRmmAgent.exe, verdict: CLEAN, prevalence: 640, endpoints: [TH-LT-2210],
+               truncated: true, signer: Example RMM Vendor Inc.}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  unrouted: []
+  below_threshold: []
+  degraded_sources: []
+  considered: ["rmm_tool:examplermmagent.exe"]
+  manual_steps: []
+  handoffs: []
+  notifications: [incident_note]

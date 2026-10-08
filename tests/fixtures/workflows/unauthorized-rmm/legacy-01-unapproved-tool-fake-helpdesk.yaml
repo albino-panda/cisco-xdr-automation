@@ -1,0 +1,113 @@
+# Unauthorised remote access tool scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-01-unapproved-tool-fake-helpdesk
+workflow: unauthorized-rmm
+description: >-
+  Migrated legacy scenario 01. After a mail-bombing wave, a caller posing as the IT help desk talks a
+  finance user into installing the unapproved tool FictiDesk and opens a live session. Secure Endpoint
+  flags the tool (T1219), Umbrella rates its relay domain suspicious, and the session is still active on
+  WS-FIN-014. The package blocks the tool's two relay domains and its installer hash, terminates the
+  running tool (new in the runtime) and isolates the one host with the active session. The internal
+  domain, the unrelated document hash and the second investigated host (no session) are left alone;
+  the unrated relay IP is shared vendor infrastructure and is listed as considered.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/unauthorized-rmm/scenarios/01-unapproved-tool-fake-helpdesk.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
+incident:
+  incident_id: INC-TEST-RMM-0001
+  title: Unapproved remote access tool FictiDesk on ws-fin-014 after help-desk call
+  severity: HIGH
+  workflow_id: unauthorized-rmm
+  source: Cisco Secure Endpoint
+  observables:
+    - {type: domain, value: relay.fictidesk.example}
+    - {type: domain, value: broker.fictidesk.example}
+    - {type: domain, value: intranet.example.com}
+    - {type: sha256, value: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57}
+    - {type: sha256, value: 0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c}
+    - {type: hostname, value: WS-FIN-014}
+    - {type: hostname, value: WS-FIN-020}
+  users: [user01@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1219],
+            initial_contact: "External chat call from a caller posing as the IT help desk, 20 minutes after a mail-bombing wave"}
+environment:
+  reputations:
+    - {type: domain, value: relay.fictidesk.example, verdict: SUSPICIOUS, risk_score: 60, confidence: 60,
+       integrations: [umbrella], summary: "category Remote Access, first seen 2026-03-02"}
+    - {type: domain, value: intranet.example.com, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [umbrella], summary: "category Business"}
+    - {type: sha256, value: 0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c, verdict: CLEAN,
+       risk_score: 0, confidence: 80, integrations: [virustotal], summary: "office document"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-014
+      record: {kind: endpoint, hostname: WS-FIN-014, connector_guid: 00000000-0000-4000-8000-00000000f014,
+               groups: [Finance Workstations], users: [user01@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-014
+      record: {kind: detection, detection_id: det-rmm-f014-1, name: Unapproved remote access tool FictiDesk,
+               category: RemoteAccessTool, verdict: SUSPICIOUS, severity: HIGH, endpoint: WS-FIN-014,
+               user: user01@example.com, status: active, process_name: FictiDesk.exe,
+               sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57,
+               mitre_techniques: [T1219], first_seen: "2026-01-15T10:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-014
+      record: {kind: process_event, event_id: evt-rmm-f014-1, endpoint: WS-FIN-014, timestamp: "2026-01-15T10:05:00Z",
+               event_type: process_start, process_name: FictiDesk.exe, pid: 4014, parent_process_name: explorer.exe,
+               sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57, user: user01@example.com}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-014
+      record: {kind: network_connection, endpoint: WS-FIN-014, user: user01@example.com, domain: relay.fictidesk.example,
+               remote_ip: 203.0.113.145, remote_port: 443, protocol: tcp, direction: outbound, process_name: FictiDesk.exe,
+               sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57,
+               first_seen: "2026-01-15T10:06:00Z", last_seen: "2026-01-15T10:40:00Z", count: 37, action: allowed}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-014
+      record: {kind: network_connection, endpoint: WS-FIN-014, user: user01@example.com, domain: broker.fictidesk.example,
+               remote_port: 443, protocol: tcp, direction: outbound, process_name: FictiDesk.exe,
+               sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57,
+               first_seen: "2026-01-15T10:05:30Z", last_seen: "2026-01-15T10:06:00Z", count: 4, action: allowed}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-FIN-020
+      record: {kind: endpoint, hostname: WS-FIN-020, connector_guid: 00000000-0000-4000-8000-00000000f020,
+               groups: [Finance Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57
+      record: {kind: hash_prevalence, sha256: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57,
+               file_name: FictiDesk.exe, prevalence: 1, endpoints: [WS-FIN-014]}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c
+      record: {kind: hash_prevalence, sha256: 0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c0d0c,
+               file_name: Q1-forecast.xlsx, verdict: CLEAN, prevalence: 812, endpoints: [WS-FIN-014, WS-FIN-020],
+               truncated: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: user01@example.com
+      record: {kind: user_profile, user: user01@example.com, department: Finance, risk_level: medium,
+               account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - block_domain:relay.fictidesk.example
+    - block_domain:broker.fictidesk.example
+    - block_hash:7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57
+    - terminate_process:WS-FIN-014/4014
+    - isolate_endpoint:WS-FIN-014
+  elevated: []
+  excluded: []
+  considered: [block_ip:203.0.113.145]
+  manual_steps: [uninstall fictidesk.exe on WS-FIN-014]
+  handoffs: []
+  containment: CONTAINED
+  controls: 4

@@ -1,0 +1,78 @@
+# Unauthorised remote access tool scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-03-guardrail-skips
+workflow: unauthorized-rmm
+description: >-
+  Migrated legacy scenario 03 (guardrails, aligned with C3). FictiDesk is installed on domain
+  controller DC-01 and a session to its suspicious relay is active. The relay domain block is
+  proposed. DC-01 is a critical asset (domain controller), so its isolation stays in the package with
+  ELEVATED approval and a visible warning, never skipped, and the lead approves. The installer hash is
+  on this tenant's hash allow-list (scenario config), so its block is shown as an excluded target and
+  terminating the allow-listed binary is withheld (ALLOWLISTED, listed as considered).
+tags: [legacy, critical_asset, true_positive, approve_all]
+legacy_source: workflows/unauthorized-rmm/scenarios/03-guardrail-skips.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
+config:
+  allowlists:
+    never_block:
+      hashes: ["5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe"]
+incident:
+  incident_id: INC-TEST-RMM-0003
+  title: Unapproved remote access tool FictiDesk on dc-01
+  severity: CRITICAL
+  workflow_id: unauthorized-rmm
+  source: Cisco Secure Endpoint
+  observables:
+    - {type: domain, value: relay.fictidesk.example}
+    - {type: sha256, value: 5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe}
+    - {type: hostname, value: DC-01}
+  trigger: {source: secure_endpoint, mitre_techniques: [T1219]}
+environment:
+  reputations:
+    - {type: domain, value: relay.fictidesk.example, verdict: SUSPICIOUS, risk_score: 60, confidence: 60,
+       integrations: [umbrella], summary: "category Remote Access, first seen 2026-03-02"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-01
+      record: {kind: endpoint, hostname: DC-01, connector_guid: 00000000-0000-4000-8000-0000000dc001,
+               groups: [Domain Controllers], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-01
+      record: {kind: detection, detection_id: det-rmm-dc01-1, name: Unapproved remote access tool FictiDesk,
+               category: RemoteAccessTool, verdict: SUSPICIOUS, severity: HIGH, endpoint: DC-01, status: active,
+               process_name: FictiDesk.exe, sha256: 5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe,
+               mitre_techniques: [T1219], first_seen: "2026-01-15T10:15:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-01
+      record: {kind: process_event, event_id: evt-rmm-dc01-1, endpoint: DC-01, timestamp: "2026-01-15T10:15:00Z",
+               event_type: process_start, process_name: FictiDesk.exe, pid: 3001, parent_process_name: explorer.exe,
+               sha256: 5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-01
+      record: {kind: network_connection, endpoint: DC-01, domain: relay.fictidesk.example, remote_ip: 198.51.100.23,
+               remote_port: 443, protocol: tcp, direction: outbound, process_name: FictiDesk.exe,
+               sha256: 5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe,
+               first_seen: "2026-01-15T10:16:00Z", last_seen: "2026-01-15T10:44:00Z", count: 6, action: allowed}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe
+      record: {kind: hash_prevalence, sha256: 5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe,
+               file_name: FictiDesk.exe, prevalence: 1, endpoints: [DC-01]}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - block_domain:relay.fictidesk.example
+    - isolate_endpoint:DC-01
+  elevated: [isolate_endpoint:DC-01]
+  excluded: [block_hash:5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe]
+  considered: [terminate_process:DC-01/3001, block_ip:198.51.100.23]
+  manual_steps: [uninstall fictidesk.exe on DC-01]
+  warnings: [ELEVATED APPROVAL REQUIRED, Domain controller]
+  containment: CONTAINED
+  controls: 2

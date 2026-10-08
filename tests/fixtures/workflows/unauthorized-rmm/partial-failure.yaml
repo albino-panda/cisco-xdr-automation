@@ -1,0 +1,86 @@
+# Unauthorised remote access tool scenario; fake lab data only.
+schema: 1
+name: partial-failure
+workflow: unauthorized-rmm
+description: >-
+  Everything is approved; the Meraki block of the peer IP fails at the vendor. Containment is partial,
+  the failed action is reported FAILED (never retried silently) and the other actions stand.
+tags: [partial_failure, true_positive, approve_all]
+mode: live
+suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
+incident:
+  incident_id: XDR-RMM-0005
+  title: Remote access tool AnyDesk on TH-LT-1047 after a help-desk call
+  severity: HIGH
+  workflow_id: unauthorized-rmm
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+    - {type: sha256, value: a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0}
+  users: [jsmith@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1219.002]}
+environment:
+  reputations:
+    - {type: domain, value: get-remote-support.test, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [virustotal, umbrella], summary: "help-desk impersonation lure"}
+    - {type: ip, value: 198.51.100.45, verdict: MALICIOUS, risk_score: 80, confidence: 75,
+       integrations: [virustotal, umbrella], summary: "hostile remote access relay"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, groups: [Workstations], tags: [], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-rmm-th-lt-1047-1, name: PUA.RemoteAccess.AnyDesk, category: RemoteAccessTool,
+               verdict: SUSPICIOUS, severity: HIGH, endpoint: TH-LT-1047, user: jsmith@example.com, status: active,
+               sha256: a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0,
+               process_name: AnyDesk.exe, mitre_techniques: [T1219.002], first_seen: "2026-01-15T11:20:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: process_event, event_id: evt-rmm-th-lt-1047-1, endpoint: TH-LT-1047, timestamp: "2026-01-15T11:18:00Z",
+               event_type: file_create, process_name: browser.exe, domain: get-remote-support.test,
+               file_path: "C:\\Users\\jsmith\\Downloads\\AnyDesk.exe",
+               sha256: a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0, user: jsmith@example.com}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: process_event, event_id: evt-rmm-th-lt-1047-2, endpoint: TH-LT-1047, timestamp: "2026-01-15T11:20:00Z",
+               event_type: process_start, process_name: AnyDesk.exe, pid: 7311, parent_process_name: explorer.exe,
+               parent_pid: 1180, sha256: a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0,
+               user: jsmith@example.com}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: network_connection, endpoint: TH-LT-1047, user: jsmith@example.com, domain: relay-01.anydesk-relay.test,
+               remote_ip: 198.51.100.45, remote_port: 443, protocol: tcp, direction: outbound, process_name: AnyDesk.exe,
+               sha256: a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0,
+               first_seen: "2026-01-15T11:21:00Z", last_seen: "2026-01-15T11:50:00Z", count: 40, action: allowed}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0
+      record: {kind: hash_prevalence, sha256: a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0,
+               file_name: AnyDesk.exe, prevalence: 1, endpoints: [TH-LT-1047], signer: Example Remote Desktop Vendor}
+  faults:
+    - {kind: FAIL, integration: meraki, operation: block_ip, times: 10}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions:
+    - terminate_process:TH-LT-1047/7311
+    - block_hash:a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0
+    - block_domain:relay-01.anydesk-relay.test
+    - block_domain:get-remote-support.test
+    - block_ip:198.51.100.45
+    - isolate_endpoint:TH-LT-1047
+  containment: PARTIALLY_CONTAINED
+  results:
+    terminate_process:TH-LT-1047/7311: SUCCESS
+    block_hash:a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0: SUCCESS
+    block_domain:relay-01.anydesk-relay.test: SUCCESS
+    block_domain:get-remote-support.test: SUCCESS
+    block_ip:198.51.100.45: FAILED
+    isolate_endpoint:TH-LT-1047: SUCCESS
+  controls: 4

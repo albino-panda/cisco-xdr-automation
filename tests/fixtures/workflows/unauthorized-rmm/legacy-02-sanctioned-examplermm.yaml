@@ -1,0 +1,86 @@
+# Unauthorised remote access tool scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-02-sanctioned-examplermm
+workflow: unauthorized-rmm
+description: >-
+  Migrated legacy scenario 02. The detection fires on ExampleRMM, which is in allowlists.approved_rmm
+  (scenario config: its hash and relay domain). The endpoint product reports it as allowed by policy
+  (CLEAN, INFO), the binary and the relay are rated clean, the binary runs on 1480 endpoints, and the
+  session was opened by a help-desk engineer from the internal IT network against an existing ticket.
+  Nothing flags the tool and no session reaches outside the organisation, so nothing is blocked or
+  isolated: no package. The tool is listed as considered with its records.
+tags: [legacy, benign]
+legacy_source: workflows/unauthorized-rmm/scenarios/02-sanctioned-examplermm.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
+config:
+  allowlists:
+    approved_rmm:
+      - name: ExampleRMM
+        hashes: [e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1]
+        domains: [relay.examplermm.example]
+incident:
+  incident_id: INC-TEST-RMM-0002
+  title: Remote access tool ExampleRMM session on ws-hr-007
+  severity: HIGH
+  workflow_id: unauthorized-rmm
+  source: Cisco Secure Endpoint
+  observables:
+    - {type: domain, value: relay.examplermm.example}
+    - {type: sha256, value: e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1}
+    - {type: hostname, value: WS-HR-007}
+  users: [user02@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1219],
+            initial_contact: User-raised service desk ticket for a printer driver issue}
+environment:
+  reputations:
+    - {type: domain, value: relay.examplermm.example, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [umbrella], summary: "category Remote Access, first seen 2019-05-14"}
+    - {type: sha256, value: e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1, verdict: CLEAN,
+       risk_score: 0, confidence: 80, integrations: [virustotal], summary: "signed remote management agent"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-HR-007
+      record: {kind: endpoint, hostname: WS-HR-007, connector_guid: 00000000-0000-4000-8000-00000000a007,
+               groups: [HR Workstations], users: [user02@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-HR-007
+      record: {kind: detection, detection_id: det-rmm-a007-1, name: RemoteAccess.ExampleRMM.Observed,
+               category: RemoteAccessTool, verdict: CLEAN, severity: INFO, endpoint: WS-HR-007, status: active,
+               process_name: ExampleRMM.exe,
+               sha256: e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1,
+               mitre_techniques: [T1219], first_seen: "2026-01-15T09:30:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-HR-007
+      record: {kind: process_event, event_id: evt-rmm-a007-1, endpoint: WS-HR-007, timestamp: "2026-01-15T09:30:00Z",
+               event_type: process_start, process_name: ExampleRMM.exe, pid: 7007, parent_process_name: services.exe,
+               sha256: e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WS-HR-007
+      record: {kind: network_connection, endpoint: WS-HR-007, remote_ip: 10.20.0.15, remote_port: 5938, protocol: tcp,
+               direction: inbound, process_name: ExampleRMM.exe,
+               sha256: e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1,
+               first_seen: "2026-01-15T09:31:00Z", last_seen: "2026-01-15T09:55:00Z", count: 6, action: allowed}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1
+      record: {kind: hash_prevalence, sha256: e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1e8a1,
+               file_name: ExampleRMM.exe, verdict: CLEAN, prevalence: 1480, endpoints: [WS-HR-007], truncated: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: user02@example.com
+      record: {kind: user_profile, user: user02@example.com, department: HR, risk_level: low, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  below_threshold: []
+  considered: ["rmm_tool:examplermm.exe"]
+  manual_steps: []
+  handoffs: []
+  notifications: [incident_note]

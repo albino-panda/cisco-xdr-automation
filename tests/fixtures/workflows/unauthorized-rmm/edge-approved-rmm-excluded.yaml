@@ -1,0 +1,71 @@
+# Unauthorised remote access tool scenario; fake lab data only.
+schema: 1
+name: edge-approved-rmm-excluded
+workflow: unauthorized-rmm
+description: >-
+  Edge case: a sanctioned tool abused. The corporate agent Example RMM (allowlists.approved_rmm in the
+  repository config: its hash and rmm.example.net) carries a remote session that Secure Endpoint rates
+  MALICIOUS (an operator outside IT after a fake help-desk call). The tool is never blocked: the hash
+  and relay domain blocks are built and shown as excluded targets with the approved_rmm reason, and
+  terminating the approved binary is withheld (ALLOWLISTED, shown as considered). The session is what
+  matters, so the workstation isolation is proposed; the analyst approves it. The unrated relay IP is
+  shared vendor infrastructure and is not blocked.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
+incident:
+  incident_id: XDR-RMM-0011
+  title: Remote access tool session from an untrusted operator on TH-LT-3105
+  severity: HIGH
+  workflow_id: unauthorized-rmm
+  observables:
+    - {type: hostname, value: TH-LT-3105}
+  users: [rpatel@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1219]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3105
+      record: {kind: endpoint, hostname: TH-LT-3105, connector_guid: 00000000-0000-4000-8000-000000003105,
+               os: Windows 11, groups: [Workstations], users: [rpatel@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3105
+      record: {kind: detection, detection_id: det-rmm-3105-1, name: RemoteAccess.SessionFromUntrustedOperator,
+               category: RemoteAccessTool, verdict: MALICIOUS, severity: HIGH, endpoint: TH-LT-3105,
+               user: rpatel@example.com, status: active,
+               sha256: "1111111111111111111111111111111111111111111111111111111111111111",
+               process_name: ExampleRmmAgent.exe, mitre_techniques: [T1219], first_seen: "2026-01-15T10:42:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3105
+      record: {kind: process_event, event_id: evt-rmm-3105-1, endpoint: TH-LT-3105, timestamp: "2026-01-15T10:40:00Z",
+               event_type: process_start, process_name: ExampleRmmAgent.exe, pid: 4410, parent_process_name: services.exe,
+               sha256: "1111111111111111111111111111111111111111111111111111111111111111"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3105
+      record: {kind: network_connection, endpoint: TH-LT-3105, domain: rmm.example.net, remote_ip: 198.51.100.121,
+               remote_port: 443, protocol: tcp, direction: outbound, process_name: ExampleRmmAgent.exe,
+               sha256: "1111111111111111111111111111111111111111111111111111111111111111",
+               first_seen: "2026-01-15T10:41:00Z", last_seen: "2026-01-15T11:05:00Z", count: 25, action: allowed}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: "1111111111111111111111111111111111111111111111111111111111111111"
+      record: {kind: hash_prevalence, sha256: "1111111111111111111111111111111111111111111111111111111111111111",
+               file_name: ExampleRmmAgent.exe, prevalence: 12, endpoints: [TH-LT-3105], truncated: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions: [isolate_endpoint:TH-LT-3105]
+  excluded:
+    - block_hash:1111111111111111111111111111111111111111111111111111111111111111
+    - block_domain:rmm.example.net
+  elevated: []
+  considered: [terminate_process:TH-LT-3105/4410, block_ip:198.51.100.121]
+  manual_steps: [uninstall examplermmagent.exe on TH-LT-3105]
+  handoffs: []
+  containment: CONTAINED
+  controls: 1

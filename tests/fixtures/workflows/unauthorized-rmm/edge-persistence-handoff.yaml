@@ -1,0 +1,85 @@
+# Unauthorised remote access tool scenario; fake lab data only.
+schema: 1
+name: edge-persistence-handoff
+workflow: unauthorized-rmm
+description: >-
+  Edge case: an Atera agent the tenant does not use was installed as a service on a workstation and
+  Secure Endpoint flags it. No session is open (its last connection was blocked by the proxy), so
+  isolation is not proposed; the running agent is terminated and its binary blocked. Removing the
+  service has no VERIFIED write: the run hands the endpoint off to the persistence workflow. The
+  workstation's user shows a high identity risk in Entra, so the account is handed off to
+  account-takeover. Hand-offs are suggestions only; the analyst approves the selected actions.
+tags: [edge_case, true_positive, approve_selected]
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
+incident:
+  incident_id: XDR-RMM-0015
+  title: Remote access tool Atera installed on TH-LT-5120
+  severity: HIGH
+  workflow_id: unauthorized-rmm
+  observables:
+    - {type: hostname, value: TH-LT-5120}
+  users: [mlopez@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1219]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-5120
+      record: {kind: endpoint, hostname: TH-LT-5120, connector_guid: 00000000-0000-4000-8000-000000005120,
+               os: Windows 11, groups: [Workstations], users: [mlopez@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-5120
+      record: {kind: detection, detection_id: det-rmm-5120-1, name: PUA.RemoteAccess.Atera, category: RemoteAccessTool,
+               verdict: SUSPICIOUS, severity: HIGH, endpoint: TH-LT-5120, user: mlopez@example.com, status: active,
+               sha256: a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2,
+               process_name: AteraAgent.exe, mitre_techniques: [T1219], first_seen: "2026-01-15T07:55:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-5120
+      record: {kind: process_event, event_id: evt-rmm-5120-1, endpoint: TH-LT-5120, timestamp: "2026-01-15T07:55:00Z",
+               event_type: process_start, process_name: AteraAgent.exe, pid: 5120, parent_process_name: services.exe,
+               sha256: a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-5120
+      record: {kind: persistence_item, endpoint: TH-LT-5120, item_id: svc-ateraagent, mechanism: service,
+               name: AteraAgent, path: "C:\\Program Files\\ATERA Networks\\AteraAgent\\AteraAgent.exe",
+               sha256: a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2,
+               created_at: "2026-01-15T07:54:00Z", verdict: SUSPICIOUS}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-5120
+      record: {kind: network_connection, endpoint: TH-LT-5120, domain: agent-api.atera-relay.test,
+               remote_ip: 198.51.100.150, remote_port: 443, protocol: tcp, direction: outbound,
+               process_name: AteraAgent.exe,
+               sha256: a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2,
+               first_seen: "2026-01-15T07:56:00Z", last_seen: "2026-01-15T07:56:00Z", count: 3, action: blocked}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2
+      record: {kind: hash_prevalence, sha256: a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2,
+               file_name: AteraAgent.exe, prevalence: 1, endpoints: [TH-LT-5120]}
+    - integration: entra
+      atomic: investigate_user
+      subject: mlopez@example.com
+      record: {kind: user_profile, user: mlopez@example.com, display_name: M Lopez, department: Finance,
+               risk_level: high, risk_state: at_risk, account_enabled: true}
+analyst: {decision: APPROVE_SELECTED, approvers: [analyst], select: [terminate_process:TH-LT-5120/5120]}
+expect:
+  package: true
+  actions:
+    - terminate_process:TH-LT-5120/5120
+    - block_hash:a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2
+    - block_domain:agent-api.atera-relay.test
+  considered: [block_ip:198.51.100.150]
+  manual_steps: [uninstall Atera on TH-LT-5120]
+  handoffs: ["persistence:TH-LT-5120", "account-takeover:mlopez@example.com"]
+  results:
+    terminate_process:TH-LT-5120/5120: SUCCESS
+    block_hash:a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2: REJECTED_BY_ANALYST
+    block_domain:agent-api.atera-relay.test: REJECTED_BY_ANALYST
+  containment: CONTAINED
+  controls: 0
