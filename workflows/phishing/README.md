@@ -36,7 +36,7 @@ Typical alerts that should route to this workflow:
 1. **Intake.** Load the incident summary, observables, the message facts in `incident.context` (`sender`, `subject`, `email_verdict`, `malicious_urls`) and the guardrails file.
 2. **Enrich.** [`enrich-domain`](../../atomic/enrich-domain/README.md), [`enrich-ip`](../../atomic/enrich-ip/README.md), [`enrich-hash`](../../atomic/enrich-hash/README.md).
 3. **Investigate.** [`investigate-user`](../../atomic/investigate-user/README.md).
-4. **Decide.** Build a containment plan from the [containment rules](#containment-rules) and drop protected, allow-listed or over-limit targets. Send the plan to an approver unless `dry_run` is true.
+4. **Decide.** Build a containment plan from the [containment rules](#containment-rules) and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
 5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
 6. **Record.** Add an incident note and [`create-ticket`](../../atomic/create-ticket/README.md).
 7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
@@ -78,7 +78,7 @@ Run with `PYTHONPATH=engine python -m xdr_plan check phishing` from the reposito
 | [`01-credential-link-and-attachment.yaml`](scenarios/01-credential-link-and-attachment.yaml) | True positive: quarantine, block-domain and block-hash are planned; the URL on the malicious domain is not blocked twice. |
 | [`02-benign-user-report.yaml`](scenarios/02-benign-user-report.yaml) | A clean user-reported newsletter produces no actions. |
 | [`03-allowlisted-partner-indicators.yaml`](scenarios/03-allowlisted-partner-indicators.yaml) | Guardrails: a compromised partner's allow-listed domain and hash are `skipped_allowlisted`, while quarantine stays planned. |
-| [`04-campaign-over-indicator-cap.yaml`](scenarios/04-campaign-over-indicator-cap.yaml) | Blast radius: a campaign with rotating domains exceeds `max_indicators_blocked`, all blocks become `skipped_limit` and the plan escalates; quarantine is not capped by the indicator limit. |
+| [`04-campaign-over-indicator-cap.yaml`](scenarios/04-campaign-over-indicator-cap.yaml) | Blast radius: a campaign with rotating domains exceeds `max_indicators_blocked`, all blocks stay planned with `elevated: true` and the plan escalates; quarantine is not capped by the indicator limit. |
 | [`05-malicious-url-on-legitimate-host.yaml`](scenarios/05-malicious-url-on-legitimate-host.yaml) | Edge case: malicious URLs on legitimate file-sharing hosts are blocked by exact URL, never by domain; the allow-listed host is skipped, the benign link is ignored and the internal sender is quarantined by sender plus subject. |
 
 ## Inputs
@@ -92,7 +92,7 @@ Run with `PYTHONPATH=engine python -m xdr_plan check phishing` from the reposito
 ## Guardrails
 
 - `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Protected hosts, protected users and allow-listed indicators are never actioned automatically.
+- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
 - Blast-radius limits cap how many hosts, users or indicators a single run may touch. URL, domain and hash blocks share `max_indicators_blocked`; quarantine passes `max_messages_quarantined` to the atomic as `max_messages`.
 - Every containment action in this workflow is reversible, and the rollback is written into the incident note (`templates.incident_note`): release messages from quarantine, remove URLs and domains from the block lists, delete hashes from the Secure Endpoint custom detection list.
 

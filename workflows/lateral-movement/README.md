@@ -37,7 +37,7 @@ Typical alerts that should route to this workflow:
 1. **Intake.** Load the incident summary, observables, the source hosts of the remote logons (`incident.context.source_hosts`, when the detection provides them) and the guardrails file.
 2. **Enrich.** [`enrich-ip`](../../atomic/enrich-ip/README.md), [`enrich-hash`](../../atomic/enrich-hash/README.md).
 3. **Investigate.** [`investigate-host`](../../atomic/investigate-host/README.md), [`investigate-user`](../../atomic/investigate-user/README.md), for every source and destination host and every account involved.
-4. **Decide.** Build a containment plan and drop protected, allow-listed or over-limit targets. Send the plan to an approver unless `dry_run` is true.
+4. **Decide.** Build a containment plan and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
 5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
 6. **Record.** Add an incident note and [`create-ticket`](../../atomic/create-ticket/README.md).
 7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
@@ -47,8 +47,8 @@ Typical alerts that should route to this workflow:
 | Action | When | Approval |
 |---|---|---|
 | [`isolate-endpoint`](../../atomic/isolate-endpoint/README.md) | Isolation-capable source or destination hosts that have a malicious detection, hold a file enrich-hash rates malicious, or are named in `incident.context.source_hosts` while the movement is confirmed malicious. | yes |
-| [`revoke-session`](../../atomic/revoke-session/README.md) | Accounts in the incident when the movement is confirmed malicious (any host with a malicious detection or any malicious hash), or any account with a successful sign-in from a malicious IP. | no |
-| [`disable-user`](../../atomic/disable-user/README.md) | Accounts confirmed compromised and not protected, meaning confirmed malicious movement plus high Entra risk or sign-in anomalies, or a successful sign-in from a malicious IP. | yes |
+| [`revoke-session`](../../atomic/revoke-session/README.md) | Accounts in the incident when the movement is confirmed malicious (any host with a malicious detection or any malicious hash), or any account with a successful sign-in from a malicious IP. | yes |
+| [`disable-user`](../../atomic/disable-user/README.md) | Accounts confirmed compromised (protected accounts need ELEVATED approval), meaning confirmed malicious movement plus high Entra risk or sign-in anomalies, or a successful sign-in from a malicious IP. | yes |
 
 "Confirmed malicious movement" means at least one host in `investigate-host` has a detection with disposition `malicious`, or at least one hash in `enrich-hash` is `malicious`. Without it, remote logons alone (for example sanctioned admin work) produce no containment.
 
@@ -77,14 +77,14 @@ Step failures: intake steps `stop`; enrichment, investigation, record and notify
 ## Guardrails
 
 - `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Protected hosts, protected users and allow-listed indicators are never actioned automatically.
-- Blast-radius limits cap how many hosts, users or indicators a single run may touch. Over the limit, that whole group is skipped and the run escalates to a human.
+- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
+- Blast-radius limits cap how many hosts, users or indicators a single run may touch. Over the limit, that whole group is skipped and the run escalates to a lead.
 - Every containment action is reversible except session revocation, and the rollback is written into the incident note.
 
 ## Notes
 
 - Map the account and host graph before isolating; isolating only the newest host leaves the source active. Run `investigate-host` for every source and destination, and pass the detection's origin hosts as `incident.context.source_hosts` so a quiet source is still isolated.
-- Domain controllers (`dc-*`) and Domain Admins accounts are protected and are only reported as `skipped_protected`; contain them manually with the incident commander.
+- Containment of domain controllers (`dc-*`) and Domain Admins accounts stays planned with ELEVATED approval; the incident commander approves or rejects it.
 - Session revocation does not reset on-premises AD credentials. The incident note lists password resets as analyst follow-up.
 
 ## Scenarios
@@ -95,8 +95,8 @@ Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them wit
 |---|---|
 | [`01-rdp-pivot-confirmed.yaml`](scenarios/01-rdp-pivot-confirmed.yaml) | True positive: an RDP pivot with malicious detections on source and destination isolates both hosts, revokes the account's sessions and disables the high-risk account. |
 | [`02-sanctioned-admin-winrm.yaml`](scenarios/02-sanctioned-admin-winrm.yaml) | Benign: change-approved WinRM patching from a jump host with clean hosts, a clean hash and no account risk produces no actions, even though the jump host is a listed source. |
-| [`03-domain-controller-destination.yaml`](scenarios/03-domain-controller-destination.yaml) | Guardrails: the source workstation is isolated, but the `dc-01` destination and the Domain Admins account are `skipped_protected` for isolation, revocation and disabling. |
-| [`04-admin-share-fan-out.yaml`](scenarios/04-admin-share-fan-out.yaml) | Blast radius: seven hosts to isolate exceed `max_hosts_isolated` (5), so all become `skipped_limit` and the plan escalates. The account is still revoked and disabled because it signed in from a malicious IP. |
+| [`03-domain-controller-destination.yaml`](scenarios/03-domain-controller-destination.yaml) | Guardrails: the source workstation is isolated, but isolation of the `dc-01` destination and revocation and disabling of the Domain Admins account are planned with `elevated: true`. |
+| [`04-admin-share-fan-out.yaml`](scenarios/04-admin-share-fan-out.yaml) | Blast radius: seven hosts to isolate exceed `max_hosts_isolated` (5), so all stay planned with `elevated: true` and the plan escalates. Revocation and disabling of the account are planned because it signed in from a malicious IP. |
 | [`05-tool-transfer-quiet-source.yaml`](scenarios/05-tool-transfer-quiet-source.yaml) | Edge case (T1570): a transferred file not yet executed isolates the destination through the hash `hosts` list, and the detection-free source is isolated through `source_hosts`. A clean bystander host is untouched, and the account is revoked but not disabled. |
 
 ## Related workflows

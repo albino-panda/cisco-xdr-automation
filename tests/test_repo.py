@@ -39,7 +39,12 @@ def test_atomic_references(atomic_id):
     spec = repo.atomics()[atomic_id]
     assert spec["id"] == atomic_id
     assert set(spec["integrations"]) <= INTEGRATIONS
-    assert set(spec["used_by"]) <= set(repo.workflow_ids())
+    assert set(spec["used_by"]) <= set(repo.workflow_dirs())
+
+
+def test_workflow_ids_are_workflow_dirs():
+    """Every legacy spec lives in a workflow directory; migrated ones keep only their README."""
+    assert set(repo.workflow_ids()) <= set(repo.workflow_dirs())
 
 
 @pytest.mark.parametrize("workflow_id", repo.workflow_ids())
@@ -50,14 +55,18 @@ def test_workflow_references(workflow_id):
         if "atomic" in step:
             assert step["atomic"] in repo.atomics(), step
     assert set(spec["integrations"]) <= INTEGRATIONS
-    assert set(spec["related_workflows"]) <= set(repo.workflow_ids())
+    assert set(spec["related_workflows"]) <= set(repo.workflow_dirs())
 
 
 def test_mitre_mapping_in_sync():
+    from tools.validation import generate_workflow_docs
+
+    assert generate_workflow_docs.check(ROOT) == []
     mapping = repo.load_yaml(ROOT / "docs" / "mitre-mapping" / "mitre-mapping.yaml")
+    assert mapping["schema_version"] == 2
     from_doc = {(t["id"], w) for t in mapping["techniques"] for w in t["workflows"]}
     from_specs = {(t["id"], wid) for wid in repo.workflow_ids() for t in repo.load_workflow(wid)["mitre_attack"]}
-    assert from_doc == from_specs
+    assert from_specs <= from_doc
 
 
 def test_one_agent_per_workflow():
@@ -66,4 +75,4 @@ def test_one_agent_per_workflow():
         front = yaml.safe_load(path.read_text(encoding="utf-8").split("---")[1])
         assert front["name"] == path.stem
         agents[path.stem] = front
-    assert set(agents) == {f"wf-{w}" for w in repo.workflow_ids()}
+    assert set(agents) == {f"wf-{w}" for w in repo.workflow_dirs()}

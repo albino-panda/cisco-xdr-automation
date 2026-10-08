@@ -85,8 +85,7 @@ steps:
   on_error: continue
 - id: build_plan
   phase: decide
-  note: Build the containment plan from the rules in `plan`, then drop any target that is protected,
-    allow-listed or over the blast-radius limit.
+  note: Build the containment plan from the rules in `plan`, then apply the guardrails. Allow-listed and internal targets are skipped; protected targets and targets over a blast-radius cap stay in the plan with ELEVATED approval and a warning, never dropped.
   on_error: escalate
 - id: approval
   phase: decide
@@ -98,8 +97,7 @@ steps:
   phase: contain
   atomic: isolate-endpoint
   when: Isolation-capable host that has a malicious detection, or that has seen a malicious payload hash
-    with a prevalence of 50 or less. Protected hosts are skipped. Eligible for auto-approval when guardrails
-    allow.
+    with a prevalence of 50 or less. Protected hosts need ELEVATED approval.
   requires_approval: true
   on_error: escalate
 - id: block_hash
@@ -113,7 +111,7 @@ steps:
   phase: contain
   atomic: revoke-session
   when: Account listed in the same incident target as a host that has a malicious detection.
-  requires_approval: false
+  requires_approval: true
   on_error: escalate
 - id: disable_user
   phase: contain
@@ -186,6 +184,7 @@ plan:
 templates:
   approval: |
     Ransomware containment for {incident.id}: {incident.title} (severity {incident.severity}).
+    ELEVATED approval required for (protected assets and actions over a blast-radius cap; a lead must approve): {plan.elevated}
     {plan.summary}
     Planned actions: {plan.actions}
     Skipped by guardrails: {plan.skipped}

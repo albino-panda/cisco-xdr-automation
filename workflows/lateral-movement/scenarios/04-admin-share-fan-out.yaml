@@ -1,10 +1,11 @@
 name: One account fans out over admin shares to many hosts
-description: >
-  Blast radius. An account signed in from a malicious external IP and used SMB admin shares to reach six
-  operations workstations from one engineering workstation; all seven hosts carry malicious detections.
-  Seven isolations exceed max_hosts_isolated (5), so every isolation becomes skipped_limit and the plan
-  escalates to a human. The account is still contained: sessions are revoked and, because of the successful
-  sign-in from a malicious IP (no Entra risk or anomalies are needed for this branch), it is disabled.
+description: >-
+  Blast radius. An account signed in from a malicious external IP and used SMB admin shares to reach
+  six operations workstations from one engineering workstation; all seven hosts carry malicious
+  detections. Seven isolations exceed max_hosts_isolated (5), so every isolation stays planned with
+  elevated: true and the plan escalates to a lead. The account actions are planned behind normal
+  approval: session revocation and, because of the successful sign-in from a malicious IP (no Entra
+  risk or anomalies are needed for this branch), disabling.
 incident:
   id: INC-TEST-LM-0004
   title: m.ortiz@example.com authenticated to seven hosts over SMB in ten minutes
@@ -46,12 +47,12 @@ results:
 expect:
   escalate: true
   actions:
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000400, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000401, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000402, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000403, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000404, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000405, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000406, status: skipped_limit}
-    - {atomic: revoke-session, target: m.ortiz@example.com, status: planned, requires_approval: false}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000400, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000401, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000402, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000403, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000404, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000405, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000406, status: planned, elevated: true}
+    - {atomic: revoke-session, target: m.ortiz@example.com, status: planned, requires_approval: true}
     - {atomic: disable-user, target: m.ortiz@example.com, status: planned, requires_approval: true}

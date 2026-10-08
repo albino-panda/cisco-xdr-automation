@@ -72,7 +72,7 @@ steps:
 - id: build_plan
   phase: decide
   note: Build the containment plan from the plan rules below, using enrichment verdicts, investigation
-    results and guardrails. Drop any target that is protected, allow-listed or over the blast-radius limit.
+    results and guardrails. Allow-listed and internal targets are skipped; protected targets and targets over a blast-radius cap stay in the plan with ELEVATED approval and a warning, never dropped.
     A failure here means no plan, so a human decides.
   on_error: escalate
 - id: approval
@@ -149,6 +149,7 @@ plan:
 templates:
   approval: |
     {workflow.name}: containment plan for {incident.id} ({incident.severity}) - {incident.title}
+    ELEVATED approval required for (protected assets and actions over a blast-radius cap; a lead must approve): {plan.elevated}
 
     Planned actions:
     {plan.actions}
@@ -175,7 +176,7 @@ templates:
     Rollback:
     - block-ip: remove the IP from the Cloudflare IP list or restore the saved Meraki rule set. Blocks expire after {plan.block_ip_expiry_hours} hours.
     - block-url: remove the URL from the Cloudflare and Umbrella block lists once the fix is deployed.
-    - isolate-endpoint: stop isolation in Secure Endpoint for the connector GUID. Unlock codes: {plan.unlock_codes}
+    - isolate-endpoint: stop isolation in Secure Endpoint for the connector GUID. The unlock code stays in the Secure Endpoint console and is not copied here.
 
     Ticket: {ticket.id} {ticket.url}
   ticket_title: "[{incident.severity}] Web application attack: {incident.title} ({incident.id})"

@@ -38,7 +38,7 @@ Endpoint context: owner, OS, recent detections, process and network trajectory, 
 
 ## Used by
 
-[`ransomware`](../../workflows/ransomware/README.md), [`malware`](../../workflows/malware/README.md), [`powershell`](../../workflows/powershell/README.md), [`lateral-movement`](../../workflows/lateral-movement/README.md), [`c2`](../../workflows/c2/README.md), [`dns-tunneling`](../../workflows/dns-tunneling/README.md), [`credential-dumping`](../../workflows/credential-dumping/README.md), [`privilege-escalation`](../../workflows/privilege-escalation/README.md), [`persistence`](../../workflows/persistence/README.md), [`rmm`](../../workflows/rmm/README.md), [`exfiltration`](../../workflows/exfiltration/README.md), [`vulnerability-exploitation`](../../workflows/vulnerability-exploitation/README.md), [`web-attacks`](../../workflows/web-attacks/README.md)
+[`ransomware`](../../workflows/ransomware/README.md), [`malware`](../../workflows/malware/README.md), [`malicious-powershell`](../../workflows/malicious-powershell/README.md), [`lateral-movement`](../../workflows/lateral-movement/README.md), [`c2`](../../workflows/c2/README.md), [`dns-tunneling`](../../workflows/dns-tunneling/README.md), [`credential-dumping`](../../workflows/credential-dumping/README.md), [`privilege-escalation`](../../workflows/privilege-escalation/README.md), [`persistence`](../../workflows/persistence/README.md), [`unauthorized-rmm`](../../workflows/unauthorized-rmm/README.md), [`exfiltration`](../../workflows/exfiltration/README.md), [`vulnerability-exploitation`](../../workflows/vulnerability-exploitation/README.md), [`web-attacks`](../../workflows/web-attacks/README.md)
 
 ## Building it in XDR Automation
 

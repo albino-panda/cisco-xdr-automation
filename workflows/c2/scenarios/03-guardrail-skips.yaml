@@ -1,9 +1,10 @@
 name: C2 indicators that hit guardrails
-description: >
+description: >-
   Guardrails. A domain controller beacons to beacon-relay.test through a compromised internal relay.
   Enrichment also returns a malicious verdict for an own-domain host and for the internal relay IP.
-  The external domain is planned. The allow-listed domain, the internal IP and the protected domain
-  controller stay in the plan as skipped so the approver sees them, and nothing changes for them.
+  The external domain is planned. The allow-listed domain and the internal IP stay in the plan as
+  skipped so the approver sees them. The protected domain controller's isolation stays planned with
+  elevated: true, so it needs ELEVATED approval.
 incident:
   id: INC-TEST-C2-0003
   title: Beaconing to beacon-relay.test through an internal relay
@@ -35,4 +36,4 @@ expect:
     - {atomic: block-domain, target: beacon-relay.test, status: planned, requires_approval: true}
     - {atomic: block-domain, target: updates.example.com, status: skipped_allowlisted}
     - {atomic: block-ip, target: 10.20.30.40, status: skipped_internal}
-    - {atomic: isolate-endpoint, target: 0f3c2a10-0000-4000-8000-0000000d0002, status: skipped_protected}
+    - {atomic: isolate-endpoint, target: 0f3c2a10-0000-4000-8000-0000000d0002, status: planned, elevated: true}

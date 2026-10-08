@@ -76,7 +76,7 @@ steps:
 - id: build_plan
   phase: decide
   note: Build the containment plan from the plan rules below, enrichment verdicts, investigation results
-    and guardrails. Drop any target that is protected, allow-listed or over the blast-radius limit.
+    and guardrails. Allow-listed and internal targets are skipped; protected targets and targets over a blast-radius cap stay in the plan with ELEVATED approval and a warning, never dropped.
   on_error: escalate
 - id: approval
   phase: decide
@@ -96,7 +96,7 @@ steps:
   atomic: revoke-session
   when: Account that was created or gained a role or group, or that granted one to another account, with
     no approved change request covering the change.
-  requires_approval: false
+  requires_approval: true
   on_error: escalate
 - id: disable_user
   phase: contain
@@ -108,8 +108,8 @@ steps:
 - id: incident_note
   phase: record
   action: XDR - Incident - Add Note to Incident
-  note: Write enrichment summary, plan, approvals, per-action results and rollback steps. The isolation
-    unlock code is stored only here, so a failure escalates.
+  note: Write enrichment summary, plan, approvals, per-action results and rollback steps. It is the
+    only record of the rollback steps, so a failure escalates.
   on_error: escalate
 - id: create_ticket
   phase: record
@@ -161,11 +161,12 @@ plan:
 templates:
   approval: |
     Privilege escalation response for {incident.id}: {incident.title} (severity {incident.severity}).
+    ELEVATED approval required for (protected assets and actions over a blast-radius cap; a lead must approve): {plan.elevated}
     Dry run: {workflow.dry_run}. Proposed actions:
     {plan.actions}
     Skipped by guardrails or limits: {plan.skipped}. Needs a human: {plan.escalate} {plan.reasons}
     Check before approving: an account that was just added to a protected group (for example Domain
-    Admins) is skipped_protected by the group guardrail. Reverse that membership manually first.
+    Admins) is marked ELEVATED by the group guardrail. Reverse that membership manually first.
     Approve to run the planned actions. Reject to keep the plan as a record only.
   incident_note: |
     Workflow {workflow.name} on {incident.id}. Dry run: {workflow.dry_run}.
@@ -174,8 +175,8 @@ templates:
     Findings: {plan.findings}
     Actions and results: {plan.results}
     Rollback:
-    - isolate-endpoint: stop isolation in Secure Endpoint for the connector GUID. Unlock codes:
-      {plan.unlock_codes}
+    - isolate-endpoint: stop isolation in Secure Endpoint for the connector GUID.
+      The unlock code stays in the Secure Endpoint console and is not copied here.
     - disable-user: set accountEnabled back to true in Entra ID once the account is confirmed legitimate.
     - revoke-session: not reversible; the user signs in again.
     Manual step: reverse every unauthorised role or group change listed above (remove the role
@@ -188,7 +189,7 @@ templates:
     Enrichment and investigation: {plan.findings}
     Containment plan and results: {plan.results}
     Approver: {approver.name} ({approver.decision}). Needs a human: {plan.escalate} {plan.reasons}
-    Rollback: stop isolation with the unlock code in the incident note; re-enable disabled accounts by
+    Rollback: stop isolation in the Secure Endpoint console (the unlock code stays there); re-enable disabled accounts by
     setting accountEnabled to true; session revocation is not reversible.
     Manual follow-up (required): reverse each unauthorised role or group change, delete or keep disabled
     accounts created outside an approved change, and record before and after membership here.

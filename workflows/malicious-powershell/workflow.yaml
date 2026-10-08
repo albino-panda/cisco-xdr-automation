@@ -1,5 +1,5 @@
 schema_version: 1
-id: powershell
+id: malicious-powershell
 name: Suspicious PowerShell
 status: specification
 description: Investigate encoded, obfuscated or download-cradle style PowerShell and contain the host
@@ -80,7 +80,7 @@ steps:
 - id: build_plan
   phase: decide
   note: Build the containment plan from the plan rules below, enrichment verdicts, investigation results
-    and guardrails. Drop any target that is protected, allow-listed or over the blast-radius limit.
+    and guardrails. Allow-listed and internal targets are skipped; protected targets and targets over a blast-radius cap stay in the plan with ELEVATED approval and a warning, never dropped.
   on_error: escalate
 - id: approval
   phase: decide
@@ -101,7 +101,7 @@ steps:
   atomic: isolate-endpoint
   when: Isolation-capable host where a malicious payload hash was seen (payload retrieved), or with a malicious
     Secure Endpoint detection while a download destination domain or IP is malicious (payload executed).
-    Protected hosts are skipped; more hosts than max_hosts_isolated escalates instead.
+    Protected hosts and more hosts than max_hosts_isolated need ELEVATED approval; over the cap the plan escalates.
   requires_approval: true
   on_error: escalate
 - id: incident_note
@@ -167,6 +167,7 @@ plan:
 templates:
   approval: |
     {workflow.name}: containment approval for {incident.id} ({incident.severity})
+    ELEVATED approval required for (protected assets and actions over a blast-radius cap; a lead must approve): {plan.elevated}
     {incident.title}
 
     Planned actions:
@@ -176,8 +177,8 @@ templates:
     Escalated (blast radius exceeded): {plan.escalate} {plan.reasons}
     Dry run: {workflow.dry_run}
 
-    Approving adds the listed download domains to the automation block list (auto-expiry
-    {plan.block_expiry_hours} hours) and network-isolates the listed hosts in Secure Endpoint.
+    Approving adds the listed download domains to the automation block list (release review due after
+    {plan.block_expiry_hours} hours; removal needs a separate human release approval) and network-isolates the listed hosts in Secure Endpoint.
     Both are reversible; the rollback for each action is written into the incident note.
     Before approving, check the script against known admin and software-deployment scripts.
   incident_note: |
@@ -201,7 +202,7 @@ templates:
       {plan.block_expiry_hours} hours.
     - isolate-endpoint: stop isolation for each connector GUID in Secure Endpoint (stop-isolation API,
       endpoint not yet verified against vendor documentation): {plan.isolated_hosts}.
-      Unlock codes: {plan.unlock_codes}.
+      The unlock code stays in the Secure Endpoint console and is not copied here.
 
     ### Follow-up
     - [ ] Payload removed or quarantined on every host in the payload hash host list

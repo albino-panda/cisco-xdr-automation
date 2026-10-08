@@ -107,7 +107,7 @@ def test_build_basic_package(builder):
     assert pkg.keys == ("XDR-83921:isolate_endpoint:TH-LT-1047", "XDR-83921:block_domain:bad.example.test")
     assert all(a.approval_level is ApprovalLevel.STANDARD and not a.warnings for a in pkg.actions)
     assert (pkg.created_at, pkg.expires_at) == (FIXED_NOW, FIXED_NOW + timedelta(minutes=240))
-    assert (pkg.workflow_id, pkg.workflow_version, pkg.requested_by) == ("powershell", "1.0.0",
+    assert (pkg.workflow_id, pkg.workflow_version, pkg.requested_by) == ("malicious-powershell", "1.0.0",
                                                                          "automation:package_builder")
     assert (pkg.risk_score, pkg.confidence_score, pkg.dry_run) == (85, 75, False)
     assert pkg.endpoints == ("TH-LT-1047",) and pkg.blast_radius.indicators == ("bad.example.test",)

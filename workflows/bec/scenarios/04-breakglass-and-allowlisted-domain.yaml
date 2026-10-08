@@ -1,9 +1,10 @@
 name: Break-glass sign-in and an allow-listed domain flagged as lookalike
 description: >-
   Guardrail case. A break-glass account shows a risky successful sign-in but no abuse yet, so only
-  session revocation is considered and the protected-user guardrail skips it. The gateway also flags
-  the organisation's own subdomain as a lookalike; block-domain is skipped as allow-listed and the
-  lookalike quarantine rule refuses allow-listed domains, so no mail is pulled.
+  session revocation is considered; the protected-user guardrail keeps it planned with elevated:
+  true (ELEVATED approval). The gateway also flags the organisation's own subdomain as a lookalike;
+  block-domain is skipped as allow-listed and the lookalike quarantine rule refuses allow-listed
+  domains, so no mail is pulled.
 incident:
   id: INC-TEST-BEC-0004
   title: Risky break-glass sign-in during payment-change investigation
@@ -36,5 +37,5 @@ results:
 expect:
   escalate: false
   actions:
-    - {atomic: revoke-session, target: breakglass-01@example.com, status: skipped_protected, requires_approval: false}
+    - {atomic: revoke-session, target: breakglass-01@example.com, status: planned, elevated: true, requires_approval: true}
     - {atomic: block-domain, target: pay.example.com, status: skipped_allowlisted, requires_approval: true}

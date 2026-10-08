@@ -68,7 +68,7 @@ def test_approve_all_issues_token_for_every_action(engine, package, audit, token
     assert d.analyst_identity == ANALYST_ID and [a.principal_id for a in d.approvers] == [ANALYST_ID]
     assert (d.incident_id, d.package_id, d.purpose) == (package.incident_id, package.package_id,
                                                         ApprovalPurpose.CONTAINMENT)
-    assert (d.workflow_id, d.workflow_version) == ("powershell", "1.0.0")
+    assert (d.workflow_id, d.workflow_version) == ("malicious-powershell", "1.0.0")
     assert d.evidence_snapshot_hash == package.evidence_snapshot_hash
     assert outcome.token is not None and d.token_id == outcome.token.token_id
     assert outcome.token.claims.decision_id == d.decision_id

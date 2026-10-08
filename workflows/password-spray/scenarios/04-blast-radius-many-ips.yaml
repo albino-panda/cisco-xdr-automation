@@ -1,9 +1,9 @@
 name: Distributed spray from many source IPs
-description: >
-  Blast radius. A distributed spray from twelve source IPs exceeds the indicator cap, which this file
-  lowers to 10 to stay readable (the default is 50). Every block-ip action becomes skipped_limit and the
-  plan escalates to a human. Session revocation has no cap, so the one account with a successful
-  sign-in from a spray source is still protected.
+description: >-
+  Blast radius. A distributed spray from twelve source IPs exceeds the indicator cap, which this
+  file lowers to 10 to stay readable (the default is 50). Every block-ip action stays planned with
+  elevated: true and the plan escalates to a lead. Session revocation has no cap, so revocation for
+  the one account with a successful sign-in from a spray source is planned behind normal approval.
 incident:
   id: INC-TEST-PS-0004
   title: Distributed password spray from residential proxy addresses
@@ -59,16 +59,16 @@ guardrails:
 expect:
   escalate: true
   actions:
-    - {atomic: block-ip, target: 203.0.113.101, status: skipped_limit, requires_approval: true}
-    - {atomic: block-ip, target: 203.0.113.102, status: skipped_limit, requires_approval: true}
-    - {atomic: block-ip, target: 203.0.113.103, status: skipped_limit, requires_approval: true}
-    - {atomic: block-ip, target: 203.0.113.104, status: skipped_limit, requires_approval: true}
-    - {atomic: block-ip, target: 203.0.113.105, status: skipped_limit, requires_approval: true}
-    - {atomic: block-ip, target: 203.0.113.106, status: skipped_limit, requires_approval: true}
-    - {atomic: block-ip, target: 203.0.113.107, status: skipped_limit, requires_approval: true}
-    - {atomic: block-ip, target: 203.0.113.108, status: skipped_limit, requires_approval: true}
-    - {atomic: block-ip, target: 203.0.113.109, status: skipped_limit, requires_approval: true}
-    - {atomic: block-ip, target: 203.0.113.110, status: skipped_limit, requires_approval: true}
-    - {atomic: block-ip, target: 203.0.113.111, status: skipped_limit, requires_approval: true}
-    - {atomic: block-ip, target: 203.0.113.112, status: skipped_limit, requires_approval: true}
-    - {atomic: revoke-session, target: k.nguyen@example.com, status: planned, requires_approval: false}
+    - {atomic: block-ip, target: 203.0.113.101, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.102, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.103, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.104, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.105, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.106, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.107, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.108, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.109, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.110, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.111, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.112, status: planned, elevated: true, requires_approval: true}
+    - {atomic: revoke-session, target: k.nguyen@example.com, status: planned, requires_approval: true}

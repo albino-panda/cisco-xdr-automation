@@ -1,9 +1,9 @@
 name: Fake help-desk campaign puts FictiDesk sessions on six hosts
 description: >-
   The same fake help-desk caller reaches six users in one morning and each gets an active FictiDesk
-  session. The relay domain and installer hash are blocked once (duplicates collapse), but six
-  isolations exceed blast_radius.max_hosts_isolated (5), so every isolation becomes skipped_limit and
-  the plan escalates to a human instead of isolating part of the group.
+  session. The relay domain and installer hash blocks are planned once (duplicates collapse), but
+  six isolations exceed blast_radius.max_hosts_isolated (5), so every isolation stays planned with
+  elevated: true and the plan escalates to a lead instead of isolating part of the group.
 incident:
   id: INC-TEST-RMM-0005
   title: FictiDesk sessions on six workstations after help-desk impersonation calls
@@ -46,9 +46,9 @@ expect:
   actions:
     - {atomic: block-domain, target: relay.fictidesk.example, status: planned, requires_approval: true}
     - {atomic: block-hash, target: 7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57, status: planned, requires_approval: true}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000101, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000102, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000103, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000104, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000105, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000106, status: skipped_limit}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000101, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000102, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000103, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000104, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000105, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000106, status: planned, elevated: true}

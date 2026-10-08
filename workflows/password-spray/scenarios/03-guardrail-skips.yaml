@@ -1,10 +1,11 @@
 name: Spray hits a break-glass account and a Domain Admin
-description: >
-  Guardrails. The spray came from one external IP and from an internal workstation. The external IP is
-  blocked. The block-ip guardrail drops the internal IP; internal hosts are contained through the
-  lateral-movement workflow, not blocked at the perimeter. The break-glass account and a Domain Admins
-  member both had a successful sign-in from a spray source, so the rules select them, but the protected
-  user list and protected group keep every action on them out of automation for a human to handle.
+description: >-
+  Guardrails. The spray came from one external IP and from an internal workstation. The external IP
+  block is planned. The block-ip guardrail skips the internal IP; internal hosts are contained
+  through the lateral-movement workflow, not blocked at the perimeter. The break-glass account and a
+  Domain Admins member both had a successful sign-in from a spray source, so the rules select them,
+  and the protected user list and protected group keep every action on them planned with elevated:
+  true (ELEVATED approval).
 incident:
   id: INC-TEST-PS-0003
   title: Password spray with successful sign-ins on privileged accounts
@@ -41,6 +42,6 @@ expect:
   actions:
     - {atomic: block-ip, target: 203.0.113.30, status: planned, requires_approval: true}
     - {atomic: block-ip, target: 10.20.4.17, status: skipped_internal, requires_approval: true}
-    - {atomic: revoke-session, target: breakglass-01@example.com, status: skipped_protected, requires_approval: false}
-    - {atomic: revoke-session, target: it-admin@example.com, status: skipped_protected, requires_approval: false}
-    - {atomic: disable-user, target: breakglass-01@example.com, status: skipped_protected, requires_approval: true}
+    - {atomic: revoke-session, target: breakglass-01@example.com, status: planned, elevated: true, requires_approval: true}
+    - {atomic: revoke-session, target: it-admin@example.com, status: planned, elevated: true, requires_approval: true}
+    - {atomic: disable-user, target: breakglass-01@example.com, status: planned, elevated: true, requires_approval: true}

@@ -90,7 +90,7 @@ def test_recorder_actor_and_workflow_selection(memory_trail, lifecycle):
     recorder = AuditRecorder(memory_trail, workflow_id="wf-default", workflow_version="9.9.9")
     decision = recorder.decision_recorded(lifecycle.decision)
     assert decision.actor == "analyst.one@example.com"
-    assert (decision.workflow_id, decision.workflow_version) == ("powershell", "1.0.0")
+    assert (decision.workflow_id, decision.workflow_version) == ("malicious-powershell", "1.0.0")
     transition = recorder.state_transition("XDR-83921", lifecycle.transition)
     assert transition.actor == "automation:lifecycle"
     api = recorder.api_call("XDR-83921", lifecycle.api_call)

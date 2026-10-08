@@ -1,10 +1,12 @@
 name: Ransomware reaches a hypervisor, a domain controller and the OT network
-description: >
+description: >-
   Guardrails. Encryption is detected on hv-esx-02, dc-01 and an OT host in 10.0.10.0/24, and on one
-  ordinary workstation. The investigation does not mark the infrastructure hosts as protected, so the
-  engine's own host patterns and CIDR must catch them. The accounts on those hosts are a break-glass
-  account and a Domain Admins member; both are high risk, and both must be skipped rather than revoked
-  or disabled. Only the workstation and the payload hash are planned.
+  ordinary workstation. The investigation does not mark the infrastructure hosts as protected, so
+  the engine's own host patterns and CIDR must catch them. The accounts on those hosts are a
+  break-glass account and a Domain Admins member; both are high risk. Every action on the three
+  infrastructure hosts and the two protected accounts stays planned with elevated: true (ELEVATED
+  approval); the workstation isolation and the payload hash block are planned behind normal
+  approval.
 incident:
   id: INC-TEST-RW-0003
   title: Ransomware on virtualisation and identity infrastructure
@@ -73,12 +75,12 @@ results:
 expect:
   escalate: false
   actions:
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-0000000e5002, status: skipped_protected}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000dc01, status: skipped_protected}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000a025, status: skipped_protected}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-0000000e5002, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000dc01, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000a025, status: planned, elevated: true}
     - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000e031, status: planned, requires_approval: true}
     - {atomic: block-hash, target: 6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f, status: planned, requires_approval: true}
-    - {atomic: revoke-session, target: breakglass-01@example.com, status: skipped_protected}
-    - {atomic: revoke-session, target: infra.admin@example.com, status: skipped_protected}
-    - {atomic: disable-user, target: breakglass-01@example.com, status: skipped_protected}
-    - {atomic: disable-user, target: infra.admin@example.com, status: skipped_protected}
+    - {atomic: revoke-session, target: breakglass-01@example.com, status: planned, elevated: true}
+    - {atomic: revoke-session, target: infra.admin@example.com, status: planned, elevated: true}
+    - {atomic: disable-user, target: breakglass-01@example.com, status: planned, elevated: true}
+    - {atomic: disable-user, target: infra.admin@example.com, status: planned, elevated: true}

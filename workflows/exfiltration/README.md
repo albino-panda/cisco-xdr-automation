@@ -36,7 +36,7 @@ Typical alerts that should route to this workflow:
 1. **Intake.** Load the incident summary, observables and the guardrails file.
 2. **Enrich.** [`enrich-domain`](../../atomic/enrich-domain/README.md), [`enrich-ip`](../../atomic/enrich-ip/README.md).
 3. **Investigate.** [`investigate-host`](../../atomic/investigate-host/README.md), [`investigate-user`](../../atomic/investigate-user/README.md).
-4. **Decide.** Build a containment plan and drop protected, allow-listed or over-limit targets. Send the plan to an approver unless `dry_run` is true.
+4. **Decide.** Build a containment plan and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
 5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
 6. **Record.** Add an incident note and [`create-ticket`](../../atomic/create-ticket/README.md).
 7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
@@ -47,8 +47,8 @@ Typical alerts that should route to this workflow:
 |---|---|---|
 | [`block-domain`](../../atomic/block-domain/README.md) | Domain with verdict malicious or suspicious, or a transfer destination with verdict unknown. Clean destinations are not blocked at the domain level; sanctioned services are allow-listed and skipped. | yes |
 | [`block-ip`](../../atomic/block-ip/README.md) | IP seen from at most 3 internal hosts (not shared infrastructure) with verdict malicious or suspicious, or a transfer destination with verdict unknown. Internal and allow-listed ranges are skipped. | yes |
-| [`isolate-endpoint`](../../atomic/isolate-endpoint/README.md) | Isolation-capable source host while the transfer is still running and shows exfiltration evidence. Finished transfers are not isolated. Protected hosts are skipped. | yes |
-| [`disable-user`](../../atomic/disable-user/README.md) | Account driving the transfer that is compromised (risk high, or risk medium with a sign-in anomaly) or flagged as an insider by the source. Protected users and groups are skipped. | yes |
+| [`isolate-endpoint`](../../atomic/isolate-endpoint/README.md) | Isolation-capable source host while the transfer is still running and shows exfiltration evidence. Finished transfers are not isolated. Protected hosts need ELEVATED approval. | yes |
+| [`disable-user`](../../atomic/disable-user/README.md) | Account driving the transfer that is compromised (risk high, or risk medium with a sign-in anomaly) or flagged as an insider by the source. Protected users and groups need ELEVATED approval. | yes |
 
 ### Error handling
 
@@ -101,7 +101,7 @@ to the defaults shown, which never widen containment beyond what the enrichment 
 ## Guardrails
 
 - `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Protected hosts, protected users and allow-listed indicators are never actioned automatically.
+- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
 - Blast-radius limits cap how many hosts, users or indicators a single run may touch.
 - Every containment action is reversible except session revocation, and the rollback is written into the incident note.
 - Sanctioned backup, file-transfer and partner services go into `allowlist.domains`, so they are never blocked.
@@ -124,10 +124,10 @@ Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them wit
 |---|---|
 | [`01-ongoing-upload-compromised-account.yaml`](scenarios/01-ongoing-upload-compromised-account.yaml) | True positive: an ongoing upload to an unknown domain and IP by a high-risk account plans all four actions, each behind approval. |
 | [`02-sanctioned-backup.yaml`](scenarios/02-sanctioned-backup.yaml) | Benign: a running backup to the allow-listed, clean backup service produces no actions; an ongoing transfer alone never isolates a host. |
-| [`03-guardrail-skips.yaml`](scenarios/03-guardrail-skips.yaml) | Guardrails: an allow-listed partner domain, an internal relay IP, a `dc-*` host and a Domain Admins account are kept in the plan as `skipped_allowlisted`, `skipped_internal` and `skipped_protected`. |
+| [`03-guardrail-skips.yaml`](scenarios/03-guardrail-skips.yaml) | Guardrails: an allow-listed partner domain, an internal relay IP, a `dc-*` host and a Domain Admins account are kept in the plan as `skipped_allowlisted`, `skipped_internal` and `elevated: true`. |
 | [`04-finished-transfer.yaml`](scenarios/04-finished-transfer.yaml) | Edge case: when the transfer has finished, the destinations are still blocked but the host is not isolated, and a low-risk account stays enabled. |
 | [`05-insider-personal-cloud.yaml`](scenarios/05-insider-personal-cloud.yaml) | Insider: only the named actor is disabled; clean personal cloud storage is not blocked and a second user in the incident is untouched. |
-| [`06-spread-destinations-over-limit.yaml`](scenarios/06-spread-destinations-over-limit.yaml) | Blast radius and shared infrastructure: a CDN address used by 40 hosts is not blocked, three IP blocks over the limit become `skipped_limit` and escalate, while isolation and disable stay planned. |
+| [`06-spread-destinations-over-limit.yaml`](scenarios/06-spread-destinations-over-limit.yaml) | Blast radius and shared infrastructure: a CDN address used by 40 hosts is not blocked, three IP blocks over the limit stay planned with `elevated: true` and escalate, while isolation and disable stay planned. |
 
 ## Related workflows
 

@@ -10,7 +10,7 @@ One directory per incident type. Each holds a `README.md` for analysts and a `wo
 | [`bec`](./bec/README.md) | high | T1534, T1114.003, T1656 | `revoke-session`, `disable-user`, `quarantine-email`, `block-domain` |
 | [`account-takeover`](./account-takeover/README.md) | high | T1078.004, T1621, T1539 | `revoke-session`, `disable-user`, `block-ip` |
 | [`malware`](./malware/README.md) | medium | T1204.002, T1105 | `block-hash`, `isolate-endpoint`, `block-domain` |
-| [`powershell`](./powershell/README.md) | medium | T1059.001, T1027 | `block-domain`, `isolate-endpoint` |
+| [`malicious-powershell`](./malicious-powershell/README.md) | medium | T1059.001, T1027 | `block-domain`, `isolate-endpoint` |
 | [`lateral-movement`](./lateral-movement/README.md) | high | T1021.001, T1021.002, T1021.006, T1570 | `isolate-endpoint`, `revoke-session`, `disable-user` |
 | [`c2`](./c2/README.md) | high | T1071.001, T1573, T1568.002 | `block-domain`, `block-ip`, `isolate-endpoint` |
 | [`dns-tunneling`](./dns-tunneling/README.md) | high | T1071.004, T1572 | `block-domain`, `isolate-endpoint` |
@@ -18,7 +18,7 @@ One directory per incident type. Each holds a `README.md` for analysts and a `wo
 | [`credential-dumping`](./credential-dumping/README.md) | critical | T1003.001, T1003.002, T1003.003 | `isolate-endpoint`, `revoke-session`, `disable-user` |
 | [`privilege-escalation`](./privilege-escalation/README.md) | high | T1068, T1548.002, T1098 | `isolate-endpoint`, `revoke-session`, `disable-user` |
 | [`persistence`](./persistence/README.md) | medium | T1547.001, T1053.005, T1543.003, T1136 | `block-hash`, `isolate-endpoint` |
-| [`rmm`](./rmm/README.md) | high | T1219 | `block-domain`, `block-hash`, `isolate-endpoint` |
+| [`unauthorized-rmm`](./unauthorized-rmm/README.md) | high | T1219 | `block-domain`, `block-hash`, `isolate-endpoint` |
 | [`exfiltration`](./exfiltration/README.md) | critical | T1041, T1567.002, T1048 | `block-domain`, `block-ip`, `isolate-endpoint`, `disable-user` |
 | [`vulnerability-exploitation`](./vulnerability-exploitation/README.md) | high | T1190, T1203 | `block-ip`, `block-url`, `isolate-endpoint` |
 | [`cloud-compromise`](./cloud-compromise/README.md) | high | T1078.004, T1098.001, T1528, T1530 | `revoke-session`, `disable-user`, `block-ip` |
@@ -26,4 +26,8 @@ One directory per incident type. Each holds a `README.md` for analysts and a `wo
 
 ## Common shape
 
-Every workflow follows the same phases: intake, enrich, investigate, decide, contain, record, notify. Containment always passes through the guardrails and, unless configured otherwise, an approval task.
+Every workflow follows the same phases: intake, enrich, investigate, decide, contain, record, notify. Workflows only investigate and recommend. Every containment action needs a human approval; protected (critical) assets and actions over a blast-radius cap need ELEVATED approval with a visible warning and are never dropped silently. After approval, the `xdr_response` lifecycle executes the approved actions and verifies them automatically; restoration needs a separate human release approval.
+
+## Migration
+
+The `workflow.yaml` and `scenarios/` here are legacy specs, checked by `PYTHONPATH=engine python -m xdr_plan check`. In Phases 2 to 5 each workflow migrates to `src/xdr_response/workflows/<x_snake>/` with simulation scenarios in `tests/fixtures/workflows/<id>/` and deletes its legacy spec in the same change (see [architecture section 14.5](../docs/architecture.md)). The generated index of all workflows, migrated or not, is [`docs/workflows/README.md`](../docs/workflows/README.md).

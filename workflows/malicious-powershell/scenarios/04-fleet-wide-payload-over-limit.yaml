@@ -1,9 +1,10 @@
 name: Same encoded payload on six workstations exceeds the isolation limit
-description: >
+description: >-
   Guardrail (blast radius). A logon script started the same encoded PowerShell download on six
   workstations, and the malicious payload landed on all of them. Six hosts is more than the default
-  max_hosts_isolated of 5, so every isolation becomes skipped_limit and the plan escalates to a human.
-  The single download domain is still planned for blocking because the indicator cap is not reached.
+  max_hosts_isolated of 5, so every isolation stays planned with elevated: true and the plan
+  escalates to a lead. The single download domain is planned behind normal approval because the
+  indicator cap is not reached.
 incident:
   id: INC-TEST-PS-0004
   title: Encoded PowerShell payload on six workstations
@@ -41,9 +42,9 @@ expect:
   escalate: true
   actions:
     - {atomic: block-domain, target: update-check.test, status: planned, requires_approval: true}
-    - {atomic: isolate-endpoint, target: 4b1c7a10-0000-4000-8000-000000000101, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 4b1c7a10-0000-4000-8000-000000000102, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 4b1c7a10-0000-4000-8000-000000000103, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 4b1c7a10-0000-4000-8000-000000000104, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 4b1c7a10-0000-4000-8000-000000000105, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 4b1c7a10-0000-4000-8000-000000000106, status: skipped_limit}
+    - {atomic: isolate-endpoint, target: 4b1c7a10-0000-4000-8000-000000000101, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 4b1c7a10-0000-4000-8000-000000000102, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 4b1c7a10-0000-4000-8000-000000000103, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 4b1c7a10-0000-4000-8000-000000000104, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 4b1c7a10-0000-4000-8000-000000000105, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 4b1c7a10-0000-4000-8000-000000000106, status: planned, elevated: true}

@@ -1,4 +1,7 @@
 # Copy to guardrails.yaml (git-ignored) and adapt. Read by every workflow at intake.
+# Legacy spec layer only: the xdr_response runtime reads config/*.yaml instead.
+# There is no auto-approval: every containment action needs a human approval. The plan engine
+# refuses auto_approve, skip_approval, bypass_approval and approval_required at any depth.
 schema_version: 1
 
 # Global switch. When true, no containment atomic makes changes.
@@ -6,12 +9,13 @@ global_dry_run: true
 
 protected:
   hosts:
-    # Never isolated automatically. Hostnames, connector GUIDs or CIDRs.
+    # Critical hosts. Hostnames, connector GUIDs or CIDRs. Containment stays planned but needs
+    # ELEVATED approval and shows a warning; a protected host is never silently dropped.
     - "dc-*"
     - "hv-*"
     - "10.0.10.0/24"   # OT network, example
   users:
-    # Never disabled automatically. Break-glass and service accounts.
+    # Break-glass and service accounts. Actions on them need ELEVATED approval.
     - "breakglass-01@example.com"
     - "breakglass-02@example.com"
   groups:
@@ -27,23 +31,19 @@ allowlist:
     - "172.16.0.0/12"
     - "192.168.0.0/16"
   hashes: []
+  # Allow-listed domains on which a specific malicious URL may still be blocked (block-url only).
+  url_block_allowed_domains: []
   approved_rmm:
-    # Sanctioned remote access tools; the rmm workflow never blocks these.
+    # Sanctioned remote access tools; the unauthorized-rmm workflow never blocks these.
     - "ExampleRMM"
 
 blast_radius:
-  # Hard caps per workflow run. Exceeding them stops containment and asks a human.
+  # Caps per workflow run. Over a cap the actions stay planned, need ELEVATED approval and the
+  # plan escalates to a human lead.
   max_hosts_isolated: 5
   max_users_disabled: 3
   max_indicators_blocked: 50
   max_messages_quarantined: 500
-
-auto_approve:
-  # Off by default. Enable narrowly after reviewing dry-run history.
-  ransomware:
-    isolate-endpoint: false
-  account-takeover:
-    revoke-session: true
 
 expiry_hours:
   block-ip: 168

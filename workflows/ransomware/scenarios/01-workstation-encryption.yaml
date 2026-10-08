@@ -57,5 +57,5 @@ expect:
     - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000f014, status: planned, requires_approval: true}
     - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000f022, status: planned, requires_approval: true}
     - {atomic: block-hash, target: 3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d, status: planned, requires_approval: true}
-    - {atomic: revoke-session, target: fin.analyst01@example.com, status: planned, requires_approval: false}
+    - {atomic: revoke-session, target: fin.analyst01@example.com, status: planned, requires_approval: true}
     - {atomic: disable-user, target: fin.analyst01@example.com, status: planned, requires_approval: true}

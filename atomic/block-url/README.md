@@ -27,7 +27,7 @@ Block a specific URL in Umbrella and/or Cloudflare without blocking the whole do
 
 ## Behaviour
 
-- Checks the guardrails file before acting and returns a `skipped_*` status instead of failing.
+- Runs only after a human approval. Checks the allow-lists before acting and returns a `skipped_*` status instead of failing.
 - With `dry_run = true` it returns `planned` and makes no change.
 - Writes the action, target, result and rollback instructions to the incident note.
 - Idempotent: a second run with the same input does not create duplicate changes.

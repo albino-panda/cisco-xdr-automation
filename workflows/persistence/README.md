@@ -36,7 +36,7 @@ Typical alerts that should route to this workflow:
 1. **Intake.** Load the incident summary, observables and the guardrails file.
 2. **Enrich.** [`enrich-hash`](../../atomic/enrich-hash/README.md), [`enrich-domain`](../../atomic/enrich-domain/README.md).
 3. **Investigate.** [`investigate-host`](../../atomic/investigate-host/README.md).
-4. **Decide.** Build a containment plan and drop protected, allow-listed or over-limit targets. Send the plan to an approver unless `dry_run` is true.
+4. **Decide.** Build a containment plan and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
 5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
 6. **Record.** Add an incident note and [`create-ticket`](../../atomic/create-ticket/README.md).
 7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
@@ -86,9 +86,9 @@ Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them wit
 |---|---|
 | [`01-malicious-run-key.yaml`](scenarios/01-malicious-run-key.yaml) | True positive: a Run key binary rated malicious and executing produces a planned hash block and a planned isolation, both needing approval. |
 | [`02-legit-updater-service.yaml`](scenarios/02-legit-updater-service.yaml) | Benign: a newly installed, clean and widespread vendor updater service with no malicious detections produces no actions. |
-| [`03-allowlisted-hash-protected-host.yaml`](scenarios/03-allowlisted-hash-protected-host.yaml) | Guardrails: an allow-listed admin tool hash is `skipped_allowlisted` and the protected domain controller is `skipped_protected`. |
+| [`03-allowlisted-hash-protected-host.yaml`](scenarios/03-allowlisted-hash-protected-host.yaml) | Guardrails: an allow-listed admin tool hash is `skipped_allowlisted` and isolation of the protected domain controller is planned with `elevated: true`. |
 | [`04-dormant-scheduled-task.yaml`](scenarios/04-dormant-scheduled-task.yaml) | Edge case: a scheduled task that has not run yet gets its malicious binary blocked but the host is not isolated; an unknown binary with an enrichment error is left alone. |
-| [`05-fleet-wide-service.yaml`](scenarios/05-fleet-wide-service.yaml) | Edge case: one malicious service on six hosts exceeds `max_hosts_isolated`, so every isolation is `skipped_limit` and the plan escalates, while the single hash block stays planned. |
+| [`05-fleet-wide-service.yaml`](scenarios/05-fleet-wide-service.yaml) | Edge case: one malicious service on six hosts exceeds `max_hosts_isolated`, so every isolation stays planned with `elevated: true` and the plan escalates, while the single hash block stays planned. |
 
 ## Inputs
 
@@ -101,7 +101,7 @@ Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them wit
 ## Guardrails
 
 - `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Protected hosts, protected users and allow-listed indicators are never actioned automatically.
+- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
 - Blast-radius limits cap how many hosts, users or indicators a single run may touch.
 - Every containment action is reversible except session revocation, and the rollback is written into the incident note.
 

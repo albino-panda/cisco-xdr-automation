@@ -4,7 +4,7 @@ name: Revoke sessions
 category: containment
 description: Invalidate refresh tokens and browser sessions for a user.
 side_effects: true
-requires_approval: false
+requires_approval: true
 reversible: false
 rollback: Not reversible; the user signs in again.
 idempotent: true

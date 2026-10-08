@@ -1,9 +1,10 @@
 name: Web shell on a protected server with internal and allow-listed targets
-description: >
-  A web shell is confirmed on the payments web server, which the guardrails protect, so isolation is
-  skipped and left to a human. One source is an internal address seen through the load balancer and
-  is skipped as internal, while the external source is still blocked. The targeted endpoint lives on
-  the organisation's allow-listed domain, so the URL block is skipped as allow-listed.
+description: >-
+  A web shell is confirmed on the payments web server, which the guardrails protect, so its
+  isolation stays planned with elevated: true and needs ELEVATED approval. One source is an internal
+  address seen through the load balancer and is skipped as internal, while the external source block
+  is planned. The targeted endpoint lives on the organisation's allow-listed domain, so the URL
+  block is skipped as allow-listed.
 incident:
   id: INC-TEST-WEB-0004
   title: Web shell detected on protected payments web server
@@ -37,4 +38,4 @@ expect:
     - {atomic: block-ip, target: 203.0.113.80, status: planned, requires_approval: true}
     - {atomic: block-ip, target: 10.20.30.40, status: skipped_internal, requires_approval: true}
     - {atomic: block-url, target: "https://pay.example.com/upload", status: skipped_allowlisted, requires_approval: true}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000201, status: skipped_protected, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000201, status: planned, elevated: true, requires_approval: true}

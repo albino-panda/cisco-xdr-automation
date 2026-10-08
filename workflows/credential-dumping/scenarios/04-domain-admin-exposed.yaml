@@ -1,9 +1,9 @@
 name: Domain Admins member logged on to a compromised workstation
 description: >-
   Guardrail. Credential access is confirmed on a workstation where a member of the protected group
-  Domain Admins was logged on. The workstation is isolated, but session revocation and disabling of the
-  Domain Admins member are skipped as protected and left to a human. The standard user on the same host
-  is still revoked.
+  Domain Admins was logged on. The workstation isolation is planned; session revocation and
+  disabling of the Domain Admins member stay planned with elevated: true and need ELEVATED approval.
+  Revocation for the standard user on the same host is planned behind normal approval.
 incident:
   id: INC-TEST-0304
   title: Credential theft behaviour on ws-0388.example.com
@@ -41,6 +41,6 @@ expect:
   escalate: false
   actions:
     - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000388, status: planned, requires_approval: true}
-    - {atomic: revoke-session, target: da-ops01@example.com, status: skipped_protected, requires_approval: false}
-    - {atomic: disable-user, target: da-ops01@example.com, status: skipped_protected, requires_approval: true}
-    - {atomic: revoke-session, target: dan.okafor@example.com, status: planned, requires_approval: false}
+    - {atomic: revoke-session, target: da-ops01@example.com, status: planned, elevated: true, requires_approval: true}
+    - {atomic: disable-user, target: da-ops01@example.com, status: planned, elevated: true, requires_approval: true}
+    - {atomic: revoke-session, target: dan.okafor@example.com, status: planned, requires_approval: true}

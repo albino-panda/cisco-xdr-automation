@@ -1,6 +1,6 @@
 """Command line: check workflows and show the plan a scenario produces.
 
-    python -m xdr_plan check [workflow ...]     # validate spec + run scenarios (all when none given)
+    python -m xdr_plan check [workflow ...]     # repository checks + validate spec + run scenarios (all when none given)
     python -m xdr_plan plan <workflow> <scenario.yaml>
 """
 from __future__ import annotations
@@ -12,25 +12,31 @@ from pathlib import Path
 
 from . import repo
 from .planner import PlanError, build_plan
-from .validate import check_workflow, load_scenario
+from .validate import check_repository, check_workflow, load_scenario
+
+
+def _report(name: str, errors: list[str]) -> bool:
+    """Print one PASS/FAIL block; return True when it failed."""
+    print(f"[{'PASS' if not errors else 'FAIL'}] {name}")
+    for err in errors:
+        print(f"    - {err}")
+    return bool(errors)
 
 
 def cmd_check(ids: list[str]) -> int:
-    failed = 0
+    """Run the repository-wide lifecycle checks, then every requested workflow."""
+    failed = _report("repository (atomics, guardrails)", check_repository())
     for wid in ids or repo.workflow_ids():
-        errors = check_workflow(wid)
-        print(f"[{'PASS' if not errors else 'FAIL'}] {wid}")
-        for err in errors:
-            print(f"    - {err}")
-        failed += bool(errors)
+        failed = _report(wid, check_workflow(wid)) or failed
     return 1 if failed else 0
 
 
 def cmd_plan(wid: str, scenario: str) -> int:
+    """Print the plan one scenario produces (recommendation only; nothing is executed)."""
     s = load_scenario(Path(scenario))
     try:
         plan = build_plan(wid, s.get("incident") or {}, s.get("results") or {}, repo.load_guardrails(s.get("guardrails")))
-    except PlanError as exc:
+    except (PlanError, ValueError) as exc:
         print(f"plan error: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(plan.as_dict(), indent=2, default=str))

@@ -23,12 +23,12 @@ Disable an Entra ID account so no new sign-ins succeed.
 
 | Name | Type | Description |
 |---|---|---|
-| `status` | string | disabled \| already_disabled \| skipped_protected \| planned |
+| `status` | string | disabled \| already_disabled \| planned |
 | `error` | string | Empty on success. |
 
 ## Behaviour
 
-- Checks the guardrails file before acting and returns a `skipped_*` status instead of failing.
+- Runs only after a human approval. A protected (critical) target needs ELEVATED approval and is never skipped silently.
 - With `dry_run = true` it returns `planned` and makes no change.
 - Writes the action, target, result and rollback instructions to the incident note.
 - Idempotent: a second run with the same input does not create duplicate changes.

@@ -1,14 +1,15 @@
 # Plan engine
 
 `xdr_plan` turns a workflow's containment rules plus enrichment and investigation results into the exact
-containment plan an approver would see. It applies the guardrails in
+containment plan an approver would see. It only recommends: nothing it plans runs without a human
+approval through the `xdr_response` lifecycle. It applies the guardrails in
 [`docs/deployment/guardrails.example.yaml`](../docs/deployment/guardrails.example.yaml) to every action.
 Scenario files then pin the expected plan, so containment logic is tested before anything is built in XDR.
 
 ```bash
 pip install -r requirements-dev.txt
 python -m pytest                                   # everything
-PYTHONPATH=engine python -m xdr_plan check phishing   # one workflow, readable output
+PYTHONPATH=engine python -m xdr_plan check phishing   # repository checks plus one workflow, readable output
 PYTHONPATH=engine python -m xdr_plan plan phishing workflows/phishing/scenarios/01-malicious-link.yaml
 ```
 
@@ -25,7 +26,7 @@ On Windows PowerShell set the path with `$env:PYTHONPATH = "engine"` first.
 5. Coverage across those scenarios:
    - at least one produces a `planned` action;
    - at least one is benign and produces no actions;
-   - at least one exercises a guardrail (a `skipped_*` status);
+   - at least one exercises a guardrail (a `skipped_*` status or `elevated: true`);
    - every plan rule produces an action in at least one scenario.
 
 ## Plan rules
@@ -66,16 +67,36 @@ You do not repeat these in rules; they run on every action after `when` is true.
 
 | Atomic | Check | Status when it trips |
 |---|---|---|
-| `isolate-endpoint` | `item.is_protected`, or host/GUID/IP matches `protected.hosts` (globs or CIDRs) | `skipped_protected` |
-| `disable-user`, `revoke-session` | `item.is_protected`, user matches `protected.users`, or `item.profile.groups` hits `protected.groups` | `skipped_protected` |
+| `isolate-endpoint` | `item.is_protected`, or host/GUID/IP matches `protected.hosts` (globs or CIDRs) | stays `planned` with `elevated: true` |
+| `disable-user`, `revoke-session` | `item.is_protected`, user matches `protected.users`, or `item.profile.groups` hits `protected.groups` | stays `planned` with `elevated: true` |
 | `block-domain` | domain or parent in `allowlist.domains` | `skipped_allowlisted` |
-| `block-url` | URL host in `allowlist.domains` | `skipped_allowlisted` |
+| `block-url` | URL host in `allowlist.domains` and not in `allowlist.url_block_allowed_domains` | `skipped_allowlisted` |
 | `block-ip` | `item.is_internal`, `allowlist.ip_ranges`, or a private/reserved address | `skipped_internal` |
 | `block-hash` | hash in `allowlist.hashes` | `skipped_allowlisted` |
-| caps | more planned actions than `blast_radius` allows | every action in that group becomes `skipped_limit` and the plan sets `escalate: true` |
+| caps | more planned actions than `blast_radius` allows | every action in that group stays `planned` with `elevated: true` and the plan sets `escalate: true` |
 
-Duplicate `(atomic, target)` pairs are planned once. `requires_approval` comes from `atomic.yaml`
-unless `auto_approve.<workflow>.<atomic>` is true in the guardrails.
+Duplicate `(atomic, target)` pairs are planned once. `requires_approval` is always `true` for a
+containment atomic. A protected target or a group over its cap is never dropped: the action stays
+`planned`, `elevated` is `true` and `reasons` says why (`protected asset: ELEVATED approval required`,
+or `<cap>: <n> planned > limit <limit>: ELEVATED approval required`). The runtime turns that into an
+ELEVATED approval with a visible critical-asset warning.
+
+Each `Action` has `rule`, `atomic`, `target`, `status` (`planned`, `skipped_allowlisted`,
+`skipped_internal`), `requires_approval`, `args`, `elevated`, `reasons` and `source`
+(`(results key, index)` when the `for_each` item is an element of `results[key]`, else `null`).
+
+## Lifecycle checks
+
+`python -m xdr_plan check` also fails on anything that asserts a weaker rule than the runtime
+(architecture section 14.4.1):
+
+| # | Check |
+|---|---|
+| C1 | a containment atomic, contain-phase step or scenario expectation with `requires_approval: false` |
+| C2 | `auto_approve`, `skip_approval`, `bypass_approval` or `approval_required` (`LEGACY_FORBIDDEN_KEYS`) at any depth in the guardrails, a spec or a scenario; `repo.load_guardrails` raises `ValueError` |
+| C3 | a scenario expecting `skipped_protected` |
+| C4 | a template that copies an unlock code (only "the unlock code stays in the Secure Endpoint console" may appear) |
+| C5 | a scenario expecting `skipped_limit` |
 
 ## Scenario files
 
@@ -97,8 +118,10 @@ guardrails:              # optional override merged over guardrails.example.yaml
   blast_radius: {max_indicators_blocked: 1}
 expect:
   escalate: false        # optional, default false
-  actions:               # the exact set of actions; order does not matter
+  actions:               # the exact set of actions; order does not matter. elevated defaults to false
+                         # and is compared strictly; requires_approval may only be true
     - {atomic: block-domain, target: invoice-portal.example, status: planned, requires_approval: true}
+    - {atomic: isolate-endpoint, target: dc-01, status: planned, elevated: true}   # a protected host (workflows with isolate-endpoint)
 ```
 
 ### Test data conventions
@@ -106,5 +129,5 @@ expect:
 - The organisation's own domain is `example.com` and is allow-listed. Use it for users and internal sites.
 - Attacker domains use reserved names that are not allow-listed, for example `invoice-portal.example` or `cdn-update.test`.
 - External IPs come from documentation ranges `192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`.
-- Protected by default: hosts `dc-*`, `hv-*` and `10.0.10.0/24`; users `breakglass-01@example.com`, `breakglass-02@example.com`; group `Domain Admins`.
+- Protected by default (ELEVATED approval): hosts `dc-*`, `hv-*` and `10.0.10.0/24`; users `breakglass-01@example.com`, `breakglass-02@example.com`; group `Domain Admins`.
 - Hashes are 64 hex characters and must not be real malware hashes.

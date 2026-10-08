@@ -69,8 +69,7 @@ steps:
 - id: build_plan
   phase: decide
   note: Evaluate the plan rules below against the detector metrics, enrichment and investigation results,
-    then apply the guardrails. Protected targets stay in the plan with a skipped_* status so the approver
-    sees them.
+    then apply the guardrails. Protected targets stay in the plan with ELEVATED approval and a warning so the approver sees them.
   on_error: escalate
 - id: approval
   phase: decide
@@ -91,9 +90,8 @@ steps:
   phase: contain
   atomic: revoke-session
   when: The bombed recipient has an investigate-user anomaly of type password_reset, password_change,
-    mfa_prompt, mfa_fatigue or mfa_method_registered at or after the detection window start. Protected
-    users (break-glass, Domain Admins) are skipped by the guardrails.
-  requires_approval: false
+    mfa_prompt, mfa_fatigue or mfa_method_registered at or after the detection window start. Protected users (break-glass, Domain Admins) stay planned with ELEVATED approval.
+  requires_approval: true
   on_error: escalate
 - id: incident_note
   phase: record
@@ -132,6 +130,7 @@ plan:
 templates:
   approval: |
     Approve mail bombing containment for {incident.id}: {incident.title} (severity {incident.severity}).
+    ELEVATED approval required for (protected assets and actions over a blast-radius cap; a lead must approve): {plan.elevated}
     Workflow {workflow.name}, dry run {plan.dry_run}.
     Planned actions:
     {plan.actions}
@@ -158,7 +157,7 @@ templates:
       the help desk so the extra sign-in prompt is expected.
     Warning: mail bombing is often followed by fake IT-support calls, chats or emails that push a
     remote-access tool. Tell the user and the help desk that IT will not cold-call about the flood.
-    Route any remote-access tool seen on the user's device to the rmm workflow and any suspicious
+    Route any remote-access tool seen on the user's device to the unauthorized-rmm workflow and any suspicious
     sign-in to the account-takeover workflow.
     Ticket: {ticket.id} {ticket.url}
   ticket_title: "[Mail bombing] {incident.title} ({incident.id})"
@@ -187,5 +186,5 @@ integrations:
 - secure-email
 - servicenow
 related_workflows:
-- rmm
+- unauthorized-rmm
 - account-takeover

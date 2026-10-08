@@ -75,8 +75,7 @@ steps:
 - id: build_plan
   phase: decide
   note: Evaluate the plan rules below against enrichment verdicts and investigation results, then apply
-    the guardrails. Protected, allow-listed, internal and over-limit targets are kept in the plan with a
-    skipped_* status so the approver sees them.
+    the guardrails. Allow-listed and internal targets are kept in the plan with a skipped_* status so the approver sees them; protected and over-limit targets stay planned with ELEVATED approval.
   on_error: escalate
 - id: approval
   phase: decide
@@ -102,7 +101,7 @@ steps:
   phase: contain
   atomic: isolate-endpoint
   when: Isolation-capable host with a malicious endpoint detection while at least one domain or IP in the
-    incident has a malicious verdict. Protected hosts are skipped; more than max_hosts_isolated escalates.
+    incident has a malicious verdict. Protected hosts and more than max_hosts_isolated need ELEVATED approval and escalate.
   requires_approval: true
   on_error: escalate
 - id: incident_note
@@ -149,6 +148,7 @@ plan:
 templates:
   approval: |
     Approve containment for {incident.id}: {incident.title} (severity {incident.severity}).
+    ELEVATED approval required for (protected assets and actions over a blast-radius cap; a lead must approve): {plan.elevated}
     Workflow {workflow.name}, dry run {plan.dry_run}.
     Planned actions:
     {plan.actions}
@@ -167,11 +167,11 @@ templates:
     Approval: {approver.decision} by {approver.name} at {approver.time}.
     Rollback:
     - block-domain: remove the domain from the automation block list in Umbrella / Secure Access and,
-      when used, the Cloudflare Gateway list. Blocks auto-expire after the planned expires_hours.
+      when used, the Cloudflare Gateway list. Blocks are flagged for release review after the planned expires_hours; removing one needs a separate human release approval.
     - block-ip: remove the Meraki MX rule or Cloudflare IP list item; Meraki restores from the saved
-      rule set. Blocks auto-expire after the planned expires_hours.
+      rule set. Blocks are flagged for release review after the planned expires_hours; removing one needs a separate human release approval.
     - isolate-endpoint: stop isolation for the connector GUID in Secure Endpoint (Stop Isolation API,
-      endpoint not yet verified against vendor docs). Unlock codes: {plan.unlock_codes}
+      endpoint not yet verified against vendor docs). The unlock code stays in the Secure Endpoint console and is not copied here.
     Ticket: {ticket.id} {ticket.url}
   ticket_title: "[C2] {incident.title} ({incident.id})"
   ticket_body: |

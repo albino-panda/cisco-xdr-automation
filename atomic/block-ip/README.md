@@ -15,7 +15,7 @@ Block an external IP at the perimeter (Meraki MX) and/or edge (Cloudflare IP lis
 | Name | Type | Required | Description |
 |---|---|---|---|
 | `ip` | string | yes | External IP address. |
-| `expires_hours` | integer | no | Auto-expiry; default 168 (7 days). |
+| `expires_hours` | integer | no | Release-review reminder in hours (never an automatic release; removal needs a separate human release approval); default 168 (7 days). |
 | `incident_id` | string | no | Cisco XDR incident ID, used for notes and audit. |
 | `dry_run` | boolean | no | When true, report the planned change without making it. Default true for containment. |
 
@@ -28,7 +28,7 @@ Block an external IP at the perimeter (Meraki MX) and/or edge (Cloudflare IP lis
 
 ## Behaviour
 
-- Checks the guardrails file before acting and returns a `skipped_*` status instead of failing.
+- Runs only after a human approval. Checks the allow-lists before acting and returns a `skipped_*` status instead of failing.
 - With `dry_run = true` it returns `planned` and makes no change.
 - Writes the action, target, result and rollback instructions to the incident note.
 - Idempotent: a second run with the same input does not create duplicate changes.

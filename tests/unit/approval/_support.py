@@ -69,7 +69,7 @@ def make_release_package(*actions, incident_id: str = "XDR-83921", **overrides: 
     drafts = [EvidenceDraft(**e.model_dump(exclude={"number"})) for a in actions for e in a.evidence]
     evidence = number_evidence(drafts)
     data: dict[str, Any] = {
-        "package_id": uuid.uuid4().hex, "incident_id": incident_id, "workflow_id": "powershell",
+        "package_id": uuid.uuid4().hex, "incident_id": incident_id, "workflow_id": "malicious-powershell",
         "workflow_version": "1.0.0", "created_at": FIXED_NOW, "expires_at": FIXED_NOW + timedelta(minutes=240),
         "requested_by": "automation:restoration_planner", "severity": Severity.HIGH, "risk_score": 40,
         "confidence_score": 90, "summary": "Test release package", "evidence": evidence,

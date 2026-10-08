@@ -36,7 +36,7 @@ Typical alerts that should route to this workflow:
 1. **Intake.** Load the incident summary, observables and the guardrails file.
 2. **Enrich.** [`enrich-domain`](../../atomic/enrich-domain/README.md), [`enrich-ip`](../../atomic/enrich-ip/README.md).
 3. **Investigate.** [`investigate-user`](../../atomic/investigate-user/README.md).
-4. **Decide.** Build a containment plan from the [containment rules](#containment-rules) and drop protected, allow-listed or over-limit targets. Send the plan to an approver unless `dry_run` is true.
+4. **Decide.** Build a containment plan from the [containment rules](#containment-rules) and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
 5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
 6. **Record.** Add an incident note and [`create-ticket`](../../atomic/create-ticket/README.md).
 7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
@@ -45,13 +45,13 @@ Typical alerts that should route to this workflow:
 
 | Action | When | Approval | On error |
 |---|---|---|---|
-| [`revoke-session`](../../atomic/revoke-session/README.md) | Investigated user is an internal (tenant) mailbox with compromise evidence: Entra risk level high, or a successful sign-in from an IP that `enrich-ip` rates malicious or suspicious. | no | escalate |
+| [`revoke-session`](../../atomic/revoke-session/README.md) | Investigated user is an internal (tenant) mailbox with compromise evidence: Entra risk level high, or a successful sign-in from an IP that `enrich-ip` rates malicious or suspicious. | yes | escalate |
 | [`disable-user`](../../atomic/disable-user/README.md) | Same compromise evidence, plus ongoing abuse: a rule forwarding mail outside the organisation, or the mailbox is a listed sender of the fraudulent messages. | yes | escalate |
 | [`quarantine-email`](../../atomic/quarantine-email/README.md) | Fraudulent messages, searched across all recipients, from a compromised internal mailbox that is a listed fraud sender, or from a gateway-flagged lookalike sender domain that is not rated clean and not allow-listed. | yes | escalate |
 | [`block-domain`](../../atomic/block-domain/README.md) | Domain flagged by the email gateway as a lookalike of an organisation domain and not rated clean by `enrich-domain`. Allow-listed domains are skipped. | yes | continue |
 
 Intake failures stop the run, enrichment and investigation failures continue with what is available,
-and a failed plan, approval or mailbox containment step escalates to a human. A failed domain block
+and a failed plan, approval or mailbox containment step escalates to a lead. A failed domain block
 continues, because the mailbox and quarantine actions matter more and the failure is recorded in the note.
 
 ### Containment rules
@@ -70,9 +70,8 @@ either `risk_level` is `high` or a sign-in with `result: success` came from an I
 | `quarantine_lookalike_sender_mail` | `quarantine-email` | An enriched domain listed in `incident.context.lookalike_domains`, not rated `clean`, and neither an allow-listed domain nor a subdomain of one. Target: the sender domain, searched across all recipients. |
 | `block_lookalike_domain` | `block-domain` | An enriched domain listed in `incident.context.lookalike_domains` and not rated `clean`. Target: the domain, expiring after `expiry_hours.block-domain`. |
 
-The engine then applies the guardrails: protected users and groups skip `revoke-session` and
-`disable-user`, allow-listed domains skip `block-domain`, and more disables than
-`blast_radius.max_users_disabled` turn every disable into `skipped_limit` and escalate.
+The engine then applies the guardrails: `revoke-session` and `disable-user` on protected users and groups need ELEVATED approval, allow-listed domains skip `block-domain`, and more disables than
+`blast_radius.max_users_disabled` keep every disable planned with `elevated: true` and escalate.
 
 Facts no atomic returns yet are read from `incident.context`, filled at intake from the email gateway
 and the mailbox audit log:
@@ -94,7 +93,7 @@ and the mailbox audit log:
 ## Guardrails
 
 - `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Protected hosts, protected users and allow-listed indicators are never actioned automatically.
+- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
 - Blast-radius limits cap how many hosts, users or indicators a single run may touch.
 - Every containment action is reversible except session revocation, and the rollback is written into the incident note.
 - Quarantine has no engine guardrail, so the lookalike quarantine rule itself refuses allow-listed domains and every quarantine is capped at `blast_radius.max_messages_quarantined`.
@@ -113,10 +112,10 @@ Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them wit
 |---|---|
 | [`01-compromised-finance-mailbox.yaml`](scenarios/01-compromised-finance-mailbox.yaml) | True positive: a mailbox with a malicious-IP sign-in, an external forwarding rule and sent fraud gets sessions revoked, the account disabled and its messages quarantined. |
 | [`02-external-lookalike-sender.yaml`](scenarios/02-external-lookalike-sender.yaml) | Impersonation with no internal compromise: the lookalike domain is blocked and its mail quarantined; the external sender and the targeted user get no identity action. |
-| [`03-protected-executive-mailbox.yaml`](scenarios/03-protected-executive-mailbox.yaml) | A protected executive mailbox is skipped for revoke and disable (`skipped_protected`) while its fraudulent messages are still quarantined. |
-| [`04-breakglass-and-allowlisted-domain.yaml`](scenarios/04-breakglass-and-allowlisted-domain.yaml) | Break-glass account is never revoked automatically; an allow-listed subdomain flagged as lookalike is `skipped_allowlisted` and its mail is not quarantined. |
+| [`03-protected-executive-mailbox.yaml`](scenarios/03-protected-executive-mailbox.yaml) | Revoke and disable of a protected executive mailbox are planned with `elevated: true` (ELEVATED approval); quarantine of its fraudulent messages is planned too. |
+| [`04-breakglass-and-allowlisted-domain.yaml`](scenarios/04-breakglass-and-allowlisted-domain.yaml) | Break-glass account revocation needs ELEVATED approval (`elevated: true`); an allow-listed subdomain flagged as lookalike is `skipped_allowlisted` and its mail is not quarantined. |
 | [`05-benign-vendor-bank-change.yaml`](scenarios/05-benign-vendor-bank-change.yaml) | Benign vendor bank-detail change: clean domain, no compromise evidence, empty plan. |
-| [`06-forwarding-rules-over-limit.yaml`](scenarios/06-forwarding-rules-over-limit.yaml) | Compromised mailboxes with forwarding rules but no sent fraud: sessions revoked, disables over the limit become `skipped_limit` and the plan escalates. |
+| [`06-forwarding-rules-over-limit.yaml`](scenarios/06-forwarding-rules-over-limit.yaml) | Compromised mailboxes with forwarding rules but no sent fraud: session revocation planned, disables over the limit stay planned with `elevated: true` and the plan escalates. |
 
 ## Related workflows
 

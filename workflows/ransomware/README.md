@@ -36,7 +36,7 @@ Typical alerts that should route to this workflow:
 1. **Intake.** Load the incident summary, observables and the guardrails file.
 2. **Enrich.** [`enrich-hash`](../../atomic/enrich-hash/README.md), [`enrich-domain`](../../atomic/enrich-domain/README.md), [`enrich-ip`](../../atomic/enrich-ip/README.md).
 3. **Investigate.** [`investigate-host`](../../atomic/investigate-host/README.md) for the incident hosts plus the hosts `enrich-hash` lists for a malicious payload, and [`investigate-user`](../../atomic/investigate-user/README.md) for the users of the incident and its targets.
-4. **Decide.** Build a containment plan from the rules below and drop protected, allow-listed or over-limit targets. Send the plan to an approver unless `dry_run` is true.
+4. **Decide.** Build a containment plan from the rules below and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
 5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
 6. **Record.** Add an incident note with the rollback for every action, and [`create-ticket`](../../atomic/create-ticket/README.md).
 7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
@@ -45,9 +45,9 @@ Typical alerts that should route to this workflow:
 
 | Action | When | Approval |
 |---|---|---|
-| [`isolate-endpoint`](../../atomic/isolate-endpoint/README.md) | Isolation-capable host that has a malicious detection, or that has seen a malicious payload hash with a prevalence of 50 or less. Protected hosts are skipped. Eligible for auto-approval when guardrails allow. | yes |
+| [`isolate-endpoint`](../../atomic/isolate-endpoint/README.md) | Isolation-capable host that has a malicious detection, or that has seen a malicious payload hash with a prevalence of 50 or less. Protected hosts need ELEVATED approval. | yes |
 | [`block-hash`](../../atomic/block-hash/README.md) | Payload hash with malicious disposition and a prevalence of 50 or less. Unknown-disposition or more widespread hashes are left to the approver. | yes |
-| [`revoke-session`](../../atomic/revoke-session/README.md) | Account listed in the same incident target as a host that has a malicious detection. | no |
+| [`revoke-session`](../../atomic/revoke-session/README.md) | Account listed in the same incident target as a host that has a malicious detection. | yes |
 | [`disable-user`](../../atomic/disable-user/README.md) | Account with Entra risk level high and at least one sign-in anomaly. | yes |
 
 ### Containment rules
@@ -87,8 +87,8 @@ Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them wit
 |---|---|
 | [`01-workstation-encryption.yaml`](scenarios/01-workstation-encryption.yaml) | True positive: the detected host and a second host holding the payload are isolated, the hash is blocked, the account loses its sessions and is disabled. |
 | [`02-benign-backup-reencryption.yaml`](scenarios/02-benign-backup-reencryption.yaml) | A backup agent's mass file modification (clean, widespread hash, no malicious detection) produces no actions. |
-| [`03-protected-hypervisor-and-admins.yaml`](scenarios/03-protected-hypervisor-and-admins.yaml) | Guardrails: hypervisor, domain controller and OT-range hosts, a break-glass account and a Domain Admins member are `skipped_protected`; only the workstation and the hash are planned. |
-| [`04-outbreak-blast-radius.yaml`](scenarios/04-outbreak-blast-radius.yaml) | Seven isolations exceed `max_hosts_isolated`, so all become `skipped_limit` and the plan escalates; the hash block and session revocation stay planned. |
+| [`03-protected-hypervisor-and-admins.yaml`](scenarios/03-protected-hypervisor-and-admins.yaml) | Guardrails: hypervisor, domain controller and OT-range hosts, a break-glass account and a Domain Admins member are planned with `elevated: true`; the workstation and the hash are planned behind normal approval. |
+| [`04-outbreak-blast-radius.yaml`](scenarios/04-outbreak-blast-radius.yaml) | Seven isolations exceed `max_hosts_isolated`, so all stay planned with `elevated: true` and the plan escalates; the hash block and session revocation stay planned. |
 | [`05-fresh-build-remote-share-encryption.yaml`](scenarios/05-fresh-build-remote-share-encryption.yaml) | Per-victim payload with unknown disposition: the source host is isolated on behaviour alone, the hash is not blocked, and the file server whose shares are encrypted remotely is not isolated. |
 | [`06-widespread-hash-not-blocked.yaml`](scenarios/06-widespread-hash-not-blocked.yaml) | Prevalence gate: a malicious-scored hash on 1800 endpoints is neither blocked nor used to isolate hosts; the low-prevalence payload is. |
 
@@ -103,13 +103,13 @@ Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them wit
 ## Guardrails
 
 - `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Protected hosts, protected users and allow-listed indicators are never actioned automatically.
+- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
 - Blast-radius limits cap how many hosts, users or indicators a single run may touch.
 - Every containment action is reversible except session revocation, and the rollback is written into the incident note.
 
 ## Notes
 
-- Speed matters more than completeness here. Keep enrichment lookbacks short, and consider auto-approving isolation of non-protected workstations so containment never waits on a human. Do this only in the guardrails file (`auto_approve.ransomware.isolate-endpoint`), never in the workflow.
+- Speed matters more than completeness here. Keep enrichment lookbacks short and keep an approver on call: isolation always needs a human approval, and after approval it executes automatically. There is no auto-approval.
 - The hosts that `enrich-hash` lists for a malicious payload are looped through `investigate-host`, and `isolate_payload_hosts` isolates them even before they raise their own detection.
 
 ## Related workflows

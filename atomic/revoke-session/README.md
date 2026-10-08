@@ -6,7 +6,7 @@ Invalidate refresh tokens and browser sessions for a user.
 |---|---|
 | Category | containment |
 | Integrations | [Microsoft Entra ID (via Microsoft Graph)](../../integrations/microsoft-entra/README.md) |
-| Approval required | no |
+| Approval required | yes |
 | Reversible | Not reversible; the user signs in again. |
 | Spec | [`atomic.yaml`](atomic.yaml) |
 
@@ -27,11 +27,11 @@ Invalidate refresh tokens and browser sessions for a user.
 
 ## Behaviour
 
-- Checks the guardrails file before acting and returns a `skipped_*` status instead of failing.
+- Runs only after a human approval. A protected (critical) target needs ELEVATED approval and is never skipped silently.
 - With `dry_run = true` it returns `planned` and makes no change.
 - Writes the action, target, result and rollback instructions to the incident note.
 - Idempotent: a second run with the same input does not create duplicate changes.
-- Low impact, so it may run without approval when the workflow severity is high or critical.
+- Always requires human approval before it runs, whatever the severity: revoking sessions is a state-changing action.
 
 ## Used by
 

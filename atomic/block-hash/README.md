@@ -28,7 +28,7 @@ Add a SHA-256 to the Secure Endpoint simple custom detection list.
 
 ## Behaviour
 
-- Checks the guardrails file before acting and returns a `skipped_*` status instead of failing.
+- Runs only after a human approval. Checks the allow-lists before acting and returns a `skipped_*` status instead of failing.
 - With `dry_run = true` it returns `planned` and makes no change.
 - Writes the action, target, result and rollback instructions to the incident note.
 - Idempotent: a second run with the same input does not create duplicate changes.
@@ -36,7 +36,7 @@ Add a SHA-256 to the Secure Endpoint simple custom detection list.
 
 ## Used by
 
-[`ransomware`](../../workflows/ransomware/README.md), [`phishing`](../../workflows/phishing/README.md), [`malware`](../../workflows/malware/README.md), [`persistence`](../../workflows/persistence/README.md), [`rmm`](../../workflows/rmm/README.md)
+[`ransomware`](../../workflows/ransomware/README.md), [`phishing`](../../workflows/phishing/README.md), [`malware`](../../workflows/malware/README.md), [`persistence`](../../workflows/persistence/README.md), [`unauthorized-rmm`](../../workflows/unauthorized-rmm/README.md)
 
 ## Building it in XDR Automation
 

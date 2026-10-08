@@ -1,9 +1,10 @@
 name: Allow-listed admin tool hash on a protected domain controller
-description: >
-  Guardrails. A scheduled task on a domain controller runs an internal admin tool that one intel source
-  rates malicious (a known false positive), and the host shows a malicious detection for it. The hash is
-  in allowlist.hashes and dc-* hosts are protected, so both actions are recorded as skipped and nothing
-  is changed. The analyst still reviews the task through the manual checklist.
+description: >-
+  Guardrails. A scheduled task on a domain controller runs an internal admin tool that one intel
+  source rates malicious (a known false positive), and the host shows a malicious detection for it.
+  The hash is in allowlist.hashes, so its block is recorded as skipped. dc-* hosts are protected, so
+  the isolation stays planned with elevated: true and a lead decides. The analyst still reviews the
+  task through the manual checklist.
 incident:
   id: INC-TEST-3003
   title: Scheduled task created on dc-01 running unsigned binary
@@ -36,4 +37,4 @@ expect:
   escalate: false
   actions:
     - {atomic: block-hash, target: 3c4d5e6f708192a33c4d5e6f708192a33c4d5e6f708192a33c4d5e6f708192a3, status: skipped_allowlisted, requires_approval: true}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000d01, status: skipped_protected, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000d01, status: planned, elevated: true, requires_approval: true}

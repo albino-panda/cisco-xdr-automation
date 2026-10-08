@@ -14,7 +14,7 @@
 1. **Integrations.** Create targets and API clients, and verify each with a read-only call (`runtime.health.check_all()`, see [docs/deployment.md](../deployment.md) section 5).
 2. **Read-only atomics.** Enrichment and investigation atomics. Run them by hand against known observables.
 3. **Ticketing and notification.** `create-ticket` and `notify-soc`.
-4. **Containment in dry run.** Confirm the planned output, the guardrail skips and the `DRY RUN` block (`Would isolate: TH-LT-1047`).
+4. **Containment in dry run.** Confirm the planned output, the allow-list skips, the ELEVATED actions and the `DRY RUN` block (`Would isolate: TH-LT-1047`).
 5. **Workflows in dry run.** Attach incident rules so every matching incident produces a plan without acting.
 6. **Enable containment** one workflow at a time after reviewing at least two weeks of dry-run plans. Set `DRY_RUN=false` only then.
 
@@ -23,7 +23,8 @@
 - Every state-changing action (containment, remediation, release, restoration, removing blocks) needs a human approval. There is no auto-approval.
 - The approval is enforced by `xdr_response`: an HMAC approval token issued only to an authenticated HUMAN principal, checked by the execution guard on every call.
 - An XDR **Request Approval** task may notify the analyst, but it never authorizes an action by itself.
-- The guardrails file still has an `auto_approve` section, read by the legacy plan engine. The example sets `account-takeover: revoke-session: true`. Set every entry to `false` in your copy. The `xdr_response` loader refuses the key, and Phase 1 removes it from the specs.
+- There is no auto-approval anywhere. The guardrails file has no `auto_approve` section, and both the legacy plan engine (`xdr_plan`) and the `xdr_response` loader refuse `auto_approve`, `skip_approval`, `bypass_approval` and `approval_required` at any depth.
+- Protected hosts and users are never skipped silently: their containment stays in the plan and needs ELEVATED approval with a visible warning. The same applies to every action of a group over a `blast_radius` cap, and the plan escalates to a lead.
 
 ## Change management
 

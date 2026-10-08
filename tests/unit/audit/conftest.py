@@ -65,7 +65,7 @@ def _fill(trail: object, n: int, incident_id: str = "XDR-83921") -> None:
     for i in range(n):
         trail.append(AuditEventType.STATE_TRANSITION, incident_id=incident_id,  # type: ignore[attr-defined]
                      actor="automation:test", payload={"index": i, "host": "TH-LT-1047"},
-                     workflow_id="powershell", workflow_version="1.0.0")
+                     workflow_id="malicious-powershell", workflow_version="1.0.0")
 
 
 @pytest.fixture
@@ -117,7 +117,7 @@ def lifecycle():
         analyst_identity=analyst.principal_id, approvers=(analyst,),
         decided_at=FIXED_NOW + timedelta(minutes=5),
         approved_action_keys=(isolate.idempotency_key,), rejected_action_keys=(block.idempotency_key,),
-        comment="isolate only", workflow_id="powershell", workflow_version="1.0.0",
+        comment="isolate only", workflow_id="malicious-powershell", workflow_version="1.0.0",
         evidence_snapshot_hash=package.evidence_snapshot_hash, token_id="tok-1")
     token = make_token(isolate, token_id="tok-1")
     api_call = ApiCallSummary(
@@ -151,7 +151,7 @@ def lifecycle():
     control = TemporaryControl(
         control_key=isolate.idempotency_key, incident_id=incident.incident_id,
         action_type=isolate.action_type, target=isolate.target, target_kind=TargetKind.ENDPOINT,
-        integration="secure_endpoint", workflow_id="powershell", workflow_version="1.0.0",
+        integration="secure_endpoint", workflow_id="malicious-powershell", workflow_version="1.0.0",
         package_id=package.package_id, token_id="tok-1", decision_id="dec-1",
         approval_level=ApprovalLevel.STANDARD, created_at=started,
         rollback_action_type=ActionType.RELEASE_ENDPOINT, rollback_params={"integration": "secure_endpoint"},

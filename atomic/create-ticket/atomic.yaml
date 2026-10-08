@@ -50,7 +50,7 @@ used_by:
 - bec
 - account-takeover
 - malware
-- powershell
+- malicious-powershell
 - lateral-movement
 - c2
 - dns-tunneling
@@ -58,7 +58,7 @@ used_by:
 - credential-dumping
 - privilege-escalation
 - persistence
-- rmm
+- unauthorized-rmm
 - exfiltration
 - vulnerability-exploitation
 - cloud-compromise

@@ -1,9 +1,10 @@
 name: Directory database accessed on a domain controller
 description: >-
   Guardrail. Credential access is confirmed on dc-01.example.com, which matches the protected host
-  pattern dc-*. Isolation is skipped as protected, and because a protected host is confirmed no account
-  action is planned either. The privileged administrator logged on to the DC is left to the incident
-  commander, who owns the domain-wide credential reset.
+  pattern dc-*. Isolation stays planned with elevated: true (ELEVATED approval by the incident
+  commander), and because a protected host is confirmed no account action is planned. The privileged
+  administrator logged on to the DC is left to the incident commander, who owns the domain-wide
+  credential reset.
 incident:
   id: INC-TEST-0303
   title: Directory database access on dc-01.example.com
@@ -33,4 +34,4 @@ results:
 expect:
   escalate: false
   actions:
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-0000000000d1, status: skipped_protected, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-0000000000d1, status: planned, elevated: true, requires_approval: true}

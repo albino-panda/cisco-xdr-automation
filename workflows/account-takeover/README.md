@@ -36,7 +36,7 @@ Typical alerts that should route to this workflow:
 1. **Intake.** Load the incident summary, observables and the guardrails file.
 2. **Enrich.** [`enrich-ip`](../../atomic/enrich-ip/README.md).
 3. **Investigate.** [`investigate-user`](../../atomic/investigate-user/README.md).
-4. **Decide.** Build a containment plan and drop protected, allow-listed or over-limit targets. Send the plan to an approver unless `dry_run` is true.
+4. **Decide.** Build a containment plan and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
 5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
 6. **Record.** Add an incident note and [`create-ticket`](../../atomic/create-ticket/README.md).
 7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
@@ -45,7 +45,7 @@ Typical alerts that should route to this workflow:
 
 | Action | When | Approval |
 |---|---|---|
-| [`revoke-session`](../../atomic/revoke-session/README.md) | The investigated user has Entra risk level high, a successful sign-in from an IP enriched as malicious or suspicious, or an MFA fatigue anomaly followed by a successful sign-in. | no (auto-approved in the guardrails file) |
+| [`revoke-session`](../../atomic/revoke-session/README.md) | The investigated user has Entra risk level high, a successful sign-in from an IP enriched as malicious or suspicious, or an MFA fatigue anomaly followed by a successful sign-in. | yes |
 | [`disable-user`](../../atomic/disable-user/README.md) | The user meets the `revoke-session` condition and holds a privileged role, or the user's sessions were already revoked earlier for this incident and a successful sign-in from a malicious or suspicious IP is still present. | yes |
 | [`block-ip`](../../atomic/block-ip/README.md) | An enriched IP that is not shared infrastructure (no internal sightings) and either has verdict malicious and appears in an investigated user's sign-ins, or is not clean and sent 3 or more denied MFA prompts to a user with an MFA fatigue anomaly. | yes |
 
@@ -88,7 +88,7 @@ Each file in [`scenarios/`](scenarios/) pins the exact plan for one case. Run th
 |---|---|
 | [`01-confirmed-takeover.yaml`](scenarios/01-confirmed-takeover.yaml) | True positive: sessions revoked without an approval wait, attacker IP blocked with approval, a suspicious shared VPN exit is not blocked, and a non-privileged user is not disabled. |
 | [`02-business-travel-benign.yaml`](scenarios/02-business-travel-benign.yaml) | Impossible travel explained by a business trip (clean IP, medium risk, no MFA fatigue) produces no actions. |
-| [`03-breakglass-protected.yaml`](scenarios/03-breakglass-protected.yaml) | A compromised break-glass Global Administrator meets the revoke and disable rules, but both are `skipped_protected`; the attacker IP is still blocked. |
+| [`03-breakglass-protected.yaml`](scenarios/03-breakglass-protected.yaml) | A compromised break-glass Global Administrator meets the revoke and disable rules; both stay planned with `elevated: true` (ELEVATED approval) and the attacker IP block is planned. |
 | [`04-internal-vpn-source.yaml`](scenarios/04-internal-vpn-source.yaml) | A malicious sign-in from an internal VPN pool address revokes sessions, and `block-ip` is `skipped_internal`. |
 | [`05-mfa-fatigue-approved.yaml`](scenarios/05-mfa-fatigue-approved.yaml) | MFA fatigue (T1621) followed by an approved push from an IP with no reputation still revokes sessions and blocks the prompt source; an unrelated unknown IP is not blocked. |
 | [`06-attacker-returns-after-revocation.yaml`](scenarios/06-attacker-returns-after-revocation.yaml) | An attacker sign-in after an earlier revocation leads to revoke again, disable with approval and an IP block. |
@@ -104,15 +104,15 @@ Each file in [`scenarios/`](scenarios/) pins the exact plan for one case. Run th
 ## Guardrails
 
 - `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Protected hosts, protected users and allow-listed indicators are never actioned automatically.
+- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
 - Blast-radius limits cap how many hosts, users or indicators a single run may touch.
 - Every containment action is reversible except session revocation, and the rollback is written into the incident note.
-- `revoke-session` is auto-approved for this workflow in `auto_approve.account-takeover` of the guardrails file, because it only forces a new sign-in. It still respects protected users and `dry_run`. `disable-user` and `block-ip` always need approval.
+- `revoke-session` needs a human approval like every other containment action, even though it only forces a new sign-in. There is no auto-approval, and the plan engine refuses an `auto_approve` key.
 
 ## Notes
 
 - Require a password reset and MFA re-registration through the help desk with identity verification out of band. This step is in the incident note, ticket and notification templates. Re-enable a disabled account only after both are done.
-- A protected account (for example break-glass) that meets the rules is never touched automatically; the skipped actions in the note tell the analyst to handle it by hand.
+- A protected account (for example break-glass) that meets the rules stays in the plan with ELEVATED approval and a warning, so a lead decides; it is never dropped silently.
 
 ## Related workflows
 

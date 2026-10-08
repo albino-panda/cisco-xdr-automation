@@ -1,9 +1,9 @@
 name: Compromised protected executive mailbox
 description: >-
   An executive mailbox listed in protected.users is compromised (Entra risk high), has an external
-  forwarding rule and sent payment requests. Revocation and disabling are skipped by the user guardrail
-  and must be done by a human. Quarantine has no user guardrail, so the fraudulent messages are still
-  pulled from every recipient.
+  forwarding rule and sent payment requests. Revocation and disabling stay planned with elevated:
+  true, so a lead must approve them. Quarantine has no user guardrail, so pulling the fraudulent
+  messages from every recipient is planned behind normal approval.
 incident:
   id: INC-TEST-BEC-0003
   title: Executive mailbox forwarding mail and requesting payment
@@ -40,6 +40,6 @@ guardrails:
 expect:
   escalate: false
   actions:
-    - {atomic: revoke-session, target: exec-01@example.com, status: skipped_protected, requires_approval: false}
-    - {atomic: disable-user, target: exec-01@example.com, status: skipped_protected, requires_approval: true}
+    - {atomic: revoke-session, target: exec-01@example.com, status: planned, elevated: true, requires_approval: true}
+    - {atomic: disable-user, target: exec-01@example.com, status: planned, elevated: true, requires_approval: true}
     - {atomic: quarantine-email, target: exec-01@example.com, status: planned, requires_approval: true}

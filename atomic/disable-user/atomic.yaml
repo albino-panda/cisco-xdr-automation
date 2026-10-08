@@ -31,7 +31,7 @@ inputs:
 outputs:
 - name: status
   type: string
-  description: disabled | already_disabled | skipped_protected | planned
+  description: disabled | already_disabled | planned
 - name: error
   type: string
   description: Empty on success.

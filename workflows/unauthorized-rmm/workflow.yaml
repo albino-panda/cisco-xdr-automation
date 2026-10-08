@@ -1,5 +1,5 @@
 schema_version: 1
-id: rmm
+id: unauthorized-rmm
 name: Unauthorised remote access tool
 status: specification
 description: Detect and remove remote monitoring and management tools that are not sanctioned by IT.
@@ -73,8 +73,7 @@ steps:
 - id: build_plan
   phase: decide
   note: Build the containment plan from the plan rules below, enrichment verdicts, investigation results
-    and guardrails. A tool named in guardrails.allowlist.approved_rmm is never blocked. Drop any target
-    that is protected, allow-listed or over the blast-radius limit.
+    and guardrails. A tool named in guardrails.allowlist.approved_rmm is never blocked. Allow-listed and internal targets are skipped; protected targets and targets over a blast-radius cap stay in the plan with ELEVATED approval and a warning, never dropped.
   on_error: escalate
 - id: approval
   phase: decide
@@ -107,7 +106,7 @@ steps:
   phase: record
   action: XDR - Incident - Add Note to Incident
   note: Write enrichment summary, plan, approvals, per-action results and the rollback for every
-    containment action. The isolation unlock code is stored only here.
+    containment action. It is the only record of the rollback steps.
   on_error: escalate
 - id: create_ticket
   phase: record
@@ -160,6 +159,7 @@ plan:
 templates:
   approval: |-
     {workflow.name}: approval needed for incident {incident.id} ({incident.severity}).
+    ELEVATED approval required for (protected assets and actions over a blast-radius cap; a lead must approve): {plan.elevated}
     Detected tool: {incident.context.rmm_tool}. Either it is not on the approved RMM list, or a session
     was opened by a remote operator that IT has not verified.
     Planned actions:
@@ -167,7 +167,7 @@ templates:
     Skipped by guardrails: {plan.skipped}
     Escalation: {plan.escalate} {plan.reasons}
     Every action is reversible: domain and hash blocks are removed from their lists, and isolation is
-    stopped with the unlock code recorded in the incident note. Approve or reject.
+    stopped in Secure Endpoint (the unlock code stays in the Secure Endpoint console). Approve or reject.
   incident_note: |-
     {workflow.name} ({workflow.id}) ran on incident {incident.id}: {incident.title}
     Detected tool: {incident.context.rmm_tool}. Approved RMM list read from the guardrails file.
@@ -183,7 +183,7 @@ templates:
       if used). Blocks also expire after the configured expiry_hours.
     - block-hash: delete the SHA-256 from the Secure Endpoint simple custom detection list.
     - isolate-endpoint: stop isolation for the connector GUID in Secure Endpoint.
-      Unlock code: {plan.unlock_codes}
+      The unlock code stays in the Secure Endpoint console and is not copied here.
     Ticket: {ticket.id} {ticket.url}
   ticket_title: '[{incident.severity}] Unauthorised remote access tool {incident.context.rmm_tool} - {incident.id}'
   ticket_body: |-
@@ -198,7 +198,7 @@ templates:
     Escalation: {plan.escalate} {plan.reasons}
     ### Rollback
     Remove domain blocks from the automation block list, delete hash blocks from the Secure Endpoint
-    custom detection list, and stop isolation with the unlock code in the XDR incident note.
+    custom detection list, and stop isolation in the Secure Endpoint console (the unlock code stays there).
     ### Follow-up
     Uninstall the tool on affected hosts, confirm with the user how the help-desk contact happened, and
     check the hosts for persistence (persistence workflow).

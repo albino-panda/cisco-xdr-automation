@@ -1,10 +1,10 @@
 name: Confirmed takeover from attacker infrastructure
-description: >
-  A standard user signs in successfully from an IP that enrichment rates malicious, and Entra rates the
-  user high risk. Sessions are revoked without an approval wait, because the guardrails auto-approve
-  revoke-session for this workflow. The attacker IP is blocked with approval. A second IP, a commercial VPN
-  exit that internal hosts also use, is suspicious but shared infrastructure, so it is not blocked.
-  The user is not privileged and was not revoked before, so the account is not disabled.
+description: >-
+  A standard user signs in successfully from an IP that enrichment rates malicious, and Entra rates
+  the user high risk. Session revocation and the block of the attacker IP are planned; both wait for
+  a human approval (revoke-session is never auto-approved). A second IP, a commercial VPN exit that
+  internal hosts also use, is suspicious but shared infrastructure, so it is not blocked. The user
+  is not privileged and was not revoked before, so the account is not disabled.
 incident:
   id: INC-TEST-ATO-0001
   title: Entra high-risk sign-in from anonymising infrastructure
@@ -35,5 +35,5 @@ results:
 expect:
   escalate: false
   actions:
-    - {atomic: revoke-session, target: ap-clerk-04@example.com, status: planned, requires_approval: false}
+    - {atomic: revoke-session, target: ap-clerk-04@example.com, status: planned, requires_approval: true}
     - {atomic: block-ip, target: 203.0.113.45, status: planned, requires_approval: true}

@@ -1,9 +1,9 @@
 name: Distributed exploitation attempts exceed the indicator blast radius
-description: >
-  Exploitation attempts against the shop application arrive from many malicious sources at once.
-  The scenario lowers max_indicators_blocked to 5 to keep the file short. Six sources qualify, so every
-  block in the indicator group becomes skipped_limit and the plan escalates to a human instead of
-  blocking automatically. The web server shows no web shell, so nothing is isolated.
+description: >-
+  Exploitation attempts against the shop application arrive from many malicious sources at once. The
+  scenario lowers max_indicators_blocked to 5 to keep the file short. Six sources qualify, so every
+  block in the indicator group stays planned with elevated: true and the plan escalates to a lead.
+  The web server shows no web shell, so nothing is isolated.
 incident:
   id: INC-TEST-WEB-0005
   title: Exploitation attempts from many sources against shop application
@@ -34,9 +34,9 @@ guardrails:
 expect:
   escalate: true
   actions:
-    - {atomic: block-ip, target: 203.0.113.10, status: skipped_limit, requires_approval: true}
-    - {atomic: block-ip, target: 203.0.113.11, status: skipped_limit, requires_approval: true}
-    - {atomic: block-ip, target: 203.0.113.12, status: skipped_limit, requires_approval: true}
-    - {atomic: block-ip, target: 198.51.100.30, status: skipped_limit, requires_approval: true}
-    - {atomic: block-ip, target: 198.51.100.31, status: skipped_limit, requires_approval: true}
-    - {atomic: block-ip, target: 192.0.2.90, status: skipped_limit, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.10, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.11, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-ip, target: 203.0.113.12, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-ip, target: 198.51.100.30, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-ip, target: 198.51.100.31, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-ip, target: 192.0.2.90, status: planned, elevated: true, requires_approval: true}

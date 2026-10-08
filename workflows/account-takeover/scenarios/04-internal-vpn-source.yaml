@@ -32,5 +32,5 @@ results:
 expect:
   escalate: false
   actions:
-    - {atomic: revoke-session, target: eng-dev-11@example.com, status: planned, requires_approval: false}
+    - {atomic: revoke-session, target: eng-dev-11@example.com, status: planned, requires_approval: true}
     - {atomic: block-ip, target: 10.20.30.40, status: skipped_internal, requires_approval: true}

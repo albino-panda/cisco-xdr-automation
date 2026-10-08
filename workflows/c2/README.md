@@ -36,7 +36,7 @@ Typical alerts that should route to this workflow:
 1. **Intake.** Load the incident summary, observables and the guardrails file.
 2. **Enrich.** [`enrich-domain`](../../atomic/enrich-domain/README.md), [`enrich-ip`](../../atomic/enrich-ip/README.md).
 3. **Investigate.** [`investigate-host`](../../atomic/investigate-host/README.md).
-4. **Decide.** Build a containment plan and drop protected, allow-listed or over-limit targets. Send the plan to an approver unless `dry_run` is true.
+4. **Decide.** Build a containment plan and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
 5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
 6. **Record.** Add an incident note and [`create-ticket`](../../atomic/create-ticket/README.md).
 7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
@@ -47,7 +47,7 @@ Typical alerts that should route to this workflow:
 |---|---|---|
 | [`block-domain`](../../atomic/block-domain/README.md) | Domain with `enrich-domain` verdict malicious, or verdict suspicious with a Command and Control category. Allow-listed domains are skipped by the guardrails. | yes |
 | [`block-ip`](../../atomic/block-ip/README.md) | IP with `enrich-ip` verdict malicious that is not listed in `incident.context.shared_infrastructure_ips` (shared hosting or CDN). Internal and allow-listed ranges are skipped by the guardrails. | yes |
-| [`isolate-endpoint`](../../atomic/isolate-endpoint/README.md) | Isolation-capable host with a malicious endpoint detection while at least one domain or IP in the incident has a malicious verdict. Protected hosts are skipped; more than `max_hosts_isolated` escalates. | yes |
+| [`isolate-endpoint`](../../atomic/isolate-endpoint/README.md) | Isolation-capable host with a malicious endpoint detection while at least one domain or IP in the incident has a malicious verdict. Protected hosts and more than `max_hosts_isolated` need ELEVATED approval and escalate. | yes |
 
 ### Error handling
 
@@ -85,8 +85,8 @@ Run them with `PYTHONPATH=engine python -m xdr_plan check c2` from the repositor
 |---|---|
 | [`01-confirmed-beaconing.yaml`](scenarios/01-confirmed-beaconing.yaml) | True positive: malicious C2 domain and IP are blocked and the infected host is isolated; a host that only queried the domain is left alone. |
 | [`02-benign-saas-heartbeat.yaml`](scenarios/02-benign-saas-heartbeat.yaml) | A periodic check-in to a clean SaaS endpoint produces no actions. |
-| [`03-guardrail-skips.yaml`](scenarios/03-guardrail-skips.yaml) | Allow-listed own domain, internal relay IP and protected domain controller are kept as `skipped_allowlisted`, `skipped_internal` and `skipped_protected` while the external C2 domain is planned. |
-| [`04-blast-radius-many-hosts.yaml`](scenarios/04-blast-radius-many-hosts.yaml) | Six beaconing hosts exceed `max_hosts_isolated`: every isolation becomes `skipped_limit` and the run escalates, while the domain and IP blocks stay planned. |
+| [`03-guardrail-skips.yaml`](scenarios/03-guardrail-skips.yaml) | Allow-listed own domain, internal relay IP and protected domain controller are kept as `skipped_allowlisted`, `skipped_internal` and `elevated: true` while the external C2 domain is planned. |
+| [`04-blast-radius-many-hosts.yaml`](scenarios/04-blast-radius-many-hosts.yaml) | Six beaconing hosts exceed `max_hosts_isolated`: every isolation stays planned with `elevated: true` and the run escalates, while the domain and IP blocks stay planned. |
 | [`05-suspicious-dga-domain.yaml`](scenarios/05-suspicious-dga-domain.yaml) | Suspicious DGA-style domains: only the one categorised Command and Control is blocked (168 h expiry); the host with only a suspicious detection is not isolated. |
 | [`06-shared-hosting-ip.yaml`](scenarios/06-shared-hosting-ip.yaml) | A malicious domain behind a shared CDN address: the domain is blocked and the host isolated, the shared IP is not blocked, and a host that is not isolation-capable is not planned. |
 
@@ -101,9 +101,9 @@ Run them with `PYTHONPATH=engine python -m xdr_plan check c2` from the repositor
 ## Guardrails
 
 - `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Protected hosts, protected users and allow-listed indicators are never actioned automatically.
+- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
 - Blast-radius limits cap how many hosts, users or indicators a single run may touch.
-- Every containment action is reversible, and the rollback is written into the incident note: remove the domain or IP from the block list (blocks also auto-expire), or stop isolation for the connector GUID in Secure Endpoint. The Secure Endpoint stop-isolation endpoint is not yet verified against vendor documentation.
+- Every containment action is reversible, and the rollback is written into the incident note: remove the domain or IP from the block list (blocks are flagged for release review after `expires_hours`; removing one needs a separate human release approval), or stop isolation for the connector GUID in Secure Endpoint. The Secure Endpoint stop-isolation endpoint is not yet verified against vendor documentation.
 
 ## Notes
 

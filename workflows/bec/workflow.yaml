@@ -73,7 +73,7 @@ steps:
 - id: build_plan
   phase: decide
   note: Build the containment plan from the rules in `plan`, enrichment verdicts, investigation results
-    and guardrails. Drop any target that is protected, allow-listed or over the blast-radius limit.
+    and guardrails. Allow-listed and internal targets are skipped; protected targets and targets over a blast-radius cap stay in the plan with ELEVATED approval and a warning, never dropped.
   on_error: escalate
 - id: approval
   phase: decide
@@ -86,7 +86,7 @@ steps:
   atomic: revoke-session
   when: Investigated user is an internal (tenant) mailbox with compromise evidence, meaning Entra risk
     level high or a successful sign-in from an IP that enrich-ip rates malicious or suspicious.
-  requires_approval: false
+  requires_approval: true
   on_error: escalate
 - id: disable_user
   phase: contain
@@ -191,6 +191,7 @@ plan:
 templates:
   approval: |
     Business email compromise containment for incident {incident.id} ({incident.severity}): {incident.title}
+    ELEVATED approval required for (protected assets and actions over a blast-radius cap; a lead must approve): {plan.elevated}
 
     Planned actions:
     {plan.actions}

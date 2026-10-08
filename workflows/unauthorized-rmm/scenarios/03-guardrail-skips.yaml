@@ -1,9 +1,9 @@
 name: Unapproved tool on a domain controller with an allow-listed installer hash
 description: >-
-  FictiDesk is installed on a domain controller and a session is active. The relay domain is still
-  blocked, but the guardrails win for the other two actions: dc-01 matches protected.hosts so
-  isolation is skipped_protected, and the installer hash was previously allow-listed (overridden here)
-  so the hash block is skipped_allowlisted. A human must handle the domain controller.
+  FictiDesk is installed on a domain controller and a session is active. The relay domain block is
+  planned. dc-01 matches protected.hosts, so its isolation stays planned with elevated: true and
+  needs ELEVATED approval. The installer hash was previously allow-listed (overridden here), so the
+  hash block is skipped_allowlisted.
 incident:
   id: INC-TEST-RMM-0003
   title: Unapproved remote access tool FictiDesk on dc-01
@@ -34,4 +34,4 @@ expect:
   actions:
     - {atomic: block-domain, target: relay.fictidesk.example, status: planned, requires_approval: true}
     - {atomic: block-hash, target: 5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe, status: skipped_allowlisted}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-0000000dc001, status: skipped_protected}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-0000000dc001, status: planned, elevated: true}

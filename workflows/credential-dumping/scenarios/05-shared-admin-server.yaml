@@ -1,10 +1,10 @@
 name: Many privileged accounts cached on a shared admin server
 description: >-
-  Edge case specific to credential dumping. A shared administration server holds cached logons of four
-  privileged accounts. The Secure Endpoint detection is still unknown, but the malicious hash is seen on
-  the server, which confirms credential access. The server is isolated and all four sessions are
-  revoked, but four account disables exceed max_users_disabled (3), so every disable becomes
-  skipped_limit and the plan escalates to a human.
+  Edge case specific to credential dumping. A shared administration server holds cached logons of
+  four privileged accounts. The Secure Endpoint detection is still unknown, but the malicious hash
+  is seen on the server, which confirms credential access. Isolation of the server and revocation of
+  all four sessions are planned, but four account disables exceed max_users_disabled (3), so every
+  disable stays planned with elevated: true and the plan escalates to a lead.
 incident:
   id: INC-TEST-0305
   title: Credential theft behaviour on adm-jump01.example.com
@@ -62,11 +62,11 @@ expect:
   escalate: true
   actions:
     - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-0000000000a1, status: planned, requires_approval: true}
-    - {atomic: revoke-session, target: net-admin01@example.com, status: planned, requires_approval: false}
-    - {atomic: revoke-session, target: net-admin02@example.com, status: planned, requires_approval: false}
-    - {atomic: revoke-session, target: sys-admin03@example.com, status: planned, requires_approval: false}
-    - {atomic: revoke-session, target: sys-admin04@example.com, status: planned, requires_approval: false}
-    - {atomic: disable-user, target: net-admin01@example.com, status: skipped_limit, requires_approval: true}
-    - {atomic: disable-user, target: net-admin02@example.com, status: skipped_limit, requires_approval: true}
-    - {atomic: disable-user, target: sys-admin03@example.com, status: skipped_limit, requires_approval: true}
-    - {atomic: disable-user, target: sys-admin04@example.com, status: skipped_limit, requires_approval: true}
+    - {atomic: revoke-session, target: net-admin01@example.com, status: planned, requires_approval: true}
+    - {atomic: revoke-session, target: net-admin02@example.com, status: planned, requires_approval: true}
+    - {atomic: revoke-session, target: sys-admin03@example.com, status: planned, requires_approval: true}
+    - {atomic: revoke-session, target: sys-admin04@example.com, status: planned, requires_approval: true}
+    - {atomic: disable-user, target: net-admin01@example.com, status: planned, elevated: true, requires_approval: true}
+    - {atomic: disable-user, target: net-admin02@example.com, status: planned, elevated: true, requires_approval: true}
+    - {atomic: disable-user, target: sys-admin03@example.com, status: planned, elevated: true, requires_approval: true}
+    - {atomic: disable-user, target: sys-admin04@example.com, status: planned, elevated: true, requires_approval: true}

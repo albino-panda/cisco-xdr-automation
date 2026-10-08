@@ -1,10 +1,11 @@
 name: Compromised admin creates four privileged accounts
-description: >
-  Blast radius. A compromised identity administrator creates four accounts and assigns each a privileged
-  role, none under an approved change. Sessions are revoked for the admin and the four new accounts
-  (revoke-session has no cap), but four disable-user actions exceed max_users_disabled (3), so all four
-  become skipped_limit and the plan escalates to a human. The exploit host is not isolation-capable, so
-  no isolation is planned for it and the investigator must contain it by hand.
+description: >-
+  Blast radius. A compromised identity administrator creates four accounts and assigns each a
+  privileged role, none under an approved change. Session revocation is planned for the admin and
+  the four new accounts (revoke-session has no cap), but four disable-user actions exceed
+  max_users_disabled (3), so all four stay planned with elevated: true and the plan escalates to a
+  lead. The exploit host is not isolation-capable, so no isolation is planned for it and the
+  investigator must contain it by hand.
 incident:
   id: INC-TEST-PE-0005
   title: Burst of account creations with privileged roles
@@ -47,12 +48,12 @@ results:
 expect:
   escalate: true
   actions:
-    - {atomic: revoke-session, target: idm-admin-07@example.com, status: planned, requires_approval: false}
-    - {atomic: revoke-session, target: svc-report-a@example.com, status: planned, requires_approval: false}
-    - {atomic: revoke-session, target: svc-report-b@example.com, status: planned, requires_approval: false}
-    - {atomic: revoke-session, target: svc-report-c@example.com, status: planned, requires_approval: false}
-    - {atomic: revoke-session, target: svc-report-d@example.com, status: planned, requires_approval: false}
-    - {atomic: disable-user, target: svc-report-a@example.com, status: skipped_limit, requires_approval: true}
-    - {atomic: disable-user, target: svc-report-b@example.com, status: skipped_limit, requires_approval: true}
-    - {atomic: disable-user, target: svc-report-c@example.com, status: skipped_limit, requires_approval: true}
-    - {atomic: disable-user, target: svc-report-d@example.com, status: skipped_limit, requires_approval: true}
+    - {atomic: revoke-session, target: idm-admin-07@example.com, status: planned, requires_approval: true}
+    - {atomic: revoke-session, target: svc-report-a@example.com, status: planned, requires_approval: true}
+    - {atomic: revoke-session, target: svc-report-b@example.com, status: planned, requires_approval: true}
+    - {atomic: revoke-session, target: svc-report-c@example.com, status: planned, requires_approval: true}
+    - {atomic: revoke-session, target: svc-report-d@example.com, status: planned, requires_approval: true}
+    - {atomic: disable-user, target: svc-report-a@example.com, status: planned, elevated: true, requires_approval: true}
+    - {atomic: disable-user, target: svc-report-b@example.com, status: planned, elevated: true, requires_approval: true}
+    - {atomic: disable-user, target: svc-report-c@example.com, status: planned, elevated: true, requires_approval: true}
+    - {atomic: disable-user, target: svc-report-d@example.com, status: planned, elevated: true, requires_approval: true}

@@ -54,14 +54,14 @@ outputs:
 used_by:
 - ransomware
 - malware
-- powershell
+- malicious-powershell
 - lateral-movement
 - c2
 - dns-tunneling
 - credential-dumping
 - privilege-escalation
 - persistence
-- rmm
+- unauthorized-rmm
 - exfiltration
 - vulnerability-exploitation
 - web-attacks

@@ -37,7 +37,7 @@ Typical alerts that should route to this workflow:
 1. **Intake.** Load the incident summary, observables and the guardrails file.
 2. **Enrich.** [`enrich-ip`](../../atomic/enrich-ip/README.md).
 3. **Investigate.** [`investigate-user`](../../atomic/investigate-user/README.md).
-4. **Decide.** Build a containment plan from the rules below and drop protected, allow-listed or over-limit targets. Send the plan to an approver unless `dry_run` is true.
+4. **Decide.** Build a containment plan from the rules below and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
 5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
 6. **Record.** Add an incident note and [`create-ticket`](../../atomic/create-ticket/README.md).
 7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
@@ -46,7 +46,7 @@ Typical alerts that should route to this workflow:
 
 | Action | When | Approval |
 |---|---|---|
-| [`revoke-session`](../../atomic/revoke-session/README.md) | Investigated user with high identity risk, medium risk plus at least one sign-in anomaly, or a successful sign-in from an IP enriched as malicious. | no |
+| [`revoke-session`](../../atomic/revoke-session/README.md) | Investigated user with high identity risk, medium risk plus at least one sign-in anomaly, or a successful sign-in from an IP enriched as malicious. | yes |
 | [`disable-user`](../../atomic/disable-user/README.md) | Investigated user holding a privileged role, with high identity risk or a successful sign-in from an IP enriched as malicious. | yes |
 | [`block-ip`](../../atomic/block-ip/README.md) | IP enriched as malicious, or suspicious and used for a successful sign-in by a high-risk user. Internal and allow-listed ranges are skipped by the guardrails. | yes |
 
@@ -83,7 +83,7 @@ The `plan` list in [`workflow.yaml`](workflow.yaml) holds the exact expressions.
 ## Guardrails
 
 - `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Protected hosts, protected users and allow-listed indicators are never actioned automatically.
+- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
 - Blast-radius limits cap how many hosts, users or indicators a single run may touch.
 - Every containment action is reversible except session revocation, and the rollback is written into the incident note.
 
@@ -95,9 +95,9 @@ Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them wit
 |---|---|
 | [`01-admin-takeover-rogue-app-credential.yaml`](scenarios/01-admin-takeover-rogue-app-credential.yaml) | True positive: a high-risk admin is revoked and disabled, a consenting medium-risk user with an anomaly is only revoked, the malicious IP and the suspicious IP the admin used are blocked, the clean IP is not. |
 | [`02-approved-certificate-rotation.yaml`](scenarios/02-approved-certificate-rotation.yaml) | Benign: an approved certificate rotation by a privileged app owner with no risk, no anomalies and clean internal sign-ins produces no actions. |
-| [`03-protected-break-glass-admin.yaml`](scenarios/03-protected-break-glass-admin.yaml) | Guardrail: a break-glass Global Administrator matches the revoke and disable rules but both are `skipped_protected`; the attacker IP is still blocked. |
+| [`03-protected-break-glass-admin.yaml`](scenarios/03-protected-break-glass-admin.yaml) | Guardrail: a break-glass Global Administrator matches the revoke and disable rules but both are planned with `elevated: true`; the attacker IP is still blocked. |
 | [`04-service-principal-secret-used-from-attacker-ip.yaml`](scenarios/04-service-principal-secret-used-from-attacker-ip.yaml) | Cloud edge case: app-only use of a leaked service principal secret. A failed sign-in from the attacker IP does not revoke or disable the clean owner; only the IP is blocked and secret removal stays manual. |
-| [`05-tenant-admins-over-disable-limit.yaml`](scenarios/05-tenant-admins-over-disable-limit.yaml) | Guardrail: four compromised admins exceed `max_users_disabled`, so every disable is `skipped_limit` and the plan escalates; revocations and the IP block still run. |
+| [`05-tenant-admins-over-disable-limit.yaml`](scenarios/05-tenant-admins-over-disable-limit.yaml) | Guardrail: four compromised admins exceed `max_users_disabled`, so every disable stays planned with `elevated: true` and the plan escalates; revocations and the IP block still run. |
 
 ## Notes
 

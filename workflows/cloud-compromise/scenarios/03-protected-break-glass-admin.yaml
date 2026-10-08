@@ -1,8 +1,9 @@
 name: Protected break-glass admin signs in from a malicious IP
-description: >
-  A break-glass Global Administrator shows high risk and a successful sign-in from a malicious IP. The
-  revoke and disable rules match, but the account is in protected.users, so both actions are
-  skipped_protected and left to a human. The attacker IP is still blocked behind approval.
+description: >-
+  A break-glass Global Administrator shows high risk and a successful sign-in from a malicious IP.
+  The revoke and disable rules match and the account is in protected.users, so both actions stay
+  planned with elevated: true and need ELEVATED approval. The attacker IP block is planned behind
+  normal approval.
 incident:
   id: INC-TEST-0303
   title: Unusual admin activity from new location on emergency access account
@@ -28,6 +29,6 @@ results:
 expect:
   escalate: false
   actions:
-    - {atomic: revoke-session, target: breakglass-01@example.com, status: skipped_protected, requires_approval: false}
-    - {atomic: disable-user, target: breakglass-01@example.com, status: skipped_protected, requires_approval: true}
+    - {atomic: revoke-session, target: breakglass-01@example.com, status: planned, elevated: true, requires_approval: true}
+    - {atomic: disable-user, target: breakglass-01@example.com, status: planned, elevated: true, requires_approval: true}
     - {atomic: block-ip, target: 203.0.113.99, status: planned, requires_approval: true}

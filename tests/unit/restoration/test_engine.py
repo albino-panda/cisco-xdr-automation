@@ -180,7 +180,7 @@ def _forged_package(env, *, incident_id: str, restores: str, target: str = "TH-L
         risk_score=0, confidence_score=100, approval_level=ApprovalLevel.STANDARD,
     )
     return ReleasePackage(
-        package_id="rel-forged", incident_id=incident_id, workflow_id="powershell", workflow_version="1.0.0",
+        package_id="rel-forged", incident_id=incident_id, workflow_id="malicious-powershell", workflow_version="1.0.0",
         created_at=FIXED_NOW, expires_at=FIXED_NOW + timedelta(hours=1), requested_by="analyst.one@example.com",
         severity="HIGH", risk_score=0, confidence_score=100, summary="forged", evidence=evidence,
         evidence_snapshot_hash=evidence_snapshot_hash(evidence), actions=(action,), control_keys=(restores,),

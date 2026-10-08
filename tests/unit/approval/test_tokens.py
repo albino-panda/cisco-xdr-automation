@@ -108,7 +108,7 @@ def test_issue_binds_package_decision_and_actions(tokens, package):
                                                         package.incident_id)
     assert c.evidence_snapshot_hash == package.evidence_snapshot_hash
     assert (c.workflow_id, c.workflow_version, c.decision_id, c.token_id) == (
-        "powershell", "1.0.0", "decision-1", "token-1")
+        "malicious-powershell", "1.0.0", "decision-1", "token-1")
     assert [g.idempotency_key for g in c.actions] == list(package.keys)
     for grant in c.actions:
         action = package.action(grant.idempotency_key)

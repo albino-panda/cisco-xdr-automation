@@ -35,7 +35,7 @@ Typical alerts that should route to this workflow:
 1. **Intake.** Load the incident summary, observables and the guardrails file. Record the accounts with an interactive or cached logon on the affected hosts in the lookback window (default 24 hours) as `incident.context.logged_on_users`. Failure here stops the run.
 2. **Enrich.** [`enrich-hash`](../../atomic/enrich-hash/README.md). Failures continue.
 3. **Investigate.** [`investigate-host`](../../atomic/investigate-host/README.md), [`investigate-user`](../../atomic/investigate-user/README.md) for the incident users and every logged-on account. Failures continue.
-4. **Decide.** Build the containment plan from the rules below and drop protected, allow-listed or over-limit targets. Credential access counts as **confirmed** on a host when a Secure Endpoint detection on it is `malicious` or a `malicious` hash was seen on it. If a protected host (domain controller) is confirmed, no account action is planned and the run escalates to the incident commander. Send the plan to an approver unless `dry_run` is true. Failures escalate.
+4. **Decide.** Build the containment plan from the rules below and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Credential access counts as **confirmed** on a host when a Secure Endpoint detection on it is `malicious` or a `malicious` hash was seen on it. If a protected host (domain controller) is confirmed, no account action is planned and the run escalates to the incident commander. Send the plan to an approver unless `dry_run` is true. Failures escalate.
 5. **Contain.** Run the approved actions below. Each action records its result, even when skipped. Failures escalate.
 6. **Record.** Add an incident note (results, rollback per action, credential-reset plan) and [`create-ticket`](../../atomic/create-ticket/README.md). Failures continue.
 7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md). Failures continue.
@@ -45,7 +45,7 @@ Typical alerts that should route to this workflow:
 | Action | When | Approval |
 |---|---|---|
 | [`isolate-endpoint`](../../atomic/isolate-endpoint/README.md) | Investigated host where credential access is confirmed and the connector policy allows isolation. | yes |
-| [`revoke-session`](../../atomic/revoke-session/README.md) | Accounts in `incident.context.logged_on_users` (logged on to the host in the lookback window) when credential access is confirmed on an affected host and no protected host is confirmed. | no |
+| [`revoke-session`](../../atomic/revoke-session/README.md) | Accounts in `incident.context.logged_on_users` (logged on to the host in the lookback window) when credential access is confirmed on an affected host and no protected host is confirmed. | yes |
 | [`disable-user`](../../atomic/disable-user/README.md) | The same exposed accounts when they hold a privileged role (`profile.privileged_roles` not empty), after approver review. | yes |
 
 ### Containment rules
@@ -54,7 +54,7 @@ The `plan` list in [`workflow.yaml`](workflow.yaml) holds the exact expressions.
 
 | Rule id | Atomic | Condition |
 |---|---|---|
-| `isolate_confirmed_hosts` | `isolate-endpoint` | For each investigated host: isolation is possible and either a detection on the host is malicious or a malicious hash was seen on it (by connector GUID or hostname). Target is the connector GUID. A domain controller matches `dc-*` and is skipped as protected. |
+| `isolate_confirmed_hosts` | `isolate-endpoint` | For each investigated host: isolation is possible and either a detection on the host is malicious or a malicious hash was seen on it (by connector GUID or hostname). Target is the connector GUID. A domain controller matches `dc-*` and needs ELEVATED approval. |
 | `revoke_exposed_sessions` | `revoke-session` | For each investigated user: the account is in `incident.context.logged_on_users`, at least one investigated host is confirmed, and no protected host is confirmed. |
 | `disable_exposed_privileged_accounts` | `disable-user` | Same as `revoke_exposed_sessions`, and the account holds at least one privileged role. Capped by `max_users_disabled`; over the cap every disable is skipped and the run escalates. |
 
@@ -73,11 +73,11 @@ The `plan` list in [`workflow.yaml`](workflow.yaml) holds the exact expressions.
 ## Guardrails
 
 - `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Protected hosts, protected users and allow-listed indicators are never actioned automatically.
+- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
 - Blast-radius limits cap how many hosts, users or indicators a single run may touch.
 - Every containment action is reversible except session revocation, and the rollback is written into the incident note.
-- A domain controller (`dc-*`) or any other protected host is never isolated automatically. When credential access is confirmed on one, account actions are not automated either and the run escalates to the incident commander.
-- Members of protected groups (`Domain Admins`) and protected users are skipped for both session revocation and disabling.
+- Isolating a domain controller (`dc-*`) or any other protected host needs ELEVATED approval by the incident commander. When credential access is confirmed on one, no account action is planned and the incident commander owns the domain-wide reset.
+- Session revocation and disabling of members of protected groups (`Domain Admins`) and of protected users need ELEVATED approval.
 
 ## Scenarios
 
@@ -87,9 +87,9 @@ Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them wit
 |---|---|
 | [`01-workstation-lsass-access.yaml`](scenarios/01-workstation-lsass-access.yaml) | True positive on a workstation: host isolated, both logged-on accounts revoked, the privileged one disabled with approval; an incident user who never logged on is not actioned. |
 | [`02-security-agent-memory-read.yaml`](scenarios/02-security-agent-memory-read.yaml) | Benign: an approved security agent reading LSASS memory (clean detection and hash) produces no actions. |
-| [`03-domain-controller-ntds.yaml`](scenarios/03-domain-controller-ntds.yaml) | Guardrail: a confirmed domain controller is skipped as protected and no account action is planned, so the incident commander decides. |
+| [`03-domain-controller-ntds.yaml`](scenarios/03-domain-controller-ntds.yaml) | Guardrail: isolation of a confirmed domain controller is planned with `elevated: true` and no account action is planned, so the incident commander decides. |
 | [`04-domain-admin-exposed.yaml`](scenarios/04-domain-admin-exposed.yaml) | Guardrail: a Domain Admins member on the host is skipped for revoke and disable while the host and the standard user are still actioned. |
-| [`05-shared-admin-server.yaml`](scenarios/05-shared-admin-server.yaml) | Edge case: a malicious hash alone confirms access on a shared admin server; four privileged disables exceed the cap, become `skipped_limit` and escalate. |
+| [`05-shared-admin-server.yaml`](scenarios/05-shared-admin-server.yaml) | Edge case: a malicious hash alone confirms access on a shared admin server; four privileged disables exceed the cap, stay planned with `elevated: true` and escalate. |
 
 ## Notes
 

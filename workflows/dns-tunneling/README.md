@@ -34,8 +34,8 @@ Typical alerts that should route to this workflow:
 1. **Intake.** Load the incident summary, observables and the guardrails file. A failure stops the run.
 2. **Enrich.** [`enrich-domain`](../../atomic/enrich-domain/README.md) on the tunneling parent domain named by the detection, not on each unique subdomain. A failure is recorded and the run continues.
 3. **Investigate.** [`investigate-host`](../../atomic/investigate-host/README.md) on every host that queried the parent domain, including clients found in internal resolver logs when Umbrella only sees the forwarding resolver. A failure is recorded and the run continues.
-4. **Decide.** Build a containment plan and drop protected, allow-listed or over-limit targets. Send the plan to an approver unless `dry_run` is true. A failure escalates to a human.
-5. **Contain.** Run the approved actions below. Each action records its result, even when skipped. A failure escalates to a human.
+4. **Decide.** Build a containment plan and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true. A failure escalates to a lead.
+5. **Contain.** Run the approved actions below. Each action records its result, even when skipped. A failure escalates to a lead.
 6. **Record.** Add an incident note with the rollback for every action, and [`create-ticket`](../../atomic/create-ticket/README.md).
 7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
 
@@ -63,8 +63,8 @@ Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them wit
 |---|---|
 | [`01-confirmed-tunnel.yaml`](scenarios/01-confirmed-tunnel.yaml) | True positive: a malicious tunnel parent domain is blocked once and the workstation whose unknown process queried it is isolated, both pending approval. |
 | [`02-security-product-lookups.yaml`](scenarios/02-security-product-lookups.yaml) | Benign: an approved antivirus product's encoded DNS lookups are high-volume and in the tunneling category, but the clean verdict and approved process produce no actions. |
-| [`03-protected-host.yaml`](scenarios/03-protected-host.yaml) | Guardrail: a protected `hv-*` host is `skipped_protected`, a host that cannot be isolated gets no action, and the other workstation is isolated. |
-| [`04-blast-radius.yaml`](scenarios/04-blast-radius.yaml) | Guardrail: six querying hosts exceed `max_hosts_isolated`, so every isolation is `skipped_limit` and the plan escalates; the domain block stays planned. |
+| [`03-protected-host.yaml`](scenarios/03-protected-host.yaml) | Guardrail: a protected `hv-*` host is planned with `elevated: true`, a host that cannot be isolated gets no action, and the other workstation is isolated. |
+| [`04-blast-radius.yaml`](scenarios/04-blast-radius.yaml) | Guardrail: six querying hosts exceed `max_hosts_isolated`, so every isolation stays planned with `elevated: true` and the plan escalates; the domain block stays planned. |
 | [`05-internal-resolver-forwarding.yaml`](scenarios/05-internal-resolver-forwarding.yaml) | DNS edge case: the internal resolver that forwards the queries (`dns.exe`) is never isolated even though it is not protected; only the real client is isolated, and many subdomains still give one block. |
 | [`06-new-domain-without-reputation.yaml`](scenarios/06-new-domain-without-reputation.yaml) | DNS edge case: a new domain with an unknown verdict is blocked on category and volume, while a low-volume VPN health-check domain in the same category is not. |
 
@@ -79,7 +79,7 @@ Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them wit
 ## Guardrails
 
 - `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Protected hosts, protected users and allow-listed indicators are never actioned automatically.
+- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
 - Blast-radius limits cap how many hosts, users or indicators a single run may touch.
 - Every containment action is reversible except session revocation, and the rollback is written into the incident note.
 

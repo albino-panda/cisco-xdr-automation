@@ -74,8 +74,7 @@ steps:
 - id: build_plan
   phase: decide
   note: Build the containment plan from the rules in `plan`. Credential access is confirmed on a host
-    when a Secure Endpoint detection on it is malicious or a malicious hash was seen on it. Drop any
-    target that is protected, allow-listed or over the blast-radius limit. When a protected host (domain
+    when a Secure Endpoint detection on it is malicious or a malicious hash was seen on it. Allow-listed and internal targets are skipped; protected targets and targets over a blast-radius cap stay in the plan with ELEVATED approval and a warning, never dropped. When a protected host (domain
     controller) has confirmed credential access, plan no account actions and escalate to the incident
     commander.
   on_error: escalate
@@ -98,7 +97,7 @@ steps:
   when: Accounts in incident.context.logged_on_users (logged on to the host in the lookback window) when
     credential access is confirmed on an affected host and no protected host (domain controller) is
     confirmed.
-  requires_approval: false
+  requires_approval: true
   on_error: escalate
 - id: disable_user
   phase: contain
@@ -134,8 +133,7 @@ related_workflows:
 plan:
 - id: isolate_confirmed_hosts
   description: Hosts where credential access is confirmed (malicious detection on the host, or a malicious
-    hash seen on it) and the connector policy allows isolation. Domain controllers and other protected
-    hosts are skipped by the guardrails and escalated.
+    hash seen on it) and the connector policy allows isolation. Domain controllers and other protected hosts stay planned with ELEVATED approval.
   atomic: isolate-endpoint
   for_each: "results['investigate-host']"
   when: >-
@@ -180,6 +178,7 @@ plan:
 templates:
   approval: |
     Credential dumping on {incident.title} ({incident.id}, severity {incident.severity}).
+    ELEVATED approval required for (protected assets and actions over a blast-radius cap; a lead must approve): {plan.elevated}
     Credential material was accessed on the host. Exposed accounts (logged on in the lookback window):
     {incident.context.logged_on_users}.
 
@@ -188,8 +187,7 @@ templates:
 
     Escalation required: {plan.escalate} {plan.reasons}
     Approve to isolate the host and disable the privileged accounts listed above. Session revocation
-    is not reversible. A protected host (domain controller) is never actioned here; it goes to the
-    incident commander.
+    is not reversible. Isolating a protected host (domain controller) needs ELEVATED approval by the incident commander, and no account action is planned then.
   incident_note: |
     Workflow {workflow.name} ({workflow.id}) ran for {incident.id}. Dry run: {workflow.dry_run}.
     Approver: {approver.name}, decision {approver.decision}.
@@ -199,13 +197,13 @@ templates:
     Escalation: {plan.escalate} {plan.reasons}
 
     Rollback:
-    - isolate-endpoint: stop isolation for the connector GUID in Secure Endpoint. The unlock code is
-      recorded below this note only.
+    - isolate-endpoint: stop isolation for the connector GUID in Secure Endpoint. The unlock code
+      stays in the Secure Endpoint console and is not copied here.
     - revoke-session: not reversible; the user signs in again after the password reset.
     - disable-user: set accountEnabled back to true in Entra ID once the password is reset.
 
     Credential-reset plan for accounts cached on the host ({incident.context.logged_on_users}):
-    1. Treat every listed account as compromised, including accounts skipped by guardrails.
+    1. Treat every listed account as compromised, including accounts marked ELEVATED.
     2. Reset the password of each account, privileged and service accounts first; rotate service
        account secrets and the host's local administrator password.
     3. Re-enable disabled accounts only after the reset and an MFA method review.

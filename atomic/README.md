@@ -16,13 +16,13 @@ Small, reusable building blocks that workflows chain together. Each one does a s
 | [`block-url`](./block-url/README.md) | containment | yes | umbrella, cloudflare |
 | [`block-hash`](./block-hash/README.md) | containment | yes | secure-endpoint |
 | [`quarantine-email`](./quarantine-email/README.md) | containment | yes | secure-email |
-| [`revoke-session`](./revoke-session/README.md) | containment | no | microsoft-entra |
+| [`revoke-session`](./revoke-session/README.md) | containment | yes | microsoft-entra |
 | [`create-ticket`](./create-ticket/README.md) | ticketing | no | servicenow, cisco-xdr |
 | [`notify-soc`](./notify-soc/README.md) | notification | no | cisco-xdr |
 
 ## Contract rules
 
 - Inputs `incident_id` and `dry_run` are accepted by every atomic.
-- Containment atomics default to `dry_run = true`, check guardrails and log rollback steps.
+- Containment atomics always require a human approval (ELEVATED for protected assets and over blast-radius caps), default to `dry_run = true`, check allow-lists and log rollback steps.
 - Enrichment and investigation atomics are read-only.
 - All atomics are idempotent and return an `error` output instead of failing the whole workflow.

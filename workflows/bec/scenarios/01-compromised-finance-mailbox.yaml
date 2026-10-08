@@ -2,8 +2,8 @@ name: Compromised internal finance mailbox sends payment-change requests
 description: >-
   True positive. An accounts-payable mailbox signed in successfully from a malicious IP, gained an
   external forwarding rule and sent bank-detail change requests to colleagues. The plan revokes its
-  sessions (no approval), disables the account and quarantines its fraudulent messages across all
-  recipients (both with approval). No lookalike domain is involved, so nothing is blocked.
+  sessions, disables the account and quarantines its fraudulent messages across all recipients,
+  every action behind human approval. No lookalike domain is involved, so nothing is blocked.
 incident:
   id: INC-TEST-BEC-0001
   title: Internal mailbox requesting vendor bank detail change
@@ -38,6 +38,6 @@ results:
 expect:
   escalate: false
   actions:
-    - {atomic: revoke-session, target: ap-clerk-01@example.com, status: planned, requires_approval: false}
+    - {atomic: revoke-session, target: ap-clerk-01@example.com, status: planned, requires_approval: true}
     - {atomic: disable-user, target: ap-clerk-01@example.com, status: planned, requires_approval: true}
     - {atomic: quarantine-email, target: ap-clerk-01@example.com, status: planned, requires_approval: true}

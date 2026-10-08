@@ -37,7 +37,7 @@ Reputation, geolocation, ASN and internal sightings for an IP address.
 
 ## Used by
 
-[`ransomware`](../../workflows/ransomware/README.md), [`phishing`](../../workflows/phishing/README.md), [`bec`](../../workflows/bec/README.md), [`account-takeover`](../../workflows/account-takeover/README.md), [`malware`](../../workflows/malware/README.md), [`powershell`](../../workflows/powershell/README.md), [`lateral-movement`](../../workflows/lateral-movement/README.md), [`c2`](../../workflows/c2/README.md), [`password-spray`](../../workflows/password-spray/README.md), [`exfiltration`](../../workflows/exfiltration/README.md), [`vulnerability-exploitation`](../../workflows/vulnerability-exploitation/README.md), [`cloud-compromise`](../../workflows/cloud-compromise/README.md), [`web-attacks`](../../workflows/web-attacks/README.md)
+[`ransomware`](../../workflows/ransomware/README.md), [`phishing`](../../workflows/phishing/README.md), [`bec`](../../workflows/bec/README.md), [`account-takeover`](../../workflows/account-takeover/README.md), [`malware`](../../workflows/malware/README.md), [`malicious-powershell`](../../workflows/malicious-powershell/README.md), [`lateral-movement`](../../workflows/lateral-movement/README.md), [`c2`](../../workflows/c2/README.md), [`password-spray`](../../workflows/password-spray/README.md), [`exfiltration`](../../workflows/exfiltration/README.md), [`vulnerability-exploitation`](../../workflows/vulnerability-exploitation/README.md), [`cloud-compromise`](../../workflows/cloud-compromise/README.md), [`web-attacks`](../../workflows/web-attacks/README.md)
 
 ## Building it in XDR Automation
 

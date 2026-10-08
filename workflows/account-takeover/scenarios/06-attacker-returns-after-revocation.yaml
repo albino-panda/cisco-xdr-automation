@@ -33,6 +33,6 @@ results:
 expect:
   escalate: false
   actions:
-    - {atomic: revoke-session, target: hr-ops-03@example.com, status: planned, requires_approval: false}
+    - {atomic: revoke-session, target: hr-ops-03@example.com, status: planned, requires_approval: true}
     - {atomic: disable-user, target: hr-ops-03@example.com, status: planned, requires_approval: true}
     - {atomic: block-ip, target: 198.51.100.150, status: planned, requires_approval: true}

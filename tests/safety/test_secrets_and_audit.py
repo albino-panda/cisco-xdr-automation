@@ -401,7 +401,7 @@ def test_audit_payload_actor_and_ids_are_redacted_before_write(tmp_path: Path):
 def _claims() -> ApprovalTokenClaims:
     return ApprovalTokenClaims(
         token_id="tok-0001", purpose=ApprovalPurpose.CONTAINMENT, package_id="pkg-0001",
-        incident_id="XDR-83921", evidence_snapshot_hash="a" * 64, workflow_id="powershell",
+        incident_id="XDR-83921", evidence_snapshot_hash="a" * 64, workflow_id="malicious-powershell",
         workflow_version="1.0.0", decision_id="dec-0001",
         actions=(TokenActionGrant(idempotency_key="XDR-83921:isolate_endpoint:TH-LT-1047",
                                   action_type=ActionType.ISOLATE_ENDPOINT, target="TH-LT-1047",

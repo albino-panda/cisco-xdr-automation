@@ -1,8 +1,8 @@
 name: Tunnel reaches a protected hypervisor host
 description: >-
-  The same malicious parent domain is queried by a workstation and by a hypervisor management host that
-  matches the protected pattern hv-*. The workstation is isolated, the hypervisor is skipped by the
-  protected-host guardrail and left to a human, and a third host whose connector policy does not allow
+  The same malicious parent domain is queried by a workstation and by a hypervisor management host
+  that matches the protected pattern hv-*. Both isolations are planned; the hypervisor's has
+  elevated: true and needs ELEVATED approval. A third host whose connector policy does not allow
   isolation produces no action at all.
 incident:
   id: INC-TEST-DNS-0003
@@ -53,4 +53,4 @@ expect:
   actions:
     - {atomic: block-domain, target: sync-telemetry.test, status: planned, requires_approval: true}
     - {atomic: isolate-endpoint, target: 3f6c1a2e-0000-4000-8000-000000000201, status: planned, requires_approval: true}
-    - {atomic: isolate-endpoint, target: 3f6c1a2e-0000-4000-8000-0000000000a3, status: skipped_protected, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 3f6c1a2e-0000-4000-8000-0000000000a3, status: planned, elevated: true, requires_approval: true}

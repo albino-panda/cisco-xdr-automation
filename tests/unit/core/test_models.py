@@ -191,7 +191,7 @@ def _claims(**over) -> ApprovalTokenClaims:
     rec = make_recommendation()
     data = dict(
         token_id="t" * 32, purpose=ApprovalPurpose.CONTAINMENT, package_id="p" * 32,
-        incident_id=rec.incident_id, evidence_snapshot_hash="e" * 64, workflow_id="powershell",
+        incident_id=rec.incident_id, evidence_snapshot_hash="e" * 64, workflow_id="malicious-powershell",
         workflow_version="1.0.0", decision_id="d" * 32,
         actions=(TokenActionGrant(idempotency_key=rec.idempotency_key, action_type=rec.action_type,
                                   target=rec.target, params_hash=rec.params_hash,
@@ -253,7 +253,7 @@ def test_credential_secret_hidden():
 def test_analyst_decision_rules():
     common = dict(decision_id="d1", package_id="p1", incident_id="XDR-83921", purpose=ApprovalPurpose.CONTAINMENT,
                   analyst_identity="", approvers=(), decided_at=FIXED_NOW, comment="no",
-                  workflow_id="powershell", workflow_version="1.0.0", evidence_snapshot_hash="e" * 64)
+                  workflow_id="malicious-powershell", workflow_version="1.0.0", evidence_snapshot_hash="e" * 64)
     AnalystDecision(**common, decision=DecisionType.REJECT, approved_action_keys=(), rejected_action_keys=("k",))
     with pytest.raises(ValidationError):
         AnalystDecision(**common, decision=DecisionType.REJECT, approved_action_keys=("k",), rejected_action_keys=())
@@ -293,7 +293,7 @@ def test_api_call_summary_is_size_capped():
 def test_temporary_control_validators():
     data = dict(control_key="XDR-83921:isolate_endpoint:TH-LT-1047", incident_id="XDR-83921",
                 action_type=ActionType.ISOLATE_ENDPOINT, target="TH-LT-1047", target_kind=TargetKind.ENDPOINT,
-                integration="secure_endpoint", workflow_id="powershell", workflow_version="1.0.0",
+                integration="secure_endpoint", workflow_id="malicious-powershell", workflow_version="1.0.0",
                 package_id="p", token_id="t", decision_id="d", approval_level=ApprovalLevel.STANDARD,
                 created_at=FIXED_NOW, rollback_action_type=ActionType.RELEASE_ENDPOINT,
                 rollback_params={"integration": "secure_endpoint"})

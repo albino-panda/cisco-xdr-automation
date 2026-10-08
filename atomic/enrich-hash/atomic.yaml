@@ -42,9 +42,9 @@ used_by:
 - ransomware
 - phishing
 - malware
-- powershell
+- malicious-powershell
 - lateral-movement
 - credential-dumping
 - privilege-escalation
 - persistence
-- rmm
+- unauthorized-rmm

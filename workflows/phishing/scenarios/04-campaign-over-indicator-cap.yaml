@@ -1,10 +1,10 @@
 name: Phishing campaign with rotating domains exceeds the indicator cap
-description: >
-  Blast-radius escalation. One campaign message links to several rotating lookalike domains and carries
-  a malicious attachment. The tenant caps indicator blocks at 3 per run (lowered here so the scenario
-  stays small; the default is 50). Four indicator blocks exceed the cap, so every block-domain and
-  block-hash action becomes skipped_limit and the plan escalates to a human. Quarantine is not part of
-  the indicator cap and stays planned.
+description: >-
+  Blast-radius escalation. One campaign message links to several rotating lookalike domains and
+  carries a malicious attachment. The tenant caps indicator blocks at 3 per run (lowered here so the
+  scenario stays small; the default is 50). Four indicator blocks exceed the cap, so every
+  block-domain and block-hash action stays planned with elevated: true and the plan escalates to a
+  lead. Quarantine is not part of the indicator cap and is planned behind normal approval.
 incident:
   id: INC-TEST-PH-0004
   title: Shipping-notice phishing campaign across many mailboxes
@@ -37,7 +37,7 @@ expect:
   escalate: true
   actions:
     - {atomic: quarantine-email, target: tracking@parcel-notice.test, status: planned, requires_approval: true}
-    - {atomic: block-domain, target: parcel-notice.test, status: skipped_limit, requires_approval: true}
-    - {atomic: block-domain, target: parcel-redelivery.test, status: skipped_limit, requires_approval: true}
-    - {atomic: block-domain, target: parcel-status.test, status: skipped_limit, requires_approval: true}
-    - {atomic: block-hash, target: 5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a, status: skipped_limit, requires_approval: true}
+    - {atomic: block-domain, target: parcel-notice.test, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-domain, target: parcel-redelivery.test, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-domain, target: parcel-status.test, status: planned, elevated: true, requires_approval: true}
+    - {atomic: block-hash, target: 5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a, status: planned, elevated: true, requires_approval: true}

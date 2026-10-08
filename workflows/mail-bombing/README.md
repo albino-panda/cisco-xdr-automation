@@ -34,7 +34,7 @@ Typical alerts that should route to this workflow:
 1. **Intake.** Load the incident summary, observables and the guardrails file.
 2. **Enrich.** [`enrich-domain`](../../atomic/enrich-domain/README.md).
 3. **Investigate.** [`investigate-user`](../../atomic/investigate-user/README.md).
-4. **Decide.** Build a containment plan and drop protected, allow-listed or over-limit targets. Send the plan to an approver unless `dry_run` is true.
+4. **Decide.** Build a containment plan and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
 5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
 6. **Record.** Add an incident note and [`create-ticket`](../../atomic/create-ticket/README.md).
 7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
@@ -55,7 +55,7 @@ Every step sets `on_error` in [`workflow.yaml`](workflow.yaml):
 | Action | When | Approval |
 |---|---|---|
 | [`quarantine-email`](../../atomic/quarantine-email/README.md) | Detector incident whose burst has at least 10 unique sender domains and at least half neutral or graymail messages. The search only matches the recipient's incoming neutral and graymail mail since the detection window start, capped at `max_messages_quarantined`. | yes |
-| [`revoke-session`](../../atomic/revoke-session/README.md) | The bombed recipient has a `password_reset`, `password_change`, `mfa_prompt`, `mfa_fatigue` or `mfa_method_registered` anomaly at or after the detection window start. Protected users are skipped. | no |
+| [`revoke-session`](../../atomic/revoke-session/README.md) | The bombed recipient has a `password_reset`, `password_change`, `mfa_prompt`, `mfa_fatigue` or `mfa_method_registered` anomaly at or after the detection window start. Protected users need ELEVATED approval. | yes |
 
 ## Containment rules
 
@@ -77,8 +77,8 @@ Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them wit
 |---|---|
 | [`01-subscription-bomb.yaml`](scenarios/01-subscription-bomb.yaml) | True positive: a 120-message, 45-domain burst is quarantined behind approval. A password change the day before the flood does not revoke sessions. |
 | [`02-newsletter-spike-benign.yaml`](scenarios/02-newsletter-spike-benign.yaml) | Benign: a single-domain newsletter resend loop trips the detector's extreme-volume rule but produces no actions. |
-| [`03-buried-mfa-and-reset.yaml`](scenarios/03-buried-mfa-and-reset.yaml) | Edge case: a password reset and an MFA prompt inside the flood revoke the recipient's sessions (no approval) next to the approval-gated quarantine. |
-| [`04-breakglass-recipient.yaml`](scenarios/04-breakglass-recipient.yaml) | Guardrail: an MFA fatigue pattern on a break-glass mailbox gives `skipped_protected` for session revocation; the reversible quarantine is still planned. |
+| [`03-buried-mfa-and-reset.yaml`](scenarios/03-buried-mfa-and-reset.yaml) | Edge case: a password reset and an MFA prompt inside the flood plan revocation of the recipient's sessions next to the quarantine, both behind human approval. |
+| [`04-breakglass-recipient.yaml`](scenarios/04-breakglass-recipient.yaml) | Guardrail: an MFA fatigue pattern on a break-glass mailbox gives `elevated: true` for session revocation; the reversible quarantine is still planned. |
 | [`05-spam-storm-not-quarantined.yaml`](scenarios/05-spam-storm-not-quarantined.yaml) | Verdict limit: a burst that is mostly spam and malicious (clean ratio 17 percent) is not quarantined by this workflow. |
 
 ## Inputs
@@ -92,7 +92,7 @@ Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them wit
 ## Guardrails
 
 - `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Protected hosts, protected users and allow-listed indicators are never actioned automatically.
+- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
 - Blast-radius limits cap how many hosts, users or indicators a single run may touch.
 - Every containment action is reversible except session revocation, and the rollback is written into the incident note.
 
@@ -106,7 +106,7 @@ Detection is provided by the sibling project `cisco-xdr-mailbomb-detector`, a se
 
 ## Related workflows
 
-[`rmm`](../rmm/README.md), [`account-takeover`](../account-takeover/README.md)
+[`unauthorized-rmm`](../unauthorized-rmm/README.md), [`account-takeover`](../account-takeover/README.md)
 
 ## Building it in XDR Automation
 

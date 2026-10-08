@@ -71,7 +71,7 @@ steps:
 - id: build_plan
   phase: decide
   note: Build the containment plan from the `plan` rules below, enrichment verdicts, investigation results
-    and guardrails. Drop any target that is protected, allow-listed or over the blast-radius limit.
+    and guardrails. Allow-listed and internal targets are skipped; protected targets and targets over a blast-radius cap stay in the plan with ELEVATED approval and a warning, never dropped.
   on_error: escalate
 - id: approval
   phase: decide
@@ -84,7 +84,7 @@ steps:
   atomic: revoke-session
   when: Investigated user with high identity risk, medium risk plus at least one sign-in anomaly, or a
     successful sign-in from an IP enriched as malicious.
-  requires_approval: false
+  requires_approval: true
   on_error: escalate
 - id: disable_user
   phase: contain
@@ -158,12 +158,13 @@ plan:
 templates:
   approval: |
     Cloud compromise containment for {incident.id}: {incident.title} (severity {incident.severity}).
+    ELEVATED approval required for (protected assets and actions over a blast-radius cap; a lead must approve): {plan.elevated}
     Dry run: {workflow.dry_run}.
 
     Planned actions:
     {plan.actions_table}
 
-    Skipped by guardrails (protected, internal or over the blast-radius limit):
+    Skipped by guardrails (allow-listed or internal):
     {plan.skipped_table}
     Escalation required: {plan.escalate} {plan.reasons}
 
@@ -200,7 +201,7 @@ templates:
     ## Rollback
     - revoke-session: not reversible; the user signs in again.
     - disable-user: set accountEnabled back to true after credential reset and MFA re-registration.
-    - block-ip: remove the Meraki rule or Cloudflare list item (auto-expiry {plan.block_ip_expiry_hours} hours).
+    - block-ip: remove the Meraki rule or Cloudflare list item (release review due after {plan.block_ip_expiry_hours} hours; removal needs a separate human release approval).
 
     ## Manual tasks: rogue app credentials and OAuth consents
     Automation covers user identities and IPs only. In the Entra admin center:

@@ -81,8 +81,7 @@ steps:
 - id: build_plan
   phase: decide
   note: Evaluate the plan rules below against enrichment verdicts, investigation results and
-    incident.context, then apply the guardrails. Protected, allow-listed, internal and over-limit targets
-    stay in the plan with a skipped_* status so the approver sees them. Records whose enrichment or
+    incident.context, then apply the guardrails. Allow-listed and internal targets are kept in the plan with a skipped_* status so the approver sees them; protected and over-limit targets stay planned with ELEVATED approval. Records whose enrichment or
     investigation returned an error are never actioned.
   on_error: escalate
 - id: approval
@@ -114,7 +113,7 @@ steps:
   when: Isolation-capable source host while incident.context.transfer_ongoing is true and the transfer
     shows exfiltration evidence (a destination domain or IP whose verdict is not clean, a malicious
     endpoint detection on the host, or incident.context.insider_risk). Finished transfers are not
-    isolated. Protected hosts are skipped.
+    isolated. Protected hosts need ELEVATED approval.
   requires_approval: true
   on_error: escalate
 - id: disable_user
@@ -122,7 +121,7 @@ steps:
   atomic: disable-user
   when: Account driving the transfer that is compromised (Entra risk high, or risk medium with at least
     one sign-in anomaly), or that the source flags as insider risk (incident.context.insider_risk with the
-    user named in incident.context.actor_users). Protected users and groups are skipped.
+    user named in incident.context.actor_users). Protected users and groups need ELEVATED approval.
   requires_approval: true
   on_error: escalate
 - id: incident_note
@@ -215,6 +214,7 @@ plan:
 templates:
   approval: |
     Approve containment for {incident.id}: {incident.title} (severity {incident.severity}).
+    ELEVATED approval required for (protected assets and actions over a blast-radius cap; a lead must approve): {plan.elevated}
     Workflow {workflow.name}, dry run {plan.dry_run}.
     Transfer: {incident.context.bytes_out} bytes in {incident.context.file_count} files to
     {incident.context.destination_domains} {incident.context.destination_ips}.
@@ -241,11 +241,11 @@ templates:
     before forensic collection and legal sign-off.
     Rollback:
     - block-domain: remove the domain from the automation block list in Umbrella / Secure Access and,
-      when used, the Cloudflare Gateway list. Blocks auto-expire after the planned expires_hours.
+      when used, the Cloudflare Gateway list. Blocks are flagged for release review after the planned expires_hours; removing one needs a separate human release approval.
     - block-ip: remove the Meraki MX rule or Cloudflare IP list item; Meraki restores from the saved
-      rule set. Blocks auto-expire after the planned expires_hours.
+      rule set. Blocks are flagged for release review after the planned expires_hours; removing one needs a separate human release approval.
     - isolate-endpoint: stop isolation for the connector GUID in Secure Endpoint (Stop Isolation API,
-      endpoint not yet verified against vendor docs). Unlock codes: {plan.unlock_codes}
+      endpoint not yet verified against vendor docs). The unlock code stays in the Secure Endpoint console and is not copied here.
     - disable-user: set accountEnabled back to true in Entra ID (Microsoft Graph, not yet verified
       against vendor docs) once the owner, and for insider cases HR and legal, agree.
     Ticket: {ticket.id} {ticket.url}

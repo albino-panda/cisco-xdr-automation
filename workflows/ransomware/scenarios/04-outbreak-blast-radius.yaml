@@ -1,9 +1,10 @@
 name: Ransomware spreading to seven workstations in one run
-description: >
+description: >-
   Blast radius. The same payload encrypts seven operations workstations. Seven isolations exceed
-  max_hosts_isolated (5), so every isolation becomes skipped_limit and the plan escalates to a human,
-  who decides on segment-level containment. The hash block and the session revocation are outside that
-  cap and stay planned, so spread is still slowed while the human decides.
+  max_hosts_isolated (5), so every isolation stays planned with elevated: true and the plan
+  escalates to a lead, who also weighs segment-level containment. The hash block and the session
+  revocation are outside that cap and are planned behind normal approval, so spread can still be
+  slowed quickly.
 incident:
   id: INC-TEST-RW-0004
   title: Ransomware outbreak in operations
@@ -49,12 +50,12 @@ results:
 expect:
   escalate: true
   actions:
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000001, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000002, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000003, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000004, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000005, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000006, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000007, status: skipped_limit}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000001, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000002, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000003, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000004, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000005, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000006, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000007, status: planned, elevated: true}
     - {atomic: block-hash, target: b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0, status: planned, requires_approval: true}
-    - {atomic: revoke-session, target: ops.lead@example.com, status: planned, requires_approval: false}
+    - {atomic: revoke-session, target: ops.lead@example.com, status: planned, requires_approval: true}

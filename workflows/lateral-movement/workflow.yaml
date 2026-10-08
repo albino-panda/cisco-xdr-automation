@@ -81,8 +81,7 @@ steps:
   on_error: continue
 - id: build_plan
   phase: decide
-  note: Build the containment plan from the `plan` rules below. Drop any target that is protected, allow-listed
-    or over the blast-radius limit.
+  note: Build the containment plan from the `plan` rules below. Allow-listed and internal targets are skipped; protected targets and targets over a blast-radius cap stay in the plan with ELEVATED approval and a warning, never dropped.
   on_error: escalate
 - id: approval
   phase: decide
@@ -102,12 +101,12 @@ steps:
   atomic: revoke-session
   when: Accounts in the incident when the movement is confirmed malicious (any host with a malicious detection
     or any malicious hash), or any account with a successful sign-in from a malicious IP.
-  requires_approval: false
+  requires_approval: true
   on_error: escalate
 - id: disable_user
   phase: contain
   atomic: disable-user
-  when: Accounts confirmed compromised and not protected, meaning confirmed malicious movement plus high Entra
+  when: Accounts confirmed compromised (protected accounts need ELEVATED approval), meaning confirmed malicious movement plus high Entra
     risk or sign-in anomalies, or a successful sign-in from a malicious IP.
   requires_approval: true
   on_error: escalate
@@ -181,12 +180,13 @@ plan:
 templates:
   approval: |
     {workflow.name}: containment approval for {incident.id} ({incident.severity})
+    ELEVATED approval required for (protected assets and actions over a blast-radius cap; a lead must approve): {plan.elevated}
     Incident: {incident.title}
     Source hosts: {plan.source_hosts}
     Destination hosts: {plan.destination_hosts}
     Planned actions (rule, atomic, target, approval needed):
     {plan.actions}
-    Skipped by guardrails (protected or over limit): {plan.skipped}
+    Skipped by guardrails (allow-listed or internal): {plan.skipped}
     Escalated (blast radius exceeded): {plan.escalate} {plan.reasons}
     Dry run: {workflow.dry_run}
     Before approving, check that both source and destination hosts are covered and that no sanctioned admin
@@ -205,7 +205,7 @@ templates:
     Escalated: {plan.escalate} {plan.reasons}
 
     ### Rollback
-    - isolate-endpoint: stop isolation for each isolated connector GUID in Secure Endpoint ({plan.isolated_hosts}). Unlock codes: {plan.unlock_codes}.
+    - isolate-endpoint: stop isolation for each isolated connector GUID in Secure Endpoint ({plan.isolated_hosts}). The unlock code stays in the Secure Endpoint console and is not copied here.
     - revoke-session: not reversible; affected users sign in again ({plan.revoked_users}).
     - disable-user: set accountEnabled back to true in Entra ID for each disabled account ({plan.disabled_users}) after its credentials are reset.
 
@@ -214,7 +214,7 @@ templates:
     - [ ] Remove remote services and scheduled tasks created on destination hosts (T1021.002, T1021.006).
     - [ ] Remove transferred tools from every host in enrich-hash hosts (T1570): {plan.transferred_files}
     - [ ] Review RDP, SMB and WinRM reachability between the affected segments.
-    - [ ] Handle skipped protected targets (domain controllers, Domain Admins, break-glass) manually.
+    - [ ] Review ELEVATED protected targets (domain controllers, Domain Admins, break-glass) with the incident lead.
   ticket_title: "[{incident.severity}] Lateral movement: {incident.title} ({incident.id})"
   ticket_body: |
     Lateral movement response for XDR incident {incident.id}.

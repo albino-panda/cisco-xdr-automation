@@ -44,7 +44,7 @@ def make_incident(incident_id: str = "XDR-83921", **overrides: Any) -> Incident:
         "title": "Malicious PowerShell on TH-LT-1047",
         "severity": Severity.HIGH,
         "created_at": FIXED_NOW,
-        "workflow_id": "powershell",
+        "workflow_id": "malicious-powershell",
         "workflow_version": "1.0.0",
         "observables": (
             Observable(type=ObservableType.HOSTNAME, value="TH-LT-1047", source="cisco_xdr"),
@@ -110,7 +110,7 @@ def make_package(*actions: RecommendedAction, incident_id: str = "XDR-83921", **
     data: dict[str, Any] = {
         "package_id": uuid.uuid4().hex,
         "incident_id": incident_id,
-        "workflow_id": "powershell",
+        "workflow_id": "malicious-powershell",
         "workflow_version": "1.0.0",
         "created_at": FIXED_NOW,
         "expires_at": FIXED_NOW + timedelta(minutes=240),

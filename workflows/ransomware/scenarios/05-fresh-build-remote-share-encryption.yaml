@@ -58,4 +58,4 @@ expect:
   escalate: false
   actions:
     - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000b007, status: planned, requires_approval: true}
-    - {atomic: revoke-session, target: hr.coordinator@example.com, status: planned, requires_approval: false}
+    - {atomic: revoke-session, target: hr.coordinator@example.com, status: planned, requires_approval: true}

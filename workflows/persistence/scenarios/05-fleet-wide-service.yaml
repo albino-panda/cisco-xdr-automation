@@ -1,9 +1,10 @@
 name: Malicious service installed on many hosts at once
-description: >
-  Persistence edge case with a blast-radius guardrail. The same malicious service binary was installed
-  and is running on six workstations within minutes, which points at a compromised deployment channel.
-  Isolating six hosts exceeds max_hosts_isolated (5), so every isolation becomes skipped_limit and the
-  plan escalates to a human. The single hash block is still planned.
+description: >-
+  Persistence edge case with a blast-radius guardrail. The same malicious service binary was
+  installed and is running on six workstations within minutes, which points at a compromised
+  deployment channel. Isolating six hosts exceeds max_hosts_isolated (5), so every isolation stays
+  planned with elevated: true and the plan escalates to a lead. The single hash block is planned
+  behind normal approval.
 incident:
   id: INC-TEST-3005
   title: Same new service installed on six workstations within ten minutes
@@ -35,9 +36,9 @@ expect:
   escalate: true
   actions:
     - {atomic: block-hash, target: 6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6, status: planned, requires_approval: true}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000101, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000102, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000103, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000104, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000105, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000106, status: skipped_limit}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000101, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000102, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000103, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000104, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000105, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000106, status: planned, elevated: true}

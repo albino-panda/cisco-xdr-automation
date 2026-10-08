@@ -33,7 +33,7 @@ Typical alerts that should route to this workflow:
 1. **Intake.** Load the incident summary, observables and the guardrails file.
 2. **Enrich.** [`enrich-ip`](../../atomic/enrich-ip/README.md).
 3. **Investigate.** [`investigate-user`](../../atomic/investigate-user/README.md).
-4. **Decide.** Build a containment plan from the [containment rules](#containment-rules) and drop protected, allow-listed or over-limit targets. Send the plan to an approver unless `dry_run` is true.
+4. **Decide.** Build a containment plan from the [containment rules](#containment-rules) and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
 5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
 6. **Record.** Add an incident note and [`create-ticket`](../../atomic/create-ticket/README.md).
 7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
@@ -43,7 +43,7 @@ Typical alerts that should route to this workflow:
 | Action | When | Approval |
 |---|---|---|
 | [`block-ip`](../../atomic/block-ip/README.md) | Spray source IP with an enrichment verdict other than clean, no internal hosts talking to it (not shared infrastructure) and no enrichment error. | yes |
-| [`revoke-session`](../../atomic/revoke-session/README.md) | Account with at least one successful sign-in whose IP is a spray source. | no |
+| [`revoke-session`](../../atomic/revoke-session/README.md) | Account with at least one successful sign-in whose IP is a spray source. | yes |
 | [`disable-user`](../../atomic/disable-user/README.md) | Account with a successful sign-in from a spray source and suspicious follow-on activity (impossible travel, new device or MFA fatigue anomaly, or Entra risk level high). | yes |
 
 A spray source is an `ip` observable on the incident. Failed attempts alone never touch an account.
@@ -81,7 +81,7 @@ The `plan` list in [`workflow.yaml`](workflow.yaml) turns the conditions above i
 ## Guardrails
 
 - `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Protected hosts, protected users and allow-listed indicators are never actioned automatically.
+- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
 - Blast-radius limits cap how many hosts, users or indicators a single run may touch.
 - Every containment action is reversible except session revocation, and the rollback is written into the incident note.
 - In this workflow, `block-ip` and `disable-user` need approval. `revoke-session` does not and cannot be undone; the user signs in again.
@@ -96,8 +96,8 @@ Each file in [`scenarios/`](scenarios/) pins the exact plan for one case. Run th
 |---|---|
 | [`01-single-success.yaml`](scenarios/01-single-success.yaml) | True positive: both spray IPs blocked with approval. Only the account with a successful sign-in from a spray source has its sessions revoked. Failed-only accounts and a success from a non-spray IP are left alone. |
 | [`02-benign-shared-egress.yaml`](scenarios/02-benign-shared-egress.yaml) | Benign: failures from a clean corporate VPN egress with many internal sightings produce an empty plan. |
-| [`03-guardrail-skips.yaml`](scenarios/03-guardrail-skips.yaml) | Guardrails: an internal spray source ends `skipped_internal`. The break-glass user and a Domain Admins member end `skipped_protected` for revoke and disable. |
-| [`04-blast-radius-many-ips.yaml`](scenarios/04-blast-radius-many-ips.yaml) | Blast radius: 12 source IPs over a cap of 10. Every block becomes `skipped_limit` and the plan escalates, while session revocation for the compromised account still goes ahead. |
+| [`03-guardrail-skips.yaml`](scenarios/03-guardrail-skips.yaml) | Guardrails: an internal spray source ends `skipped_internal`. Revoke and disable for the break-glass user and a Domain Admins member are planned with `elevated: true`. |
+| [`04-blast-radius-many-ips.yaml`](scenarios/04-blast-radius-many-ips.yaml) | Blast radius: 12 source IPs over a cap of 10. Every block stays planned with `elevated: true` and the plan escalates, while session revocation for the compromised account is planned behind normal approval. |
 | [`05-all-attempts-failed.yaml`](scenarios/05-all-attempts-failed.yaml) | Spray edge case: no attempt succeeded, so only IPs are blocked. A high-risk account with failures only is not touched, and an IP whose enrichment failed is not blocked. |
 | [`06-success-with-follow-on-activity.yaml`](scenarios/06-success-with-follow-on-activity.yaml) | MFA fatigue and a new device after a successful sign-in from a spray source lead to revoke and disable (with approval). An unfamiliar location alone leads to revoke only. |
 

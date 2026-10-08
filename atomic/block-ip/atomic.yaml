@@ -20,7 +20,7 @@ inputs:
 - name: expires_hours
   type: integer
   required: false
-  description: Auto-expiry; default 168 (7 days).
+  description: Release-review reminder in hours (never an automatic release; removal needs a separate human release approval); default 168 (7 days).
 - name: incident_id
   type: string
   required: false

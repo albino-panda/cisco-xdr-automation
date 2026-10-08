@@ -67,14 +67,12 @@ steps:
   on_error: continue
 - id: build_plan
   phase: decide
-  note: Build the containment plan from enrichment verdicts, investigation results and guardrails. Drop
-    any target that is protected, allow-listed or over the blast-radius limit.
+  note: Build the containment plan from enrichment verdicts, investigation results and guardrails. Allow-listed and internal targets are skipped; protected targets and targets over a blast-radius cap stay in the plan with ELEVATED approval and a warning, never dropped.
   on_error: escalate
 - id: approval
   phase: decide
   action: Approval Task
-  note: Show the plan to an approver. Skipped when dry_run is true (plan is only recorded). Actions
-    auto-approved in the guardrails file (auto_approve.account-takeover) are listed for information only.
+  note: Show the plan to an approver. Skipped when dry_run is true (plan is only recorded). Every containment action, including revoke-session, needs a human approval.
   skip_if: dry_run == true
   on_error: escalate
 - id: revoke_session
@@ -82,7 +80,7 @@ steps:
   atomic: revoke-session
   when: The investigated user has Entra risk level high, a successful sign-in from an IP enriched as malicious
     or suspicious, or an MFA fatigue anomaly followed by a successful sign-in.
-  requires_approval: false
+  requires_approval: true
   on_error: escalate
 - id: disable_user
   phase: contain
@@ -161,14 +159,14 @@ plan:
 templates:
   approval: |
     Approve account takeover containment for {incident.id}: {incident.title} (severity {incident.severity}).
+    ELEVATED approval required for (protected assets and actions over a blast-radius cap; a lead must approve): {plan.elevated}
     Workflow {workflow.name}, dry run {plan.dry_run}.
     Planned actions:
     {plan.actions}
     Skipped by guardrails:
     {plan.skipped}
     Escalation: {plan.escalate} {plan.reasons}
-    revoke-session is auto-approved for this workflow in the guardrails file and is listed for information.
-    It is not reversible: the user signs in again. disable-user and block-ip are reversible; the rollback
+    revoke-session needs this approval like every other action. It is not reversible: the user signs in again. disable-user and block-ip are reversible; the rollback
     for each is written to the incident note.
   incident_note: |
     Workflow {workflow.name} ({workflow.id}) ran for {incident.id}. Dry run: {plan.dry_run}.
@@ -184,7 +182,7 @@ templates:
     - disable-user: set accountEnabled back to true in Entra ID, only after the help desk has completed
       the password reset and MFA re-registration below.
     - block-ip: remove the Meraki MX rule or Cloudflare IP list item; Meraki restores from the saved
-      rule set. Blocks auto-expire after the planned expires_hours.
+      rule set. Blocks are flagged for release review after the planned expires_hours; removing one needs a separate human release approval.
     Required follow-up (help desk): reset the password and re-register MFA for every affected user, after
     identity verification out of band (call back on a number from the HR record, not one from the
     incident). Remove MFA methods and devices the user does not recognise.

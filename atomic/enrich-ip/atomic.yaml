@@ -48,7 +48,7 @@ used_by:
 - bec
 - account-takeover
 - malware
-- powershell
+- malicious-powershell
 - lateral-movement
 - c2
 - password-spray

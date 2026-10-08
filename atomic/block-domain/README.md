@@ -15,7 +15,7 @@ Add a domain to the automation block list in Umbrella and, optionally, Cloudflar
 | Name | Type | Required | Description |
 |---|---|---|---|
 | `domain` | string | yes | Domain to block. |
-| `expires_hours` | integer | no | Auto-expiry; default 720 (30 days). |
+| `expires_hours` | integer | no | Release-review reminder in hours (never an automatic release; removal needs a separate human release approval); default 720 (30 days). |
 | `incident_id` | string | no | Cisco XDR incident ID, used for notes and audit. |
 | `dry_run` | boolean | no | When true, report the planned change without making it. Default true for containment. |
 
@@ -28,7 +28,7 @@ Add a domain to the automation block list in Umbrella and, optionally, Cloudflar
 
 ## Behaviour
 
-- Checks the guardrails file before acting and returns a `skipped_*` status instead of failing.
+- Runs only after a human approval. Checks the allow-lists before acting and returns a `skipped_*` status instead of failing.
 - With `dry_run = true` it returns `planned` and makes no change.
 - Writes the action, target, result and rollback instructions to the incident note.
 - Idempotent: a second run with the same input does not create duplicate changes.
@@ -36,7 +36,7 @@ Add a domain to the automation block list in Umbrella and, optionally, Cloudflar
 
 ## Used by
 
-[`phishing`](../../workflows/phishing/README.md), [`bec`](../../workflows/bec/README.md), [`malware`](../../workflows/malware/README.md), [`powershell`](../../workflows/powershell/README.md), [`c2`](../../workflows/c2/README.md), [`dns-tunneling`](../../workflows/dns-tunneling/README.md), [`rmm`](../../workflows/rmm/README.md), [`exfiltration`](../../workflows/exfiltration/README.md)
+[`phishing`](../../workflows/phishing/README.md), [`bec`](../../workflows/bec/README.md), [`malware`](../../workflows/malware/README.md), [`malicious-powershell`](../../workflows/malicious-powershell/README.md), [`c2`](../../workflows/c2/README.md), [`dns-tunneling`](../../workflows/dns-tunneling/README.md), [`unauthorized-rmm`](../../workflows/unauthorized-rmm/README.md), [`exfiltration`](../../workflows/exfiltration/README.md)
 
 ## Building it in XDR Automation
 

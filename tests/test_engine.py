@@ -43,7 +43,7 @@ def plan(results, override=None):
 
 
 def statuses(p):
-    return {(a.atomic, a.target, a.status) for a in p.actions}
+    return {(a.atomic, a.target, a.status, a.elevated) for a in p.actions}
 
 
 def test_spec_is_valid():
@@ -59,29 +59,40 @@ def test_planned_and_guardrails():
         "investigate-host": [host("ws-01", "g1"), host("dc-01", "g2"), host("ws-02", "g3", bad=False)],
     })
     assert statuses(p) == {
-        ("block-domain", "bad.example", "planned"),
-        ("block-domain", "login.example.com", "skipped_allowlisted"),
-        ("block-ip", "203.0.113.7", "planned"),
-        ("block-ip", "10.1.2.3", "skipped_internal"),
-        ("isolate-endpoint", "g1", "planned"),
-        ("isolate-endpoint", "g2", "skipped_protected"),
+        ("block-domain", "bad.example", "planned", False),
+        ("block-domain", "login.example.com", "skipped_allowlisted", False),
+        ("block-ip", "203.0.113.7", "planned", False),
+        ("block-ip", "10.1.2.3", "skipped_internal", False),
+        ("isolate-endpoint", "g1", "planned", False),
+        ("isolate-endpoint", "g2", "planned", True),  # protected dc-01: ELEVATED, never dropped (C3)
     }
     iso = next(a for a in p.actions if a.target == "g1")
     assert iso.args == {"reason": "Test: T"} and iso.requires_approval
+    dc = next(a for a in p.actions if a.target == "g2")
+    assert dc.reasons == ["protected asset: ELEVATED approval required"]
+    assert dc.source == ("investigate-host", 1)
+    assert all(a.requires_approval for a in p.actions)
     assert not p.escalate
 
 
 def test_blast_radius_escalates():
     hosts = [host(f"ws-{i}", f"g{i}") for i in range(6)]
     p = plan({"investigate-host": hosts})
-    assert p.escalate
-    assert {a.status for a in p.actions} == {"skipped_limit"}
+    reason = "max_hosts_isolated: 6 planned > limit 5: ELEVATED approval required"
+    assert p.escalate and p.reasons == [reason]
+    assert {(a.status, a.elevated) for a in p.actions} == {("planned", True)}  # C5: kept, never skipped
+    assert all(a.reasons == [reason] and a.requires_approval for a in p.actions)
 
 
-def test_auto_approve_and_dedupe():
-    p = plan({"enrich-domain": [{"domain": "bad.example", "verdict": "malicious"}] * 2},
+def test_auto_approve_is_refused():
+    with pytest.raises(ValueError, match="auto_approve"):
+        plan({"enrich-domain": [{"domain": "bad.example", "verdict": "malicious"}]},
              {"auto_approve": {"synthetic": {"block-domain": True}}})
-    assert len(p.actions) == 1 and p.actions[0].requires_approval is False
+
+
+def test_dedupe():
+    p = plan({"enrich-domain": [{"domain": "bad.example", "verdict": "malicious"}] * 2})
+    assert len(p.actions) == 1 and p.actions[0].requires_approval is True
 
 
 def test_benign_produces_nothing():

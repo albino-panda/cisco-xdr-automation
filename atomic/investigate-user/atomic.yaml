@@ -56,11 +56,11 @@ used_by:
 - mail-bombing
 - bec
 - account-takeover
-- powershell
+- malicious-powershell
 - lateral-movement
 - password-spray
 - credential-dumping
 - privilege-escalation
-- rmm
+- unauthorized-rmm
 - exfiltration
 - cloud-compromise

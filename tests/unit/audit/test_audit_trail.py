@@ -60,12 +60,12 @@ def test_record_fields_are_populated(make_trail):
     trail = make_trail()
     record = trail.append(AuditEventType.ACTION_STARTED, incident_id="XDR-83921",
                           actor="analyst.one@example.com", payload={"target": "TH-LT-1047"},
-                          workflow_id="powershell", workflow_version="1.0.0")
+                          workflow_id="malicious-powershell", workflow_version="1.0.0")
     assert record.record_id == "aud-000001"
     assert record.timestamp == FIXED_NOW
     assert record.event_type is AuditEventType.ACTION_STARTED
     assert record.incident_id == "XDR-83921"
-    assert (record.workflow_id, record.workflow_version) == ("powershell", "1.0.0")
+    assert (record.workflow_id, record.workflow_version) == ("malicious-powershell", "1.0.0")
     assert record.actor == "analyst.one@example.com"
     assert record.payload == {"target": "TH-LT-1047"}
 

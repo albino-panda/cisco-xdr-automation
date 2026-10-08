@@ -42,6 +42,6 @@ expect:
   actions:
     - {atomic: block-ip, target: 198.51.100.60, status: planned, requires_approval: true}
     - {atomic: block-ip, target: 198.51.100.61, status: planned, requires_approval: true}
-    - {atomic: revoke-session, target: s.okafor@example.com, status: planned, requires_approval: false}
-    - {atomic: revoke-session, target: t.vance@example.com, status: planned, requires_approval: false}
+    - {atomic: revoke-session, target: s.okafor@example.com, status: planned, requires_approval: true}
+    - {atomic: revoke-session, target: t.vance@example.com, status: planned, requires_approval: true}
     - {atomic: disable-user, target: s.okafor@example.com, status: planned, requires_approval: true}

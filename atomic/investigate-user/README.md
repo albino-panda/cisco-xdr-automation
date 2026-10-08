@@ -38,7 +38,7 @@ Identity context for an account: profile, risk state, recent sign-ins, MFA event
 
 ## Used by
 
-[`ransomware`](../../workflows/ransomware/README.md), [`phishing`](../../workflows/phishing/README.md), [`mail-bombing`](../../workflows/mail-bombing/README.md), [`bec`](../../workflows/bec/README.md), [`account-takeover`](../../workflows/account-takeover/README.md), [`powershell`](../../workflows/powershell/README.md), [`lateral-movement`](../../workflows/lateral-movement/README.md), [`password-spray`](../../workflows/password-spray/README.md), [`credential-dumping`](../../workflows/credential-dumping/README.md), [`privilege-escalation`](../../workflows/privilege-escalation/README.md), [`rmm`](../../workflows/rmm/README.md), [`exfiltration`](../../workflows/exfiltration/README.md), [`cloud-compromise`](../../workflows/cloud-compromise/README.md)
+[`ransomware`](../../workflows/ransomware/README.md), [`phishing`](../../workflows/phishing/README.md), [`mail-bombing`](../../workflows/mail-bombing/README.md), [`bec`](../../workflows/bec/README.md), [`account-takeover`](../../workflows/account-takeover/README.md), [`malicious-powershell`](../../workflows/malicious-powershell/README.md), [`lateral-movement`](../../workflows/lateral-movement/README.md), [`password-spray`](../../workflows/password-spray/README.md), [`credential-dumping`](../../workflows/credential-dumping/README.md), [`privilege-escalation`](../../workflows/privilege-escalation/README.md), [`unauthorized-rmm`](../../workflows/unauthorized-rmm/README.md), [`exfiltration`](../../workflows/exfiltration/README.md), [`cloud-compromise`](../../workflows/cloud-compromise/README.md)
 
 ## Building it in XDR Automation
 

@@ -1,10 +1,11 @@
 name: Admin upload from a domain controller to a partner transfer site
 description: >-
   Guardrails. A risky admin account uploads from a domain controller through an internal relay to a
-  sanctioned partner transfer site that has no reputation yet. One action per contain atomic is produced and
-  each is kept in the plan with a skipped status so the approver sees it. The partner domain is allow-listed
-  (added through the guardrails override), the relay IP is internal, the host matches dc-* and the
-  account is in Domain Admins. Nothing is planned for automatic execution.
+  sanctioned partner transfer site that has no reputation yet. One action per contain atomic is
+  produced. The partner domain is allow-listed (added through the guardrails override) and the relay
+  IP is internal, so both are kept with a skipped status for the approver to see. The host matches
+  dc-* and the account is in Domain Admins, so their isolation and disable stay planned with
+  elevated: true and need ELEVATED approval.
 incident:
   id: INC-TEST-EXF-0003
   title: Unusual upload from domain controller by admin account
@@ -49,5 +50,5 @@ expect:
   actions:
     - {atomic: block-domain, target: partner-sftp.example, status: skipped_allowlisted}
     - {atomic: block-ip, target: 10.20.30.40, status: skipped_internal}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000e703, status: skipped_protected}
-    - {atomic: disable-user, target: adm-r.lee@example.com, status: skipped_protected}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000e703, status: planned, elevated: true}
+    - {atomic: disable-user, target: adm-r.lee@example.com, status: planned, elevated: true}

@@ -8,6 +8,8 @@ from typing import Any
 
 import yaml
 
+from .guardrails import find_forbidden_keys
+
 COMMON_INPUTS = {"incident_id", "dry_run"}
 
 
@@ -33,7 +35,13 @@ def atomics() -> dict[str, dict]:
 
 
 def workflow_ids() -> list[str]:
+    """Ids of the remaining legacy specs: directories under ``workflows/`` that hold a ``workflow.yaml``."""
     return sorted(p.parent.name for p in (ROOT / "workflows").glob("*/workflow.yaml"))
+
+
+def workflow_dirs() -> list[str]:
+    """Every workflow id: directories under ``workflows/`` that hold a ``README.md`` (legacy or migrated)."""
+    return sorted(p.parent.name for p in (ROOT / "workflows").glob("*/README.md"))
 
 
 def load_workflow(workflow_id: str) -> dict:
@@ -70,6 +78,16 @@ def deep_merge(base: Any, override: Any) -> Any:
     return copy.deepcopy(override)
 
 
+def check_forbidden(data: Any, source: str) -> None:
+    """Raise ``ValueError`` when ``data`` holds a key of ``LEGACY_FORBIDDEN_KEYS`` at any depth (C2)."""
+    found = find_forbidden_keys(data)
+    if found:
+        raise ValueError(f"{source}: forbidden key(s) {found}: approval can never be disabled or automated")
+
+
 def load_guardrails(override: dict | None = None) -> dict:
+    """Load ``guardrails.example.yaml`` merged with ``override``; refuses forbidden keys in either."""
     base = load_yaml(ROOT / "docs" / "deployment" / "guardrails.example.yaml")
+    check_forbidden(base, "guardrails.example.yaml")
+    check_forbidden(override or {}, "guardrails override")
     return deep_merge(base, override or {})

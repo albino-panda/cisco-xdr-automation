@@ -79,7 +79,7 @@ steps:
 - id: build_plan
   phase: decide
   note: Build the containment plan from the plan rules below, enrichment verdicts, investigation results
-    and guardrails. Drop any target that is protected, allow-listed or over the blast-radius limit.
+    and guardrails. Allow-listed and internal targets are skipped; protected targets and targets over a blast-radius cap stay in the plan with ELEVATED approval and a warning, never dropped.
   on_error: escalate
 - id: approval
   phase: decide
@@ -139,6 +139,7 @@ plan:
 templates:
   approval: |
     {workflow.name}: containment approval for {incident.id} ({incident.severity})
+    ELEVATED approval required for (protected assets and actions over a blast-radius cap; a lead must approve): {plan.elevated}
     {incident.title}
 
     Planned actions:
@@ -164,7 +165,7 @@ templates:
 
     ### Rollback
     - block-hash: delete each blocked SHA-256 from the Secure Endpoint simple custom detection list ({plan.blocked_hashes}).
-    - isolate-endpoint: stop isolation for each isolated connector GUID in Secure Endpoint ({plan.isolated_hosts}). Unlock codes: {plan.unlock_codes}.
+    - isolate-endpoint: stop isolation for each isolated connector GUID in Secure Endpoint ({plan.isolated_hosts}). The unlock code stays in the Secure Endpoint console and is not copied here.
 
     ### Manual removal checklist (record who removed what and when)
     - [ ] Registry Run / RunOnce value removed (T1547.001): {plan.run_keys}

@@ -1,9 +1,10 @@
 name: Exploit on a domain controller and elevation of a break-glass account
-description: >
-  Guardrails. A malicious privilege-escalation detection fires on a domain controller and a break-glass
-  account is assigned a role from an unfamiliar location with no approved change. All three rules match,
-  but the domain controller matches protected host pattern dc-* and the break-glass account is a
-  protected user, so every action is skipped_protected and a human must respond.
+description: >-
+  Guardrails. A malicious privilege-escalation detection fires on a domain controller and a
+  break-glass account is assigned a role from an unfamiliar location with no approved change. All
+  three rules match; the domain controller matches protected host pattern dc-* and the break-glass
+  account is a protected user, so every action stays planned with elevated: true and needs ELEVATED
+  approval by a lead.
 incident:
   id: INC-TEST-PE-0003
   title: Privilege escalation on dc-02 and break-glass role change
@@ -37,6 +38,6 @@ results:
 expect:
   escalate: false
   actions:
-    - {atomic: isolate-endpoint, target: 9a8b7c6d-3e4f-4a5b-8c7d-0000000000d2, status: skipped_protected, requires_approval: true}
-    - {atomic: revoke-session, target: breakglass-01@example.com, status: skipped_protected, requires_approval: false}
-    - {atomic: disable-user, target: breakglass-01@example.com, status: skipped_protected, requires_approval: true}
+    - {atomic: isolate-endpoint, target: 9a8b7c6d-3e4f-4a5b-8c7d-0000000000d2, status: planned, elevated: true, requires_approval: true}
+    - {atomic: revoke-session, target: breakglass-01@example.com, status: planned, elevated: true, requires_approval: true}
+    - {atomic: disable-user, target: breakglass-01@example.com, status: planned, elevated: true, requires_approval: true}

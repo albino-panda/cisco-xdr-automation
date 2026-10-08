@@ -284,7 +284,7 @@ Based on [integrations.md](integrations.md) section 1 and [architecture.md](arch
 
 **Version control.** Export XDR workflows as JSON (or commit from the Workflow Editor to Git). Secure String values are not carried in exports, but check every export for literals before committing it. An import without "duplicate" overwrites the existing workflow and cannot be undone.
 
-**Legacy guardrails file.** [`deployment/guardrails.example.yaml`](deployment/guardrails.example.yaml) feeds the workflow-spec plan engine (`engine/xdr_plan`). `xdr_response` does not read it. Its `auto_approve` section does not apply to `xdr_response`, and the `xdr_response` loader refuses that key. Phase 1 removes it from the specs.
+**Legacy guardrails file.** [`deployment/guardrails.example.yaml`](deployment/guardrails.example.yaml) feeds the workflow-spec plan engine (`engine/xdr_plan`). `xdr_response` does not read it in production. Since Phase 1 it has no `auto_approve` section: both the plan engine and the `xdr_response` loader refuse `auto_approve`, `skip_approval`, `bypass_approval` and `approval_required` at any depth. Protected assets stay planned with ELEVATED approval, and over a blast-radius cap actions stay planned, become ELEVATED and the plan escalates. The legacy replay (`tools/simulator/legacy_replay.py`) maps this file onto critical assets, allow-lists and caps only for the dry-run regression replay. Its `expiry_hours` are release-review reminders and never release anything automatically: every release needs its own human approval.
 
 ## 9. Runtime files and audit
 

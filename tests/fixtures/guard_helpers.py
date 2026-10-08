@@ -96,7 +96,7 @@ def make_token(
     claims = ApprovalTokenClaims(
         token_id=token_id or uuid.uuid4().hex, purpose=purpose, package_id="pkg-test",
         incident_id=incident_id or first.incident_id, evidence_snapshot_hash="0" * 64,
-        workflow_id="powershell", workflow_version="1.0.0", decision_id="decision-test",
+        workflow_id="malicious-powershell", workflow_version="1.0.0", decision_id="decision-test",
         actions=grants,
         approvers=(ApproverClaim(principal_id="analyst.one@example.com", kind=approver_kind,
                                  roles=("xdr-approver", "xdr-elevated-approver")),),

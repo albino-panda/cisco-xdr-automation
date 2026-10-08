@@ -1,9 +1,9 @@
 name: Break-glass mailbox bombed with an MFA fatigue pattern
-description: >
+description: >-
   A break-glass account's mailbox is flooded and repeated MFA pushes appear inside the window. The
-  revoke rule fires, but the protected-users guardrail keeps the break-glass account untouched
-  (skipped_protected) so emergency access is never cut automatically; an analyst must decide. The
-  reversible, approval-gated quarantine of neutral and graymail messages is still planned.
+  revoke rule fires and the protected-users guardrail keeps the action planned with elevated: true,
+  so cutting emergency access needs ELEVATED approval by a lead. The reversible, approval-gated
+  quarantine of neutral and graymail messages is planned behind normal approval.
 incident:
   id: INC-TEST-MB-0004
   title: "[HIGH] Possible email bombing of breakglass-01@example.com: 75 msgs / 28 domains in 5 min"
@@ -58,4 +58,4 @@ expect:
   escalate: false
   actions:
     - {atomic: quarantine-email, target: breakglass-01@example.com, status: planned, requires_approval: true}
-    - {atomic: revoke-session, target: breakglass-01@example.com, status: skipped_protected}
+    - {atomic: revoke-session, target: breakglass-01@example.com, status: planned, elevated: true}

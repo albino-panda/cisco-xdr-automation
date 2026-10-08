@@ -32,24 +32,24 @@ inputs:
 outputs:
 - name: status
   type: string
-  description: isolated | pending | already_isolated | skipped_protected | planned
+  description: isolated | pending | already_isolated | planned
 - name: unlock_code
   type: string
-  description: Isolation unlock code, stored only in the incident note.
+  description: Isolation unlock code. It stays in the Secure Endpoint console and is never copied to notes, tickets or notifications.
 - name: error
   type: string
   description: Empty on success.
 used_by:
 - ransomware
 - malware
-- powershell
+- malicious-powershell
 - lateral-movement
 - c2
 - dns-tunneling
 - credential-dumping
 - privilege-escalation
 - persistence
-- rmm
+- unauthorized-rmm
 - exfiltration
 - vulnerability-exploitation
 - web-attacks

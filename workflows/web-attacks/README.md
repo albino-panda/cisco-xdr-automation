@@ -35,7 +35,7 @@ Typical alerts that should route to this workflow:
 1. **Intake.** Load the incident summary, observables and the guardrails file.
 2. **Enrich.** [`enrich-ip`](../../atomic/enrich-ip/README.md), [`enrich-domain`](../../atomic/enrich-domain/README.md).
 3. **Investigate.** [`investigate-host`](../../atomic/investigate-host/README.md).
-4. **Decide.** Build a containment plan from the [containment rules](#containment-rules) and drop protected, allow-listed or over-limit targets. Send the plan to an approver unless `dry_run` is true.
+4. **Decide.** Build a containment plan from the [containment rules](#containment-rules) and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
 5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
 6. **Record.** Add an incident note (plan, approvals, results and the rollback for every action) and [`create-ticket`](../../atomic/create-ticket/README.md).
 7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
@@ -90,7 +90,7 @@ Incident context fields the rules read (set by the triggering source or the anal
 ## Guardrails
 
 - `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Protected hosts, protected users and allow-listed indicators are never actioned automatically.
+- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
 - Blast-radius limits cap how many hosts, users or indicators a single run may touch.
 - Every containment action is reversible except session revocation, and the rollback is written into the incident note.
 
@@ -98,8 +98,7 @@ Incident context fields the rules read (set by the triggering source or the anal
 
 - Scanning alone is usually low severity; escalate only when combined with success indicators. Scanning
   sources may be blocked, but isolation needs a confirmed web shell.
-- A web server with a confirmed web shell that is protected or not isolation-capable is not isolated
-  automatically; the ticket asks the owner to take it out of the pool and review its web root.
+- Isolating a protected web server with a confirmed web shell needs ELEVATED approval, and one that is not isolation-capable is not isolated; the ticket asks the owner to take it out of the pool and review its web root.
 - `block-url` targets on an allow-listed domain (for example `example.com`) are skipped by the guardrails,
   so virtual patches for applications on your own allow-listed domains need a manual edge rule.
 
@@ -114,8 +113,8 @@ Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them wit
 | [`01-confirmed-web-shell.yaml`](scenarios/01-confirmed-web-shell.yaml) | A confirmed web shell plans all three actions: block the source, block the vulnerable endpoint and isolate the infected server, while a clean server in the same pool is left alone. |
 | [`02-authorised-scanner.yaml`](scenarios/02-authorised-scanner.yaml) | An authorised external scanner with a suspicious reputation, no vulnerable endpoint and a clean server produces no actions. |
 | [`03-scanning-only.yaml`](scenarios/03-scanning-only.yaml) | Unauthorised scanning blocks the source only; a suspicious non-web-shell detection does not isolate the server. |
-| [`04-guardrail-skips.yaml`](scenarios/04-guardrail-skips.yaml) | Guardrails skip a protected server (`skipped_protected`), an internal source (`skipped_internal`) and an endpoint on the allow-listed domain (`skipped_allowlisted`), while the external source is still blocked. |
-| [`05-distributed-sources-escalate.yaml`](scenarios/05-distributed-sources-escalate.yaml) | More attacking sources than `max_indicators_blocked` turns every block into `skipped_limit` and escalates to a human. |
+| [`04-guardrail-skips.yaml`](scenarios/04-guardrail-skips.yaml) | Isolation of a protected server is planned with `elevated: true`; an internal source (`skipped_internal`) and an endpoint on the allow-listed domain (`skipped_allowlisted`) are skipped, and the external source block is planned. |
+| [`05-distributed-sources-escalate.yaml`](scenarios/05-distributed-sources-escalate.yaml) | More attacking sources than `max_indicators_blocked` keeps every block planned with `elevated: true` and escalates to a lead. |
 
 ## Related workflows
 

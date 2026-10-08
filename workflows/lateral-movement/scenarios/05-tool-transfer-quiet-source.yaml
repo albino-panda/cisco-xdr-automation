@@ -46,4 +46,4 @@ expect:
   actions:
     - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000502, status: planned, requires_approval: true}
     - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000501, status: planned, requires_approval: true}
-    - {atomic: revoke-session, target: k.ng@example.com, status: planned, requires_approval: false}
+    - {atomic: revoke-session, target: k.ng@example.com, status: planned, requires_approval: true}

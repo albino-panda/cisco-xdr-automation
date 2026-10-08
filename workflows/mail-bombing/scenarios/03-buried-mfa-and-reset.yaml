@@ -1,9 +1,10 @@
 name: Password reset and MFA prompt buried in the flood
-description: >
-  The case mail bombing is used for: while 140 sign-up confirmations from 60 domains bury the inbox, a
-  self-service password reset and an unexpected MFA prompt hit the same account inside the detection
-  window. The burst is quarantined behind approval and the recipient's sessions are revoked without
-  approval (revoke-session needs none). The ticket and note send the analyst to account-takeover.
+description: >-
+  The case mail bombing is used for: while 140 sign-up confirmations from 60 domains bury the inbox,
+  a self-service password reset and an unexpected MFA prompt hit the same account inside the
+  detection window. Quarantine of the burst and revocation of the recipient's sessions are planned,
+  both behind human approval (revoke-session is never auto-approved). The ticket and note send the
+  analyst to account-takeover.
 incident:
   id: INC-TEST-MB-0003
   title: "[CRITICAL] Possible email bombing of payroll-officer@example.com: 140 msgs / 60 domains in 5 min"
@@ -59,4 +60,4 @@ expect:
   escalate: false
   actions:
     - {atomic: quarantine-email, target: payroll-officer@example.com, status: planned, requires_approval: true}
-    - {atomic: revoke-session, target: payroll-officer@example.com, status: planned, requires_approval: false}
+    - {atomic: revoke-session, target: payroll-officer@example.com, status: planned, requires_approval: true}

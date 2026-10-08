@@ -1,9 +1,10 @@
 name: Admin-share movement to a domain controller with a Domain Admins account
-description: >
-  Guardrails. A compromised HR workstation copies a binary to a domain controller over the ADMIN$ share and
-  starts it as a service, using an account in Domain Admins. The workstation is isolated as planned. The
-  domain controller matches the protected host pattern dc-* and the account is in the protected Domain
-  Admins group, so isolation, session revocation and disabling are all skipped_protected and left to a human.
+description: >-
+  Guardrails. A compromised HR workstation copies a binary to a domain controller over the ADMIN$
+  share and starts it as a service, using an account in Domain Admins. The workstation isolation is
+  planned. The domain controller matches the protected host pattern dc-* and the account is in the
+  protected Domain Admins group, so isolation of the controller, session revocation and disabling
+  stay planned with elevated: true and need ELEVATED approval.
 incident:
   id: INC-TEST-LM-0003
   title: Remote service created on dc-01 from ws-hr-03 over admin share
@@ -58,6 +59,6 @@ expect:
   escalate: false
   actions:
     - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000301, status: planned, requires_approval: true}
-    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000302, status: skipped_protected}
-    - {atomic: revoke-session, target: adm.r.lee@example.com, status: skipped_protected}
-    - {atomic: disable-user, target: adm.r.lee@example.com, status: skipped_protected}
+    - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-000000000302, status: planned, elevated: true}
+    - {atomic: revoke-session, target: adm.r.lee@example.com, status: planned, elevated: true}
+    - {atomic: disable-user, target: adm.r.lee@example.com, status: planned, elevated: true}

@@ -242,7 +242,7 @@ def make_release_package(*actions: RecommendedAction, incident_id: str = INCIDEN
     drafts = [EvidenceDraft(**e.model_dump(exclude={"number"})) for a in actions for e in a.evidence]
     evidence = number_evidence(drafts)
     return ReleasePackage(
-        package_id=uuid.uuid4().hex, incident_id=incident_id, workflow_id="powershell",
+        package_id=uuid.uuid4().hex, incident_id=incident_id, workflow_id="malicious-powershell",
         workflow_version="1.0.0", created_at=FIXED_NOW, expires_at=FIXED_NOW + timedelta(minutes=240),
         requested_by="automation:restoration_planner", severity=Severity.HIGH, risk_score=40,
         confidence_score=90, summary="Test release package", evidence=evidence,
@@ -596,7 +596,7 @@ def test_token_minted_with_public_sign_api_and_fabricated_human_is_refused(clock
     req = request_for(ActionType.ISOLATE_ENDPOINT, "secure_endpoint", connector_guid="guid-1")
     claims = ApprovalTokenClaims(
         token_id="minted-without-decision", purpose=ApprovalPurpose.CONTAINMENT, package_id="never-approved",
-        incident_id=req.incident_id, evidence_snapshot_hash="0" * 64, workflow_id="powershell",
+        incident_id=req.incident_id, evidence_snapshot_hash="0" * 64, workflow_id="malicious-powershell",
         workflow_version="1.0.0", decision_id="never-recorded",
         actions=(TokenActionGrant(idempotency_key=req.idempotency_key, action_type=req.action_type,
                                   target=req.target, params_hash=req.params_hash,

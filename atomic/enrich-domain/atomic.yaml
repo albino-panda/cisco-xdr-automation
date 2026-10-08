@@ -47,10 +47,10 @@ used_by:
 - mail-bombing
 - bec
 - malware
-- powershell
+- malicious-powershell
 - c2
 - dns-tunneling
 - persistence
-- rmm
+- unauthorized-rmm
 - exfiltration
 - web-attacks

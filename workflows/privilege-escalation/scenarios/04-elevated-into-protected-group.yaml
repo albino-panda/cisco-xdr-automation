@@ -1,11 +1,12 @@
 name: UAC bypass then self-added to Domain Admins
-description: >
-  Edge case specific to privilege escalation. A UAC bypass detection fires on an engineering workstation
-  and the user's account is then added to Domain Admins with no approved change. Investigation reads
-  the current membership, which already includes Domain Admins, so the protected-group guardrail skips
-  revoke-session and disable-user for the very account the attacker elevated. The workstation is still
-  isolated. This pins the behaviour so the approval text and README warn the approver to remove the
-  membership by hand first.
+description: >-
+  Edge case specific to privilege escalation. A UAC bypass detection fires on an engineering
+  workstation and the user's account is then added to Domain Admins with no approved change.
+  Investigation reads the current membership, which already includes Domain Admins, so the
+  protected-group guardrail marks revoke-session and disable-user for the very account the attacker
+  elevated as elevated: true (ELEVATED approval). The workstation isolation is planned. This pins
+  the behaviour so the approval text and README warn the approver to remove the membership by hand
+  first.
 incident:
   id: INC-TEST-PE-0004
   title: UAC bypass followed by Domain Admins membership change
@@ -39,5 +40,5 @@ expect:
   escalate: false
   actions:
     - {atomic: isolate-endpoint, target: 2c3d4e5f-6a7b-4c8d-9e0f-000000000077, status: planned, requires_approval: true}
-    - {atomic: revoke-session, target: m.ortiz@example.com, status: skipped_protected, requires_approval: false}
-    - {atomic: disable-user, target: m.ortiz@example.com, status: skipped_protected, requires_approval: true}
+    - {atomic: revoke-session, target: m.ortiz@example.com, status: planned, elevated: true, requires_approval: true}
+    - {atomic: disable-user, target: m.ortiz@example.com, status: planned, elevated: true, requires_approval: true}

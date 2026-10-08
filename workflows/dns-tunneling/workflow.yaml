@@ -67,8 +67,7 @@ steps:
   on_error: continue
 - id: build_plan
   phase: decide
-  note: Build the containment plan from enrichment verdicts, investigation results and guardrails. Drop
-    any target that is protected, allow-listed or over the blast-radius limit.
+  note: Build the containment plan from enrichment verdicts, investigation results and guardrails. Allow-listed and internal targets are skipped; protected targets and targets over a blast-radius cap stay in the plan with ELEVATED approval and a warning, never dropped.
   on_error: escalate
 - id: approval
   phase: decide
@@ -139,6 +138,7 @@ plan:
 templates:
   approval: |
     {workflow.name}: containment approval for {incident.id} ({incident.severity})
+    ELEVATED approval required for (protected assets and actions over a blast-radius cap; a lead must approve): {plan.elevated}
     {incident.title}
 
     Planned actions:
@@ -149,7 +149,7 @@ templates:
     Dry run: {workflow.dry_run}
 
     Approving blocks the listed tunnel parent domains in Umbrella (and Cloudflare Gateway when enabled)
-    with auto-expiry, and network-isolates the listed hosts in Secure Endpoint while keeping the
+    with a release-review reminder (never an automatic release), and network-isolates the listed hosts in Secure Endpoint while keeping the
     management channel open. Both are reversible; rollback steps go into the incident note.
     Before approving, check that no listed domain or process belongs to a sanctioned security or VPN product.
   incident_note: |
@@ -167,7 +167,7 @@ templates:
 
     ### Rollback
     - block-domain: remove each domain from the Umbrella automation destination list (and the Cloudflare Gateway list when used): {plan.blocked_domains}. Blocks also expire on their own (guardrails expiry_hours.block-domain, default 720 hours).
-    - isolate-endpoint: stop isolation for each connector GUID in Secure Endpoint (DELETE /v1/computers/<connector_guid>/isolation, not yet verified against vendor documentation): {plan.isolated_hosts}. Unlock codes: {plan.unlock_codes}.
+    - isolate-endpoint: stop isolation for each connector GUID in Secure Endpoint (DELETE /v1/computers/<connector_guid>/isolation, not yet verified against vendor documentation): {plan.isolated_hosts}. The unlock code stays in the Secure Endpoint console and is not copied here.
 
     ### Analyst follow-up
     - [ ] Identify and remove the querying process on each isolated host.

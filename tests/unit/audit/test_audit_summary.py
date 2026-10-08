@@ -46,7 +46,7 @@ def summary(make_trail, lifecycle) -> ExecutionAuditSummary:
 
 def test_summary_identity_and_trigger(summary, lifecycle):
     assert summary.incident_id == "XDR-83921"
-    assert (summary.workflow_id, summary.workflow_version) == ("powershell", "1.0.0")
+    assert (summary.workflow_id, summary.workflow_version) == ("malicious-powershell", "1.0.0")
     assert summary.timestamp == FIXED_NOW  # first record of the incident
     assert summary.trigger == {"source": "cisco_xdr", "rule": "test-trigger"}
     assert len(summary.observables) == len(lifecycle.incident.observables)

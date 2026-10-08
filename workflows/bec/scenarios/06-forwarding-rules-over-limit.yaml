@@ -1,9 +1,10 @@
 name: Several mailboxes with external forwarding rules exceed the disable limit
 description: >-
-  Edge case for a tenant-wide BEC campaign. Two finance mailboxes signed in from a malicious IP and each
-  gained an external forwarding rule (T1114.003), but neither sent fraud yet. With max_users_disabled
-  lowered to 1, both disables become skipped_limit and the plan escalates to a human. Session
-  revocation has no cap and is still planned; nothing is quarantined because no fraud sender is listed.
+  Edge case for a tenant-wide BEC campaign. Two finance mailboxes signed in from a malicious IP and
+  each gained an external forwarding rule (T1114.003), but neither sent fraud yet. With
+  max_users_disabled lowered to 1, both disables stay planned with elevated: true and the plan
+  escalates to a lead. Session revocation has no cap and is planned behind normal approval; nothing
+  is quarantined because no fraud sender is listed.
 incident:
   id: INC-TEST-BEC-0006
   title: External forwarding rules created on multiple finance mailboxes
@@ -47,7 +48,7 @@ guardrails:
 expect:
   escalate: true
   actions:
-    - {atomic: revoke-session, target: ap-clerk-04@example.com, status: planned, requires_approval: false}
-    - {atomic: revoke-session, target: ap-clerk-05@example.com, status: planned, requires_approval: false}
-    - {atomic: disable-user, target: ap-clerk-04@example.com, status: skipped_limit, requires_approval: true}
-    - {atomic: disable-user, target: ap-clerk-05@example.com, status: skipped_limit, requires_approval: true}
+    - {atomic: revoke-session, target: ap-clerk-04@example.com, status: planned, requires_approval: true}
+    - {atomic: revoke-session, target: ap-clerk-05@example.com, status: planned, requires_approval: true}
+    - {atomic: disable-user, target: ap-clerk-04@example.com, status: planned, elevated: true, requires_approval: true}
+    - {atomic: disable-user, target: ap-clerk-05@example.com, status: planned, elevated: true, requires_approval: true}

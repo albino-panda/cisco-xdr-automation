@@ -2,9 +2,9 @@ name: Ongoing transfer spread over many destination IPs
 description: >-
   Blast radius and shared infrastructure. An ongoing transfer is split across three unknown external
   IPs and one shared CDN address that 40 internal hosts use. The CDN address is not blocked
-  (internal_sightings over 3). The three IP blocks exceed max_indicators_blocked (2 in this override),
-  so all of them become skipped_limit and the plan escalates. Host isolation and the compromised
-  account are capped separately and stay planned.
+  (internal_sightings over 3). The three IP blocks exceed max_indicators_blocked (2 in this
+  override), so all of them stay planned with elevated: true and the plan escalates. Host isolation
+  and the compromised account are capped separately and stay planned behind normal approval.
 incident:
   id: INC-TEST-EXF-0006
   title: Outbound transfer split across several cloud addresses
@@ -48,8 +48,8 @@ guardrails:
 expect:
   escalate: true
   actions:
-    - {atomic: block-ip, target: 203.0.113.10, status: skipped_limit}
-    - {atomic: block-ip, target: 203.0.113.11, status: skipped_limit}
-    - {atomic: block-ip, target: 203.0.113.12, status: skipped_limit}
+    - {atomic: block-ip, target: 203.0.113.10, status: planned, elevated: true}
+    - {atomic: block-ip, target: 203.0.113.11, status: planned, elevated: true}
+    - {atomic: block-ip, target: 203.0.113.12, status: planned, elevated: true}
     - {atomic: isolate-endpoint, target: 00000000-0000-4000-8000-00000000e706, status: planned, requires_approval: true}
     - {atomic: disable-user, target: c.park@example.com, status: planned, requires_approval: true}

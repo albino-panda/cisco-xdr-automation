@@ -1,9 +1,10 @@
 name: Six hosts beaconing to the same C2 domain
-description: >
+description: >-
   Blast radius. Internal DNS shows six workstations beaconing to the same C2 domain, each with a
-  malicious detection. Six isolations exceed max_hosts_isolated (5), so every isolation becomes
-  skipped_limit and the run escalates to a human. The domain and IP blocks fall under a separate cap
-  and stay planned, which cuts the channel for all six hosts while a human decides on isolation.
+  malicious detection. Six isolations exceed max_hosts_isolated (5), so every isolation stays
+  planned with elevated: true and the run escalates to a lead. The domain and IP blocks fall under a
+  separate cap and stay planned behind normal approval, which cuts the channel for all six hosts
+  while the lead decides on isolation.
 incident:
   id: INC-TEST-C2-0004
   title: Multiple workstations beaconing to sync-api.test
@@ -37,9 +38,9 @@ expect:
   actions:
     - {atomic: block-domain, target: sync-api.test, status: planned, requires_approval: true}
     - {atomic: block-ip, target: 192.0.2.66, status: planned, requires_approval: true}
-    - {atomic: isolate-endpoint, target: 0f3c2a10-0000-4000-8000-000000000301, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 0f3c2a10-0000-4000-8000-000000000302, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 0f3c2a10-0000-4000-8000-000000000303, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 0f3c2a10-0000-4000-8000-000000000304, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 0f3c2a10-0000-4000-8000-000000000305, status: skipped_limit}
-    - {atomic: isolate-endpoint, target: 0f3c2a10-0000-4000-8000-000000000306, status: skipped_limit}
+    - {atomic: isolate-endpoint, target: 0f3c2a10-0000-4000-8000-000000000301, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 0f3c2a10-0000-4000-8000-000000000302, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 0f3c2a10-0000-4000-8000-000000000303, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 0f3c2a10-0000-4000-8000-000000000304, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 0f3c2a10-0000-4000-8000-000000000305, status: planned, elevated: true}
+    - {atomic: isolate-endpoint, target: 0f3c2a10-0000-4000-8000-000000000306, status: planned, elevated: true}
