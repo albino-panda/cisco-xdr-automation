@@ -194,7 +194,9 @@ def test_secrets_in_targets_are_redacted() -> None:
     package = package_of([url_action])
     text = render_dry_run(_simulator().simulate(package))
     assert "abcdef123456" not in text
-    assert "Would block: https://evil.example.com/p?token=[REDACTED]" in text
+    # 14.12.6: a URL target never carries a credential; the secret query parameter is dropped when the
+    # target is normalized, so the dry run shows (and the vendor would receive) the URL without it.
+    assert "Would block: https://evil.example.com/p\n" in text
 
 
 def test_registered_secret_never_rendered() -> None:

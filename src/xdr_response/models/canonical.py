@@ -14,6 +14,7 @@ from datetime import date, datetime, timezone
 from enum import Enum
 from pathlib import PurePath
 from typing import TYPE_CHECKING, Any
+from urllib.parse import unquote_plus
 from uuid import UUID
 
 from pydantic import BaseModel, SecretBytes, SecretStr
@@ -31,6 +32,7 @@ __all__ = [
     "endpoint_names",
     "same_endpoint",
     "canonical_url",
+    "url_without_credentials",
     "make_idempotency_key",
     "format_datetime",
 ]
@@ -152,7 +154,48 @@ def normalize_target(kind: TargetKind | str, value: str) -> str:
         v = v.upper().rstrip(".")
         if not v:
             raise ValueError("target must not be empty")
+    elif kind is TargetKind.URL:
+        v = url_without_credentials(v)
+        if not v:
+            raise ValueError("target must not be empty")
     return v
+
+
+def url_without_credentials(value: str) -> str:
+    """``value`` without the credentials a URL can carry (14.12.6).
+
+    The ``user:password@`` part of the authority is removed, and every query or fragment parameter
+    whose key is sensitive (the keys :meth:`Redactor.redact_url
+    <xdr_response.logs.redaction.Redactor.redact_url>` redacts: ``token``, ``password``, ``sig``,
+    ``api_key``, ...) is dropped with its value; an emptied query or fragment loses its ``?`` / ``#``.
+    Everything else (scheme, host, port, path, the other parameters and their order) is kept as
+    written. A credential is never part of the destination, so a URL target, its idempotency key and
+    the vendor call never carry one. The result is stable: applying the function again changes nothing.
+    """
+    from xdr_response.logs.redaction import get_redactor  # local: models stay importable on their own
+
+    text = value.strip()
+    scheme, sep, rest = text.partition("://")
+    if not sep or not scheme or "/" in scheme or "?" in scheme or "#" in scheme:
+        scheme, sep, rest = "", "", text
+    cut = min((i for i in (rest.find("/"), rest.find("?"), rest.find("#")) if i >= 0), default=len(rest))
+    netloc, tail = rest[:cut], rest[cut:]
+    userinfo, _at, host = netloc.rpartition("@")
+    before, hash_sep, fragment = tail.partition("#")
+    path, query_sep, query = before.partition("?")
+    redactor = get_redactor()
+
+    def secret(pair: str) -> bool:
+        return bool(pair) and redactor.is_sensitive_key(unquote_plus(pair.partition("=")[0]))
+
+    query_pairs = query.split("&") if query_sep else []
+    fragment_pairs = fragment.split("&") if hash_sep else []
+    if not _at and not any(secret(p) for p in (*query_pairs, *fragment_pairs)):
+        return text  # nothing to remove: the URL is kept exactly as written
+    query = "&".join(p for p in query_pairs if p and not secret(p))
+    fragment = "&".join(p for p in fragment_pairs if p and not secret(p))
+    rebuilt = f"{host}{path}{'?' + query if query else ''}{'#' + fragment if fragment else ''}"
+    return f"{scheme}{sep}{rebuilt}"
 
 
 def _is_ip_literal(value: str) -> bool:
