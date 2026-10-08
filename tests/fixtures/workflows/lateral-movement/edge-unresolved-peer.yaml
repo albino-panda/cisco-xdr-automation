@@ -1,0 +1,57 @@
+# Lateral-movement workflow scenario; fake lab data only.
+schema: 1
+name: edge-unresolved-peer
+workflow: lateral-movement
+description: >-
+  Edge case: a compromised laptop opens internal SMB sessions to an address that no investigated
+  endpoint owns (the related-endpoint search knows no host with it). The laptop is isolated and the
+  account revoked; the unknown peer is never guessed into an isolation target: it is listed as a
+  manual step (identify the host behind the address and investigate it), citing the connection
+  records.
+tags: [edge_case, true_positive]
+mode: both
+incident:
+  incident_id: XDR-LM-0012
+  title: Admin share sessions from TH-LT-1047 to an unknown internal host
+  severity: HIGH
+  workflow_id: lateral-movement
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+  users: [jsmith@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1021.002]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, ip_addresses: [198.51.100.47], users: [jsmith@example.com],
+               groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-lm-1047-5, name: Remote service creation burst,
+               category: LateralMovement, verdict: MALICIOUS, severity: HIGH, endpoint: TH-LT-1047,
+               user: jsmith@example.com, mitre_techniques: [T1021.002], first_seen: "2026-01-15T11:31:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: network_connection, endpoint: TH-LT-1047, user: jsmith@example.com, local_ip: 198.51.100.47,
+               remote_ip: 198.51.100.99, remote_port: 445, protocol: tcp, direction: internal,
+               process_name: svc_push.exe, count: 4, first_seen: "2026-01-15T11:29:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, department: Finance, groups: [Finance Users],
+               risk_level: low, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - revoke_sessions:jsmith@example.com
+  considered: []
+  manual_steps: [lateral peer 198.51.100.99]
+  handoffs: []
+  containment: CONTAINED
+  controls: 1

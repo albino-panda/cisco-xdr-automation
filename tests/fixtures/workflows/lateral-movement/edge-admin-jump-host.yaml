@@ -1,0 +1,65 @@
+# Lateral-movement workflow scenario; fake lab data only.
+schema: 1
+name: edge-admin-jump-host
+workflow: lateral-movement
+description: >-
+  Edge case: admin jump host. An administrator account opens a WinRM session from the sanctioned
+  jump host TH-JMP-0001 to the web server TH-SRV-0412, where a process started by the WinRM
+  provider host is detected as malicious. The web server is isolated and the account's sessions are
+  revoked, but the jump host has no malicious activity of its own: isolating it would cut
+  administration of every server it manages, so it is shown as considered (with its records) for
+  the analyst to review, never silently skipped.
+tags: [edge_case, true_positive]
+mode: both
+incident:
+  incident_id: XDR-LM-0010
+  title: WinRM session from TH-JMP-0001 followed by malicious process on TH-SRV-0412
+  severity: HIGH
+  workflow_id: lateral-movement
+  observables:
+    - {type: hostname, value: TH-SRV-0412}
+    - {type: hostname, value: TH-JMP-0001}
+  trigger: {source: secure_endpoint, mitre_techniques: [T1021.006]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-SRV-0412
+      record: {kind: endpoint, hostname: TH-SRV-0412, connector_guid: 00000000-0000-4000-8000-000000000412,
+               os: Windows Server 2022, ip_addresses: [198.51.100.112], groups: [Web Servers],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-SRV-0412
+      record: {kind: network_connection, endpoint: TH-SRV-0412, user: ops.admin@example.com, local_ip: 198.51.100.112,
+               remote_ip: 198.51.100.21, remote_port: 5985, protocol: tcp, direction: inbound,
+               process_name: svchost.exe, first_seen: "2026-01-15T11:10:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-SRV-0412
+      record: {kind: process_event, event_id: evt-lm-0412-wsm, endpoint: TH-SRV-0412, timestamp: "2026-01-15T11:11:00Z",
+               event_type: process_start, process_name: webhelper.exe, parent_process_name: wsmprovhost.exe,
+               user: ops.admin@example.com, verdict: MALICIOUS}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-JMP-0001
+      record: {kind: endpoint, hostname: TH-JMP-0001, connector_guid: 00000000-0000-4000-8000-000000000001,
+               os: Windows Server 2022, ip_addresses: [198.51.100.21], users: [ops.admin@example.com],
+               groups: [Admin Jump Hosts], isolation_capable: true, isolation_state: not_isolated}
+    - integration: entra
+      atomic: investigate_user
+      subject: ops.admin@example.com
+      record: {kind: user_profile, user: ops.admin@example.com, display_name: Ops Admin, department: IT Operations,
+               groups: [Server Operators], risk_level: low, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:TH-SRV-0412
+    - revoke_sessions:ops.admin@example.com
+  elevated: []
+  considered: [isolate_endpoint:TH-JMP-0001]
+  manual_steps: []
+  handoffs: []
+  containment: CONTAINED
+  controls: 1

@@ -1,0 +1,83 @@
+# Lateral-movement workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-02-sanctioned-admin-winrm
+workflow: lateral-movement
+description: >-
+  Legacy 02, converted to typed records. An IT administrator runs a change-approved patch script
+  over WinRM from the admin jump host to two web servers. No host has a malicious detection or
+  event, the script hash is rated clean and the account shows no risk or anomalies, so the movement
+  is not confirmed: nothing is proposed and nothing is considered, even though the jump host is the
+  source of the sessions.
+tags: [legacy, benign]
+legacy_source: workflows/lateral-movement/scenarios/02-sanctioned-admin-winrm.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-LM-0002
+  title: WinRM sessions from jump-01 to multiple web servers
+  severity: MEDIUM
+  source: splunk
+  workflow_id: lateral-movement
+  observables:
+    - {type: hostname, value: jump-01}
+    - {type: hostname, value: srv-web-01}
+    - {type: hostname, value: srv-web-02}
+    - {type: user, value: it.admin@example.com}
+    - {type: sha256, value: feedface00000000feedface00000000feedface00000000feedface00000000}
+  trigger: {source: splunk, mitre_techniques: [T1021.006]}
+environment:
+  reputations:
+    - {type: sha256, value: feedface00000000feedface00000000feedface00000000feedface00000000, verdict: CLEAN,
+       risk_score: 0, confidence: 80, integrations: [secure_endpoint, virustotal], summary: signed patch script}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: jump-01
+      record: {kind: endpoint, hostname: jump-01, connector_guid: 00000000-0000-4000-8000-000000000201,
+               os: Windows Server 2022, ip_addresses: [198.51.100.20], users: [it.admin@example.com],
+               groups: [Admin Jump Hosts], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: jump-01
+      record: {kind: network_connection, endpoint: jump-01, user: it.admin@example.com, local_ip: 198.51.100.20,
+               remote_ip: 198.51.100.51, remote_port: 5985, protocol: tcp, direction: internal,
+               process_name: powershell.exe, first_seen: "2026-01-15T09:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: jump-01
+      record: {kind: network_connection, endpoint: jump-01, user: it.admin@example.com, local_ip: 198.51.100.20,
+               remote_ip: 198.51.100.52, remote_port: 5985, protocol: tcp, direction: internal,
+               process_name: powershell.exe, first_seen: "2026-01-15T09:01:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: srv-web-01
+      record: {kind: endpoint, hostname: srv-web-01, connector_guid: 00000000-0000-4000-8000-000000000202,
+               os: Windows Server 2022, ip_addresses: [198.51.100.51], groups: [Web Servers],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: srv-web-02
+      record: {kind: endpoint, hostname: srv-web-02, connector_guid: 00000000-0000-4000-8000-000000000203,
+               os: Windows Server 2022, ip_addresses: [198.51.100.52], groups: [Web Servers],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: feedface00000000feedface00000000feedface00000000feedface00000000
+      record: {kind: hash_prevalence, sha256: feedface00000000feedface00000000feedface00000000feedface00000000,
+               verdict: CLEAN, prevalence: 40, endpoints: [jump-01, srv-web-01, srv-web-02]}
+    - integration: entra
+      atomic: investigate_user
+      subject: it.admin@example.com
+      record: {kind: user_profile, user: it.admin@example.com, department: IT Operations, groups: [Server Admins],
+               risk_level: none, risk_state: none, account_enabled: true}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: it.admin@example.com
+      record: {kind: sign_in, sign_in_id: si-lm-l02-1, user: it.admin@example.com, timestamp: "2026-01-15T08:55:00Z",
+               ip: 198.51.100.20, country: ZZ, app: Windows Sign In, result: success}
+expect:
+  package: false
+  actions: []
+  below_threshold: []
+  considered: []
+  manual_steps: []
+  handoffs: []

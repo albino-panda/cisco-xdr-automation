@@ -1,0 +1,187 @@
+# Lateral-movement workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-04-admin-share-fan-out
+workflow: lateral-movement
+description: >-
+  Legacy 04, converted to typed records (C5: over-limit becomes ELEVATED). An account that signed
+  in from an external address rated malicious uses SMB admin shares to reach six operations
+  workstations from one engineering workstation; all seven hosts carry malicious detections.
+  Seven isolations exceed the endpoint blast-radius cap (5), so every isolation stays proposed with
+  ELEVATED approval and a blast-radius warning, and the lead approves. The account actions need
+  standard approval: session revocation and, because of the successful sign-in from the malicious
+  address, disabling; the address is blocked (new: the legacy plan had no address block). The
+  account is handed off to account-takeover.
+tags: [legacy, true_positive]
+legacy_source: workflows/lateral-movement/scenarios/04-admin-share-fan-out.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-LM-0004
+  title: m.ortiz@example.com authenticated to seven hosts over SMB in ten minutes
+  severity: CRITICAL
+  source: cisco_xdr
+  workflow_id: lateral-movement
+  observables:
+    - {type: user, value: m.ortiz@example.com}
+    - {type: ip, value: 203.0.113.145}
+    - {type: hostname, value: ws-eng-04}
+    - {type: hostname, value: ws-ops-01}
+    - {type: hostname, value: ws-ops-02}
+    - {type: hostname, value: ws-ops-03}
+    - {type: hostname, value: ws-ops-04}
+    - {type: hostname, value: ws-ops-05}
+    - {type: hostname, value: ws-ops-06}
+  trigger: {source: cisco_xdr, mitre_techniques: [T1021.002]}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.145, verdict: MALICIOUS, risk_score: 80, confidence: 75,
+       integrations: [umbrella, meraki], summary: attacker infrastructure}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-eng-04
+      record: {kind: endpoint, hostname: ws-eng-04, connector_guid: 00000000-0000-4000-8000-000000000400,
+               os: Windows 11, ip_addresses: [198.51.100.140], users: [m.ortiz@example.com], groups: [Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-eng-04
+      record: {kind: detection, detection_id: det-lm-l04-0, name: Remote service creation burst, verdict: MALICIOUS,
+               severity: HIGH, endpoint: ws-eng-04, user: m.ortiz@example.com}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-eng-04
+      record: {kind: network_connection, endpoint: ws-eng-04, user: m.ortiz@example.com, local_ip: 198.51.100.140,
+               remote_ip: 198.51.100.141, remote_port: 445, protocol: tcp, direction: internal,
+               process_name: svc_push.exe, first_seen: "2026-01-15T11:01:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-ops-01
+      record: {kind: endpoint, hostname: ws-ops-01, connector_guid: 00000000-0000-4000-8000-000000000401,
+               os: Windows 11, ip_addresses: [198.51.100.141], groups: [Operations Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-ops-01
+      record: {kind: detection, detection_id: det-lm-l04-1, name: Service created from file dropped over SMB,
+               verdict: MALICIOUS, severity: HIGH, endpoint: ws-ops-01}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-eng-04
+      record: {kind: network_connection, endpoint: ws-eng-04, user: m.ortiz@example.com, local_ip: 198.51.100.140,
+               remote_ip: 198.51.100.142, remote_port: 445, protocol: tcp, direction: internal,
+               process_name: svc_push.exe, first_seen: "2026-01-15T11:02:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-ops-02
+      record: {kind: endpoint, hostname: ws-ops-02, connector_guid: 00000000-0000-4000-8000-000000000402,
+               os: Windows 11, ip_addresses: [198.51.100.142], groups: [Operations Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-ops-02
+      record: {kind: detection, detection_id: det-lm-l04-2, name: Service created from file dropped over SMB,
+               verdict: MALICIOUS, severity: HIGH, endpoint: ws-ops-02}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-eng-04
+      record: {kind: network_connection, endpoint: ws-eng-04, user: m.ortiz@example.com, local_ip: 198.51.100.140,
+               remote_ip: 198.51.100.143, remote_port: 445, protocol: tcp, direction: internal,
+               process_name: svc_push.exe, first_seen: "2026-01-15T11:03:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-ops-03
+      record: {kind: endpoint, hostname: ws-ops-03, connector_guid: 00000000-0000-4000-8000-000000000403,
+               os: Windows 11, ip_addresses: [198.51.100.143], groups: [Operations Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-ops-03
+      record: {kind: detection, detection_id: det-lm-l04-3, name: Service created from file dropped over SMB,
+               verdict: MALICIOUS, severity: HIGH, endpoint: ws-ops-03}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-eng-04
+      record: {kind: network_connection, endpoint: ws-eng-04, user: m.ortiz@example.com, local_ip: 198.51.100.140,
+               remote_ip: 198.51.100.144, remote_port: 445, protocol: tcp, direction: internal,
+               process_name: svc_push.exe, first_seen: "2026-01-15T11:04:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-ops-04
+      record: {kind: endpoint, hostname: ws-ops-04, connector_guid: 00000000-0000-4000-8000-000000000404,
+               os: Windows 11, ip_addresses: [198.51.100.144], groups: [Operations Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-ops-04
+      record: {kind: detection, detection_id: det-lm-l04-4, name: Service created from file dropped over SMB,
+               verdict: MALICIOUS, severity: HIGH, endpoint: ws-ops-04}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-eng-04
+      record: {kind: network_connection, endpoint: ws-eng-04, user: m.ortiz@example.com, local_ip: 198.51.100.140,
+               remote_ip: 198.51.100.145, remote_port: 445, protocol: tcp, direction: internal,
+               process_name: svc_push.exe, first_seen: "2026-01-15T11:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-ops-05
+      record: {kind: endpoint, hostname: ws-ops-05, connector_guid: 00000000-0000-4000-8000-000000000405,
+               os: Windows 11, ip_addresses: [198.51.100.145], groups: [Operations Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-ops-05
+      record: {kind: detection, detection_id: det-lm-l04-5, name: Service created from file dropped over SMB,
+               verdict: MALICIOUS, severity: HIGH, endpoint: ws-ops-05}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-eng-04
+      record: {kind: network_connection, endpoint: ws-eng-04, user: m.ortiz@example.com, local_ip: 198.51.100.140,
+               remote_ip: 198.51.100.146, remote_port: 445, protocol: tcp, direction: internal,
+               process_name: svc_push.exe, first_seen: "2026-01-15T11:06:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-ops-06
+      record: {kind: endpoint, hostname: ws-ops-06, connector_guid: 00000000-0000-4000-8000-000000000406,
+               os: Windows 11, ip_addresses: [198.51.100.146], groups: [Operations Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-ops-06
+      record: {kind: detection, detection_id: det-lm-l04-6, name: Service created from file dropped over SMB,
+               verdict: MALICIOUS, severity: HIGH, endpoint: ws-ops-06}
+    - integration: entra
+      atomic: investigate_user
+      subject: m.ortiz@example.com
+      record: {kind: user_profile, user: m.ortiz@example.com, department: Engineering, groups: [Engineering Users],
+               risk_level: none, risk_state: none, account_enabled: true}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: m.ortiz@example.com
+      record: {kind: sign_in, sign_in_id: si-lm-l04-1, user: m.ortiz@example.com, timestamp: "2026-01-15T10:50:00Z",
+               ip: 203.0.113.145, country: ZZ, app: VPN, result: success}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:WS-ENG-04
+    - isolate_endpoint:WS-OPS-01
+    - isolate_endpoint:WS-OPS-02
+    - isolate_endpoint:WS-OPS-03
+    - isolate_endpoint:WS-OPS-04
+    - isolate_endpoint:WS-OPS-05
+    - isolate_endpoint:WS-OPS-06
+    - revoke_sessions:m.ortiz@example.com
+    - disable_user:m.ortiz@example.com
+    - block_ip:203.0.113.145
+  elevated:
+    - isolate_endpoint:WS-ENG-04
+    - isolate_endpoint:WS-OPS-01
+    - isolate_endpoint:WS-OPS-02
+    - isolate_endpoint:WS-OPS-03
+    - isolate_endpoint:WS-OPS-04
+    - isolate_endpoint:WS-OPS-05
+    - isolate_endpoint:WS-OPS-06
+  warnings: [ELEVATED APPROVAL REQUIRED, blast-radius cap]
+  considered: []
+  handoffs: ["account-takeover:m.ortiz@example.com"]
+  containment: CONTAINED

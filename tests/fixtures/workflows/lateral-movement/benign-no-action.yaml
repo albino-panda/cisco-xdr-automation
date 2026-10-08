@@ -1,0 +1,62 @@
+# Lateral-movement workflow scenario; fake lab data only.
+schema: 1
+name: benign-no-action
+workflow: lateral-movement
+description: >-
+  Benign. An IT administrator opens remote desktop sessions from an IT workstation to an
+  application server during a change window, which trips a remote-logon alert. Neither host has a
+  malicious detection or event, no tool is rated, the connection is not flagged and Entra shows no
+  risk for the account, so the movement is not confirmed: nothing is proposed and nothing is listed
+  as considered.
+tags: [benign]
+mode: both
+incident:
+  incident_id: XDR-LM-0004
+  title: Remote logons from TH-LT-1088 to TH-SRV-0310
+  severity: MEDIUM
+  workflow_id: lateral-movement
+  observables:
+    - {type: hostname, value: TH-LT-1088}
+    - {type: hostname, value: TH-SRV-0310}
+  users: [it.ops@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1021.001]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1088
+      record: {kind: endpoint, hostname: TH-LT-1088, connector_guid: 00000000-0000-4000-8000-000000001088,
+               os: Windows 11, ip_addresses: [198.51.100.88], users: [it.ops@example.com],
+               groups: [IT Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1088
+      record: {kind: network_connection, endpoint: TH-LT-1088, user: it.ops@example.com, local_ip: 198.51.100.88,
+               remote_ip: 198.51.100.31, remote_port: 3389, protocol: tcp, direction: internal,
+               process_name: mstsc.exe, first_seen: "2026-01-15T10:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-SRV-0310
+      record: {kind: endpoint, hostname: TH-SRV-0310, connector_guid: 00000000-0000-4000-8000-000000000310,
+               os: Windows Server 2022, ip_addresses: [198.51.100.31], groups: [Application Servers],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: entra
+      atomic: investigate_user
+      subject: it.ops@example.com
+      record: {kind: user_profile, user: it.ops@example.com, display_name: IT Operations, department: IT Operations,
+               groups: [Server Operators], risk_level: none, risk_state: none, account_enabled: true}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: it.ops@example.com
+      record: {kind: sign_in, sign_in_id: si-lm-1088-1, user: it.ops@example.com, timestamp: "2026-01-15T09:58:00Z",
+               ip: 198.51.100.88, country: ZZ, app: Windows Sign In, result: success, mfa_result: satisfied}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  below_threshold: []
+  unrouted: []
+  considered: []
+  manual_steps: []
+  handoffs: []
+  degraded_sources: []

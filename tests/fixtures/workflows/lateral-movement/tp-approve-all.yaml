@@ -1,0 +1,118 @@
+# Lateral-movement workflow scenario; fake lab data only.
+schema: 1
+name: tp-approve-all
+workflow: lateral-movement
+description: >-
+  True positive. A finance laptop with a credential-access detection opens a remote desktop session
+  to the application server TH-SRV-0310, which the peer lookup resolves by its address; a service
+  started there runs the same tool, rated malicious. The account used for the session signed in from
+  an address rated malicious and Entra rates it high risk with a risk detection. The analyst
+  approves everything: both isolations, the tool hash block, the address block, the session
+  revocation and the account disable execute and verify. The run hands the account off to
+  account-takeover and the laptop to credential-dumping.
+tags: [true_positive, approve_all]
+mode: both
+incident:
+  incident_id: XDR-LM-0001
+  title: Remote desktop lateral movement from TH-LT-1047
+  severity: HIGH
+  workflow_id: lateral-movement
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+  users: [jsmith@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1021.001]}
+environment:
+  reputations:
+    - {type: sha256, value: 6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e, verdict: MALICIOUS,
+       risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal], summary: remote access tool}
+    - {type: ip, value: 203.0.113.80, verdict: MALICIOUS, risk_score: 80, confidence: 75,
+       integrations: [umbrella, meraki], summary: attacker infrastructure}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, ip_addresses: [198.51.100.47], users: [jsmith@example.com],
+               groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-lm-1047-1, name: Credential theft tool detected,
+               category: CredentialAccess, verdict: MALICIOUS, severity: HIGH, endpoint: TH-LT-1047,
+               user: jsmith@example.com, sha256: 6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e,
+               mitre_techniques: [T1003.001], first_seen: "2026-01-15T11:20:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: network_connection, endpoint: TH-LT-1047, user: jsmith@example.com, local_ip: 198.51.100.47,
+               remote_ip: 198.51.100.31, remote_port: 3389, protocol: tcp, direction: internal,
+               process_name: mstsc.exe, first_seen: "2026-01-15T11:25:00Z"}
+    - integration: secure_endpoint
+      atomic: search_related_endpoints
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-SRV-0310, connector_guid: 00000000-0000-4000-8000-000000000310,
+               os: Windows Server 2022, ip_addresses: [198.51.100.31], groups: [Application Servers]}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-SRV-0310
+      record: {kind: endpoint, hostname: TH-SRV-0310, connector_guid: 00000000-0000-4000-8000-000000000310,
+               os: Windows Server 2022, ip_addresses: [198.51.100.31], groups: [Application Servers],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-SRV-0310
+      record: {kind: detection, detection_id: det-lm-0310-1, name: Service from a remote session runs an unsigned tool,
+               category: LateralMovement, verdict: MALICIOUS, severity: HIGH, endpoint: TH-SRV-0310,
+               user: jsmith@example.com, sha256: 6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e,
+               mitre_techniques: [T1021.001, T1569.002], first_seen: "2026-01-15T11:31:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-SRV-0310
+      record: {kind: process_event, event_id: evt-lm-0310-svc, endpoint: TH-SRV-0310, timestamp: "2026-01-15T11:30:00Z",
+               event_type: service, process_name: svc_helper.exe, parent_process_name: services.exe,
+               sha256: 6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e,
+               user: jsmith@example.com, verdict: SUSPICIOUS}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e
+      record: {kind: hash_prevalence, sha256: 6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e,
+               file_name: svc_helper.exe, verdict: MALICIOUS, prevalence: 2, endpoints: [TH-LT-1047, TH-SRV-0310]}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, display_name: J Smith, department: Finance,
+               groups: [Finance Users], risk_level: high, risk_state: at_risk, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: anomaly, anomaly_id: risk-lm-1047-1, anomaly_type: unfamiliar_location, severity: HIGH,
+               user: jsmith@example.com, ip: 203.0.113.80, first_seen: "2026-01-15T10:55:00Z"}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: sign_in, sign_in_id: si-lm-1047-1, user: jsmith@example.com, timestamp: "2026-01-15T10:54:00Z",
+               ip: 203.0.113.80, country: ZZ, app: VPN, result: success, mfa_result: satisfied}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - isolate_endpoint:TH-SRV-0310
+    - block_hash:6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e
+    - block_ip:203.0.113.80
+    - revoke_sessions:jsmith@example.com
+    - disable_user:jsmith@example.com
+  elevated: []
+  excluded: []
+  unrouted: []
+  below_threshold: []
+  risk: {min: 80, max: 100}
+  confidence: {min: 50, max: 100}
+  degraded_sources: []
+  considered: []
+  manual_steps: []
+  handoffs: ["account-takeover:jsmith@example.com", "credential-dumping:TH-LT-1047"]
+  evidence_min: 1
+  containment: CONTAINED
+  controls: 5
+  notifications: [incident_note, soc_notification, analyst_summary]

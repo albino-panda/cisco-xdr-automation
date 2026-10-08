@@ -1,0 +1,102 @@
+# Lateral-movement workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-01-rdp-pivot-confirmed
+workflow: lateral-movement
+description: >-
+  Legacy 01, converted to typed records (C1: session revocation needs approval). A finance
+  workstation with a credential theft detection opens remote desktop sessions to an application
+  server, where a malicious service is then created; the tool is on both hosts. Both hosts are
+  isolated, the account loses its sessions and, because Entra rates it high risk with an anomaly,
+  is disabled, and the tool hash is blocked (new: the legacy plan had no hash block). The account
+  is handed off to account-takeover and the workstation to credential-dumping.
+tags: [legacy, true_positive]
+legacy_source: workflows/lateral-movement/scenarios/01-rdp-pivot-confirmed.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-LM-0001
+  title: Remote logons from ws-fin-07 to srv-app-02 followed by service creation
+  severity: HIGH
+  source: secure_endpoint
+  workflow_id: lateral-movement
+  observables:
+    - {type: hostname, value: ws-fin-07}
+    - {type: hostname, value: srv-app-02}
+    - {type: user, value: j.doe@example.com}
+    - {type: ip, value: 198.51.100.15}
+    - {type: sha256, value: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+  trigger: {source: secure_endpoint, mitre_techniques: [T1021.001]}
+environment:
+  reputations:
+    - {type: sha256, value: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef, verdict: MALICIOUS,
+       risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal], summary: credential theft tool}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-fin-07
+      record: {kind: endpoint, hostname: ws-fin-07, connector_guid: 00000000-0000-4000-8000-000000000101,
+               os: Windows 11, ip_addresses: [198.51.100.15], users: [j.doe@example.com], groups: [Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-fin-07
+      record: {kind: detection, detection_id: det-lm-l01-1, name: Credential theft tool detected,
+               category: CredentialAccess, verdict: MALICIOUS, severity: HIGH, endpoint: ws-fin-07,
+               user: j.doe@example.com, sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-fin-07
+      record: {kind: network_connection, endpoint: ws-fin-07, user: j.doe@example.com, local_ip: 198.51.100.15,
+               remote_ip: 198.51.100.16, remote_port: 3389, protocol: tcp, direction: internal,
+               process_name: mstsc.exe, first_seen: "2026-01-15T11:10:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: srv-app-02
+      record: {kind: endpoint, hostname: srv-app-02, connector_guid: 00000000-0000-4000-8000-000000000102,
+               os: Windows Server 2022, ip_addresses: [198.51.100.16], groups: [Application Servers],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: srv-app-02
+      record: {kind: detection, detection_id: det-lm-l01-2, name: Service created from a remote session runs unsigned binary,
+               verdict: MALICIOUS, severity: HIGH, endpoint: srv-app-02, user: j.doe@example.com,
+               sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: srv-app-02
+      record: {kind: network_connection, endpoint: srv-app-02, user: j.doe@example.com, local_ip: 198.51.100.16,
+               remote_ip: 198.51.100.15, remote_port: 3389, protocol: tcp, direction: inbound,
+               first_seen: "2026-01-15T11:10:00Z"}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      record: {kind: hash_prevalence, sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef,
+               verdict: MALICIOUS, prevalence: 2, endpoints: [ws-fin-07, srv-app-02]}
+    - integration: entra
+      atomic: investigate_user
+      subject: j.doe@example.com
+      record: {kind: user_profile, user: j.doe@example.com, department: Finance, groups: [Finance Users],
+               risk_level: high, risk_state: at_risk, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: j.doe@example.com
+      record: {kind: anomaly, anomaly_id: risk-lm-l01-1, anomaly_type: new_device, severity: MEDIUM,
+               user: j.doe@example.com, detail: First remote logon to srv-app-02}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: j.doe@example.com
+      record: {kind: sign_in, sign_in_id: si-lm-l01-1, user: j.doe@example.com, timestamp: "2026-01-15T08:30:00Z",
+               ip: 198.51.100.15, country: ZZ, app: Windows Sign In, result: success}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:WS-FIN-07
+    - isolate_endpoint:SRV-APP-02
+    - revoke_sessions:j.doe@example.com
+    - disable_user:j.doe@example.com
+    - block_hash:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  elevated: []
+  considered: []
+  handoffs: ["account-takeover:j.doe@example.com", "credential-dumping:WS-FIN-07"]
+  containment: CONTAINED
+  controls: 4

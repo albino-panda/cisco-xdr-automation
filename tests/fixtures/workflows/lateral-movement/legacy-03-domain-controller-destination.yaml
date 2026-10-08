@@ -1,0 +1,103 @@
+# Lateral-movement workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-03-domain-controller-destination
+workflow: lateral-movement
+description: >-
+  Legacy 03, converted to typed records (C3: protected becomes ELEVATED). A compromised HR
+  workstation copies a binary to a domain controller over the ADMIN$ share and starts it as a
+  service, using an account in Domain Admins. The workstation isolation and the hash block need
+  standard approval. The domain controller matches the domain-controller class and the account the
+  privileged-account class, so the controller isolation, the session revocation and the account
+  disable stay proposed with ELEVATED approval and a visible warning; the lead approves.
+tags: [legacy, true_positive, critical_asset]
+legacy_source: workflows/lateral-movement/scenarios/03-domain-controller-destination.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-LM-0003
+  title: Remote service created on dc-01 from ws-hr-03 over admin share
+  severity: CRITICAL
+  source: cisco_xdr
+  workflow_id: lateral-movement
+  observables:
+    - {type: hostname, value: ws-hr-03}
+    - {type: hostname, value: dc-01}
+    - {type: user, value: adm.r.lee@example.com}
+    - {type: sha256, value: c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00}
+  trigger: {source: cisco_xdr, mitre_techniques: [T1021.002, T1570]}
+environment:
+  reputations:
+    - {type: sha256, value: c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00, verdict: MALICIOUS,
+       risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal], summary: remote execution tool}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-hr-03
+      record: {kind: endpoint, hostname: ws-hr-03, connector_guid: 00000000-0000-4000-8000-000000000301,
+               os: Windows 11, ip_addresses: [198.51.100.103], groups: [Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-hr-03
+      record: {kind: detection, detection_id: det-lm-l03-1, name: Malicious binary written to remote ADMIN$ share,
+               verdict: MALICIOUS, severity: HIGH, endpoint: ws-hr-03, user: adm.r.lee@example.com,
+               sha256: c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-hr-03
+      record: {kind: network_connection, endpoint: ws-hr-03, user: adm.r.lee@example.com, local_ip: 198.51.100.103,
+               remote_ip: 198.51.100.130, remote_port: 445, protocol: tcp, direction: internal,
+               process_name: copy_tool.exe, first_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: dc-01
+      record: {kind: endpoint, hostname: dc-01, connector_guid: 00000000-0000-4000-8000-000000000302,
+               os: Windows Server 2022, ip_addresses: [198.51.100.130], groups: [Domain Controllers],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: dc-01
+      record: {kind: detection, detection_id: det-lm-l03-2, name: Service created from file dropped over SMB,
+               verdict: MALICIOUS, severity: CRITICAL, endpoint: dc-01, user: adm.r.lee@example.com,
+               sha256: c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: dc-01
+      record: {kind: process_event, event_id: evt-lm-l03-svc, endpoint: dc-01, timestamp: "2026-01-15T11:01:00Z",
+               event_type: service, process_name: copy_tool.exe, parent_process_name: services.exe,
+               sha256: c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00, verdict: SUSPICIOUS}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00
+      record: {kind: hash_prevalence, sha256: c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00,
+               verdict: MALICIOUS, prevalence: 2, endpoints: [ws-hr-03, dc-01]}
+    - integration: entra
+      atomic: investigate_user
+      subject: adm.r.lee@example.com
+      record: {kind: user_profile, user: adm.r.lee@example.com, department: IT Operations, groups: [Domain Admins],
+               risk_level: high, risk_state: at_risk, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: adm.r.lee@example.com
+      record: {kind: anomaly, anomaly_id: risk-lm-l03-1, anomaly_type: new_device, severity: MEDIUM,
+               user: adm.r.lee@example.com, detail: First interactive logon from ws-hr-03}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: adm.r.lee@example.com
+      record: {kind: sign_in, sign_in_id: si-lm-l03-1, user: adm.r.lee@example.com, timestamp: "2026-01-15T10:40:00Z",
+               ip: 198.51.100.103, country: ZZ, app: Windows Sign In, result: success}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:WS-HR-03
+    - isolate_endpoint:DC-01
+    - revoke_sessions:adm.r.lee@example.com
+    - disable_user:adm.r.lee@example.com
+    - block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00
+  elevated:
+    - isolate_endpoint:DC-01
+    - revoke_sessions:adm.r.lee@example.com
+    - disable_user:adm.r.lee@example.com
+  warnings: [ELEVATED APPROVAL REQUIRED, Domain controller, Privileged account]
+  handoffs: ["account-takeover:adm.r.lee@example.com"]
+  containment: CONTAINED

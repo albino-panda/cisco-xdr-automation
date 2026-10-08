@@ -1,0 +1,69 @@
+# Lateral-movement workflow scenario; fake lab data only.
+schema: 1
+name: edge-defender-managed-source
+workflow: lateral-movement
+description: >-
+  Edge case: the quiet source is managed by Microsoft Defender for Endpoint only. TH-LT-2210 has no
+  malicious activity of its own but originated the remote desktop session to TH-SRV-0310, where a
+  malicious process runs under the same account. The Secure Endpoint rules do not apply to the
+  laptop; the Defender rule recommends isolating it as the movement source, the server is isolated
+  through Secure Endpoint and the account is revoked. Approved actions execute and verify through
+  their own routes.
+tags: [edge_case, true_positive]
+mode: both
+suite:
+  secure_endpoint: [endpoint]
+  defender_endpoint: [endpoint]
+  entra: [identity]
+  virustotal: [intel]
+incident:
+  incident_id: XDR-LM-0013
+  title: Remote desktop lateral movement to TH-SRV-0310
+  severity: HIGH
+  workflow_id: lateral-movement
+  observables:
+    - {type: hostname, value: TH-SRV-0310}
+    - {type: hostname, value: TH-LT-2210}
+  trigger: {source: defender_endpoint, mitre_techniques: [T1021.001]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-SRV-0310
+      record: {kind: endpoint, hostname: TH-SRV-0310, connector_guid: 00000000-0000-4000-8000-000000000310,
+               os: Windows Server 2022, ip_addresses: [198.51.100.31], groups: [Application Servers],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-SRV-0310
+      record: {kind: network_connection, endpoint: TH-SRV-0310, user: kng@example.com, local_ip: 198.51.100.31,
+               remote_ip: 198.51.100.210, remote_port: 3389, protocol: tcp, direction: inbound,
+               first_seen: "2026-01-15T11:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-SRV-0310
+      record: {kind: detection, detection_id: det-lm-0310-6, name: Malicious process from a remote desktop session,
+               category: LateralMovement, verdict: MALICIOUS, severity: HIGH, endpoint: TH-SRV-0310,
+               user: kng@example.com, mitre_techniques: [T1021.001], first_seen: "2026-01-15T11:07:00Z"}
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: endpoint, hostname: TH-LT-2210, mde_machine_id: 2a10e7d6c5b4a3f2e1d01e5c0a9b8f7d6e5c4b3a,
+               os: Windows 11, ip_addresses: [198.51.100.210], users: [kng@example.com], groups: [Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: entra
+      atomic: investigate_user
+      subject: kng@example.com
+      record: {kind: user_profile, user: kng@example.com, department: Engineering, groups: [Engineering Users],
+               risk_level: low, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:TH-SRV-0310
+    - isolate_endpoint:TH-LT-2210
+    - revoke_sessions:kng@example.com
+  unrouted: []
+  considered: []
+  containment: CONTAINED
+  controls: 2

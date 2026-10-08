@@ -1,0 +1,95 @@
+# Lateral-movement workflow scenario; fake lab data only.
+schema: 1
+name: edge-clean-target-not-isolated
+workflow: lateral-movement
+description: >-
+  Edge case: optional target isolation. A compromised laptop reaches two hosts: TH-SRV-0310 over
+  SMB, where the transferred tool is started as a service, and TH-LT-1052 over remote desktop,
+  which shows no malicious activity of its own. The source and the confirmed target are isolated
+  and the account is revoked; TH-LT-1052 is in the blast radius but only listed as considered
+  (scoped for review), never isolated on the movement alone.
+tags: [edge_case, true_positive]
+mode: both
+incident:
+  incident_id: XDR-LM-0011
+  title: Lateral movement from TH-LT-1047 to several hosts
+  severity: HIGH
+  workflow_id: lateral-movement
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+  users: [jsmith@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1021.002, T1021.001]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, ip_addresses: [198.51.100.47], users: [jsmith@example.com],
+               groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-lm-1047-4, name: Remote service creation burst,
+               category: LateralMovement, verdict: MALICIOUS, severity: HIGH, endpoint: TH-LT-1047,
+               user: jsmith@example.com, mitre_techniques: [T1021.002], first_seen: "2026-01-15T11:31:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: network_connection, endpoint: TH-LT-1047, user: jsmith@example.com, local_ip: 198.51.100.47,
+               remote_ip: 198.51.100.31, remote_port: 445, protocol: tcp, direction: internal,
+               process_name: svc_push.exe, first_seen: "2026-01-15T11:29:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: network_connection, endpoint: TH-LT-1047, user: jsmith@example.com, local_ip: 198.51.100.47,
+               remote_ip: 198.51.100.52, remote_port: 3389, protocol: tcp, direction: internal,
+               process_name: mstsc.exe, first_seen: "2026-01-15T11:33:00Z"}
+    - integration: secure_endpoint
+      atomic: search_related_endpoints
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-SRV-0310, connector_guid: 00000000-0000-4000-8000-000000000310,
+               os: Windows Server 2022, ip_addresses: [198.51.100.31], groups: [Application Servers]}
+    - integration: secure_endpoint
+      atomic: search_related_endpoints
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1052, connector_guid: 00000000-0000-4000-8000-000000001052,
+               os: Windows 11, ip_addresses: [198.51.100.52], groups: [Workstations]}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-SRV-0310
+      record: {kind: endpoint, hostname: TH-SRV-0310, connector_guid: 00000000-0000-4000-8000-000000000310,
+               os: Windows Server 2022, ip_addresses: [198.51.100.31], groups: [Application Servers],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-SRV-0310
+      record: {kind: process_event, event_id: evt-lm-0310-svc3, endpoint: TH-SRV-0310, timestamp: "2026-01-15T11:30:00Z",
+               event_type: service, process_name: svc_helper.exe, parent_process_name: services.exe,
+               user: jsmith@example.com, verdict: MALICIOUS}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1052
+      record: {kind: endpoint, hostname: TH-LT-1052, connector_guid: 00000000-0000-4000-8000-000000001052,
+               os: Windows 11, ip_addresses: [198.51.100.52], groups: [Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, department: Finance, groups: [Finance Users],
+               risk_level: low, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - isolate_endpoint:TH-SRV-0310
+    - revoke_sessions:jsmith@example.com
+  considered: [isolate_endpoint:TH-LT-1052]
+  manual_steps: []
+  dry_run_lines:
+    - DRY RUN
+    - "Would isolate: TH-LT-1047"
+    - "Would isolate: TH-SRV-0310"
+    - "Would revoke sessions: jsmith@example.com"
+    - No containment actions executed.

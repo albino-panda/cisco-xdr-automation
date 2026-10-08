@@ -1,0 +1,93 @@
+# Lateral-movement workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-05-tool-transfer-quiet-source
+workflow: lateral-movement
+description: >-
+  Legacy 05, converted to typed records (T1570). A tool is copied over an admin share to a file
+  server but has not run yet, so neither host has a detection. The tool is rated malicious and the
+  enterprise search lists the file server, so the destination is isolated. The source used only
+  built-in tools and has no detection of its own, but the connection records show it originated
+  the copy, so it is isolated too instead of being left active (the legacy spec needed the
+  detection's source_hosts list for this). A third clean host in the incident is untouched. The
+  account is not flagged by Entra: its sessions are revoked but it is not disabled. The tool hash
+  is blocked (new: the legacy plan had no hash block).
+tags: [legacy, true_positive, edge_case]
+legacy_source: workflows/lateral-movement/scenarios/05-tool-transfer-quiet-source.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-LM-0005
+  title: Unknown executable copied to srv-file-01 over C$ share
+  severity: HIGH
+  source: secure_endpoint
+  workflow_id: lateral-movement
+  observables:
+    - {type: hostname, value: ws-eng-12}
+    - {type: hostname, value: srv-file-01}
+    - {type: hostname, value: ws-eng-15}
+    - {type: user, value: k.ng@example.com}
+    - {type: sha256, value: deadbeef0000111122223333444455556666777788889999aaaabbbbccccdddd}
+  trigger: {source: secure_endpoint, mitre_techniques: [T1570]}
+environment:
+  reputations:
+    - {type: sha256, value: deadbeef0000111122223333444455556666777788889999aaaabbbbccccdddd, verdict: MALICIOUS,
+       risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal], summary: remote access tool}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-eng-12
+      record: {kind: endpoint, hostname: ws-eng-12, connector_guid: 00000000-0000-4000-8000-000000000501,
+               os: Windows 11, ip_addresses: [198.51.100.112], users: [k.ng@example.com], groups: [Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-eng-12
+      record: {kind: network_connection, endpoint: ws-eng-12, user: k.ng@example.com, local_ip: 198.51.100.112,
+               remote_ip: 198.51.100.150, remote_port: 445, protocol: tcp, direction: internal,
+               process_name: robocopy.exe, first_seen: "2026-01-15T11:15:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: srv-file-01
+      record: {kind: endpoint, hostname: srv-file-01, connector_guid: 00000000-0000-4000-8000-000000000502,
+               os: Windows Server 2022, ip_addresses: [198.51.100.150], groups: [File Servers],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: srv-file-01
+      record: {kind: process_event, event_id: evt-lm-l05-file, endpoint: srv-file-01, timestamp: "2026-01-15T11:15:30Z",
+               event_type: file_create, process_name: System, file_path: "C:/Users/Public/updater.exe",
+               sha256: deadbeef0000111122223333444455556666777788889999aaaabbbbccccdddd, user: k.ng@example.com}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-eng-15
+      record: {kind: endpoint, hostname: ws-eng-15, connector_guid: 00000000-0000-4000-8000-000000000503,
+               os: Windows 11, ip_addresses: [198.51.100.115], groups: [Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: deadbeef0000111122223333444455556666777788889999aaaabbbbccccdddd
+      record: {kind: hash_prevalence, sha256: deadbeef0000111122223333444455556666777788889999aaaabbbbccccdddd,
+               file_name: updater.exe, verdict: MALICIOUS, prevalence: 1, endpoints: [srv-file-01]}
+    - integration: entra
+      atomic: investigate_user
+      subject: k.ng@example.com
+      record: {kind: user_profile, user: k.ng@example.com, department: Engineering, groups: [Engineering Users],
+               risk_level: none, risk_state: none, account_enabled: true}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: k.ng@example.com
+      record: {kind: sign_in, sign_in_id: si-lm-l05-1, user: k.ng@example.com, timestamp: "2026-01-15T08:45:00Z",
+               ip: 198.51.100.112, country: ZZ, app: Windows Sign In, result: success}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:SRV-FILE-01
+    - isolate_endpoint:WS-ENG-12
+    - revoke_sessions:k.ng@example.com
+    - block_hash:deadbeef0000111122223333444455556666777788889999aaaabbbbccccdddd
+  elevated: []
+  considered: []
+  manual_steps: []
+  handoffs: []
+  containment: CONTAINED
+  controls: 3

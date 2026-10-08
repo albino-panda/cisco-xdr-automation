@@ -1,0 +1,78 @@
+# Lateral-movement workflow scenario; fake lab data only.
+schema: 1
+name: critical-asset-elevated
+workflow: lateral-movement
+description: >-
+  A compromised workstation copies a tool over an admin share to the domain controller DC-02 and
+  starts it as a service. The domain controller isolation needs ELEVATED approval with a visible
+  warning (never skipped): an analyst alone cannot approve the package and the lead approves. The
+  workstation isolation, the hash block and the session revocation need standard approval.
+tags: [critical_asset, true_positive]
+mode: both
+incident:
+  incident_id: XDR-LM-0006
+  title: Remote service created on DC-02 from TH-LT-1047 over admin share
+  severity: CRITICAL
+  workflow_id: lateral-movement
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+    - {type: hostname, value: DC-02}
+  users: [jsmith@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1021.002]}
+environment:
+  reputations:
+    - {type: sha256, value: 2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c, verdict: MALICIOUS,
+       risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal], summary: remote execution tool}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, ip_addresses: [198.51.100.47], users: [jsmith@example.com],
+               groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-lm-1047-3, name: Tool written to a remote admin share,
+               category: LateralMovement, verdict: MALICIOUS, severity: HIGH, endpoint: TH-LT-1047,
+               user: jsmith@example.com, sha256: 2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c,
+               mitre_techniques: [T1021.002, T1570], first_seen: "2026-01-15T11:28:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: network_connection, endpoint: TH-LT-1047, user: jsmith@example.com, local_ip: 198.51.100.47,
+               remote_ip: 198.51.100.12, remote_port: 445, protocol: tcp, direction: internal,
+               process_name: svc_push.exe, first_seen: "2026-01-15T11:27:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-02
+      record: {kind: endpoint, hostname: DC-02, connector_guid: 00000000-0000-4000-8000-0000000000d2,
+               os: Windows Server 2022, ip_addresses: [198.51.100.12], groups: [Domain Controllers],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-02
+      record: {kind: detection, detection_id: det-lm-dc02-1, name: Service created from a file dropped over SMB,
+               category: LateralMovement, verdict: MALICIOUS, severity: CRITICAL, endpoint: DC-02,
+               user: jsmith@example.com, sha256: 2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c,
+               mitre_techniques: [T1569.002], first_seen: "2026-01-15T11:29:00Z"}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c
+      record: {kind: hash_prevalence, sha256: 2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c,
+               file_name: svc_push.exe, verdict: MALICIOUS, prevalence: 2, endpoints: [TH-LT-1047, DC-02]}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, department: Finance, groups: [Finance Users],
+               risk_level: low, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - isolate_endpoint:DC-02
+    - block_hash:2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c
+    - revoke_sessions:jsmith@example.com
+  elevated: [isolate_endpoint:DC-02]
+  warnings: [ELEVATED APPROVAL REQUIRED, Domain controller]
+  containment: CONTAINED

@@ -1,0 +1,82 @@
+# Lateral-movement workflow scenario; fake lab data only.
+schema: 1
+name: degraded-source
+workflow: lateral-movement
+description: >-
+  Entra (an expected source) is unavailable while the account is investigated. The run notes the
+  degraded source and lowers confidence, and still recommends both isolations, the hash block and
+  the session revocation from the Secure Endpoint records that show the account on the movement.
+  No account disable is proposed: nothing confirms the account compromised.
+tags: [degraded_source, true_positive]
+mode: both
+incident:
+  incident_id: XDR-LM-0005
+  title: Admin share lateral movement from TH-LT-1047 to TH-SRV-0310
+  severity: HIGH
+  workflow_id: lateral-movement
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+  users: [jsmith@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1021.002]}
+environment:
+  reputations:
+    - {type: sha256, value: 8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c, verdict: MALICIOUS,
+       risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal], summary: remote execution tool}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, ip_addresses: [198.51.100.47], users: [jsmith@example.com],
+               groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-lm-1047-2, name: Remote service creation burst,
+               category: LateralMovement, verdict: MALICIOUS, severity: HIGH, endpoint: TH-LT-1047, user: jsmith@example.com,
+               sha256: 8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c, mitre_techniques: [T1021.002, T1569.002], first_seen: "2026-01-15T11:31:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: network_connection, endpoint: TH-LT-1047, user: jsmith@example.com, local_ip: 198.51.100.47,
+               remote_ip: 198.51.100.31, remote_port: 445, protocol: tcp, direction: internal,
+               process_name: svc_push.exe, sha256: 8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c, first_seen: "2026-01-15T11:29:00Z"}
+    - integration: secure_endpoint
+      atomic: search_related_endpoints
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-SRV-0310, connector_guid: 00000000-0000-4000-8000-000000000310,
+               os: Windows Server 2022, ip_addresses: [198.51.100.31], groups: [Application Servers]}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-SRV-0310
+      record: {kind: endpoint, hostname: TH-SRV-0310, connector_guid: 00000000-0000-4000-8000-000000000310,
+               os: Windows Server 2022, ip_addresses: [198.51.100.31], groups: [Application Servers],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-SRV-0310
+      record: {kind: process_event, event_id: evt-lm-0310-svc2, endpoint: TH-SRV-0310, timestamp: "2026-01-15T11:30:00Z",
+               event_type: service, process_name: svc_helper.exe, parent_process_name: services.exe,
+               sha256: 8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c, user: jsmith@example.com, verdict: MALICIOUS}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c
+      record: {kind: hash_prevalence, sha256: 8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c,
+               file_name: svc_helper.exe, verdict: MALICIOUS, prevalence: 2, endpoints: [TH-LT-1047, TH-SRV-0310]}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, display_name: J Smith, department: Finance,
+               groups: [Finance Users], risk_level: low, risk_state: none, account_enabled: true}
+  faults:
+    - {kind: UNAVAILABLE, integration: entra, operation: investigate, times: 5}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - isolate_endpoint:TH-SRV-0310
+    - block_hash:8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c
+    - revoke_sessions:jsmith@example.com
+  degraded_sources: [entra]
+  containment: CONTAINED
