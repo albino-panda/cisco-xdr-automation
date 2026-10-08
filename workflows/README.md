@@ -2,11 +2,11 @@
 
 One directory per incident type. Each holds a `README.md` for analysts. A workflow not yet migrated also holds its legacy `workflow.yaml` specification and `scenarios/`. Exported XDR workflow JSON goes next to them as `workflow.export.json`.
 
-## Migrated workflows (Phases 2 and 3)
+## Migrated workflows (Phases 2 to 4)
 
 These run on the workflow framework (`src/xdr_response/workflows/<x_snake>/`); their scenarios are in `tests/fixtures/workflows/<id>/`. ATT&CK ids, recommended actions, integrations and scenario counts are in the generated index [`docs/workflows/README.md`](../docs/workflows/README.md).
 
-A hand-off is a suggestion in the run notes, the workflow summary and the analyst notification: "run account-takeover for jsmith@example.com", with the record ids that justify it. It never starts the other workflow and never changes the package. When triggers overlap, the entry-vector workflow (phishing, password-spray, mfa-fatigue, mail-bombing, bec) handles the incident and hands the account off to account-takeover (architecture 14.10.2). The subjects of a hand-off are the entity the target workflow starts from: an account for `account-takeover`, an endpoint hostname for `persistence`, `unauthorized-rmm` and `credential-dumping`, a file hash for `malware`, a mailbox for `phishing` (14.11.2).
+A hand-off is a suggestion in the run notes, the workflow summary and the analyst notification: "run account-takeover for jsmith@example.com", with the record ids that justify it. It never starts the other workflow and never changes the package. When triggers overlap, the entry-vector workflow (phishing, password-spray, mfa-fatigue, mail-bombing, bec, suspicious-authentication) handles the incident and hands the account off to account-takeover (architecture 14.10.2, 14.12.2). In general a workflow outranks every workflow it hands off to, so the hand-off is still suggested when both match (14.11.2). The subjects of a hand-off are the entity the target workflow starts from: an account for `account-takeover`, an endpoint hostname for `persistence`, `unauthorized-rmm` and `credential-dumping`, a file hash for `malware`, a mailbox for `phishing` (14.11.2).
 
 | Workflow | Phase | Hands off to (`handoff_to`; when its evidence points there) |
 |---|---|---|
@@ -23,17 +23,18 @@ A hand-off is a suggestion in the run notes, the workflow summary and the analys
 | [`lateral-movement`](./lateral-movement/README.md) | 3 | `account-takeover` (an account used for or tied to the movement is compromised), `credential-dumping` (credential access reported on a host of the movement) |
 | [`persistence`](./persistence/README.md) | 3 | - |
 | [`unauthorized-rmm`](./unauthorized-rmm/README.md) | 3 | `persistence` (the tool persists as a service, task or run key), `account-takeover` (a user of an affected endpoint shows high or confirmed identity risk, or a high-severity anomaly) |
+| [`c2`](./c2/README.md) | 4 | `malware` (a flagged beaconing process: scope its file across the estate, quarantine it and block its hash) |
+| [`dns-tunneling`](./dns-tunneling/README.md) | 4 | - |
+| [`exfiltration`](./exfiltration/README.md) | 4 | `account-takeover` (an account that drives the transfer is compromised) |
+| [`suspicious-authentication`](./suspicious-authentication/README.md) | 4 | `account-takeover` (a suspicious sign-in concluded as a likely compromise) |
+| [`cloud-compromise`](./cloud-compromise/README.md) | 4 | `account-takeover` (a compromised cloud account: review mailbox rules, sign-ins and endpoints beyond the cloud activity) |
 
-## Legacy specs (Phases 4 and 5)
+## Legacy specs (Phase 5)
 
 | Workflow | Severity | ATT&CK | Containment |
 |---|---|---|---|
-| [`c2`](./c2/README.md) | high | T1071.001, T1573, T1568.002 | `block-domain`, `block-ip`, `isolate-endpoint` |
-| [`dns-tunneling`](./dns-tunneling/README.md) | high | T1071.004, T1572 | `block-domain`, `isolate-endpoint` |
 | [`privilege-escalation`](./privilege-escalation/README.md) | high | T1068, T1548.002, T1098 | `isolate-endpoint`, `revoke-session`, `disable-user` |
-| [`exfiltration`](./exfiltration/README.md) | critical | T1041, T1567.002, T1048 | `block-domain`, `block-ip`, `isolate-endpoint`, `disable-user` |
 | [`vulnerability-exploitation`](./vulnerability-exploitation/README.md) | high | T1190, T1203 | `block-ip`, `block-url`, `isolate-endpoint` |
-| [`cloud-compromise`](./cloud-compromise/README.md) | high | T1078.004, T1098.001, T1528, T1530 | `revoke-session`, `disable-user`, `block-ip` |
 | [`web-attacks`](./web-attacks/README.md) | medium | T1190, T1595.002, T1505.003 | `block-ip`, `block-url`, `isolate-endpoint` |
 
 ## Common shape

@@ -59,7 +59,9 @@ techniques:
   - malicious-powershell
 - id: T1041
   name: Exfiltration Over C2 Channel
-  tactics: []
+  tactics:
+  - id: TA0010
+    name: Exfiltration
   workflows:
   - exfiltration
 - id: T1047
@@ -72,7 +74,9 @@ techniques:
   - malicious-powershell
 - id: T1048
   name: Exfiltration Over Alternative Protocol
-  tactics: []
+  tactics:
+  - id: TA0010
+    name: Exfiltration
   workflows:
   - exfiltration
 - id: T1053.005
@@ -109,13 +113,17 @@ techniques:
   workflows:
   - ransomware
 - id: T1071.001
-  name: 'Application Layer Protocol: Web Protocols'
-  tactics: []
+  name: Web Protocols
+  tactics:
+  - id: TA0011
+    name: Command and Control
   workflows:
   - c2
 - id: T1071.004
-  name: 'Application Layer Protocol: DNS'
-  tactics: []
+  name: DNS
+  tactics:
+  - id: TA0011
+    name: Command and Control
   workflows:
   - dns-tunneling
 - id: T1078
@@ -139,6 +147,14 @@ techniques:
   - mfa-fatigue
   - password-spray
   - phishing
+  - suspicious-authentication
+- id: T1090.003
+  name: Multi-hop Proxy
+  tactics:
+  - id: TA0011
+    name: Command and Control
+  workflows:
+  - suspicious-authentication
 - id: T1098
   name: Account Manipulation
   tactics: []
@@ -146,7 +162,9 @@ techniques:
   - privilege-escalation
 - id: T1098.001
   name: Additional Cloud Credentials
-  tactics: []
+  tactics:
+  - id: TA0003
+    name: Persistence
   workflows:
   - cloud-compromise
 - id: T1098.003
@@ -155,6 +173,7 @@ techniques:
   - id: TA0003
     name: Persistence
   workflows:
+  - cloud-compromise
   - mfa-fatigue
 - id: T1105
   name: Ingress Tool Transfer
@@ -282,12 +301,9 @@ techniques:
   - web-attacks
 - id: T1528
   name: Steal Application Access Token
-  tactics: []
-  workflows:
-  - cloud-compromise
-- id: T1530
-  name: Data from Cloud Storage
-  tactics: []
+  tactics:
+  - id: TA0006
+    name: Credential Access
   workflows:
   - cloud-compromise
 - id: T1534
@@ -362,12 +378,16 @@ techniques:
   - phishing
 - id: T1567.002
   name: Exfiltration to Cloud Storage
-  tactics: []
+  tactics:
+  - id: TA0010
+    name: Exfiltration
   workflows:
   - exfiltration
 - id: T1568.002
   name: Domain Generation Algorithms
-  tactics: []
+  tactics:
+  - id: TA0011
+    name: Command and Control
   workflows:
   - c2
 - id: T1569.002
@@ -387,12 +407,16 @@ techniques:
   - ransomware
 - id: T1572
   name: Protocol Tunneling
-  tactics: []
+  tactics:
+  - id: TA0011
+    name: Command and Control
   workflows:
   - dns-tunneling
 - id: T1573
   name: Encrypted Channel
-  tactics: []
+  tactics:
+  - id: TA0011
+    name: Command and Control
   workflows:
   - c2
 - id: T1595.002
