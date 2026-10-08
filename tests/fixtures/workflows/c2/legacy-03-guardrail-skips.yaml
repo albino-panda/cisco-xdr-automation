@@ -1,0 +1,73 @@
+# c2 workflow scenario; fake lab data only.
+schema: 1
+name: legacy-03-guardrail-skips
+workflow: c2
+description: >-
+  Migrated from legacy scenario 03. The domain controller DC-02 beacons to beacon-relay.test through
+  an internal relay (10.20.30.40). The own-domain host updates.example.com also comes back MALICIOUS
+  with a Command and Control category. The external domain is blocked. The allow-listed domain and
+  the internal relay IP are built and shown as excluded targets with their reasons (never executed,
+  never silently dropped). The domain controller's isolation stays proposed with ELEVATED approval
+  and a visible Domain controller warning; the SOC lead approves.
+tags: [legacy, true_positive, critical_asset, approve_all]
+legacy_source: workflows/c2/scenarios/03-guardrail-skips.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-C2-0003
+  title: Beaconing to beacon-relay.test through an internal relay
+  severity: HIGH
+  workflow_id: c2
+  observables:
+    - {type: domain, value: beacon-relay.test}
+    - {type: domain, value: updates.example.com}
+    - {type: ip, value: 10.20.30.40}
+    - {type: hostname, value: dc-02}
+environment:
+  reputations:
+    - {type: domain, value: beacon-relay.test, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [umbrella, virustotal], summary: "command and control"}
+    - {type: domain, value: updates.example.com, verdict: MALICIOUS, risk_score: 80, confidence: 70,
+       integrations: [umbrella, virustotal], summary: "command and control"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-02
+      record: {kind: endpoint, hostname: DC-02, connector_guid: 0f3c2a10-0000-4000-8000-0000000d0002,
+               os: Windows 11, groups: [Domain Controllers], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-02
+      record: {kind: detection, detection_id: det-dc-02, name: W32.C2.Beacon, verdict: MALICIOUS,
+               severity: HIGH, endpoint: DC-02, status: active, first_seen: "2026-01-15T10:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-02
+      record: {kind: dns_query, endpoint: DC-02, domain: beacon-relay.test, query_type: A,
+               response_ips: [], count: 37, categories: [Command and Control], action: allowed,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-02
+      record: {kind: dns_query, endpoint: DC-02, domain: updates.example.com, query_type: A,
+               response_ips: [], count: 4, categories: [Command and Control], action: allowed,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: DC-02
+      record: {kind: network_connection, endpoint: DC-02, remote_ip: 10.20.30.40, remote_port: 443, protocol: tcp,
+               direction: outbound, count: 37, action: allowed, verdict: MALICIOUS,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - block_domain:beacon-relay.test
+    - isolate_endpoint:DC-02
+  elevated:
+    - isolate_endpoint:DC-02
+  excluded:
+    - block_domain:updates.example.com
+    - block_ip:10.20.30.40
+  warnings: [ELEVATED APPROVAL REQUIRED, Domain controller]
+  containment: CONTAINED
+  controls: 2

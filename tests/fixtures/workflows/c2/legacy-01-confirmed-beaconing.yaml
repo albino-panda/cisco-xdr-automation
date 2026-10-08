@@ -1,0 +1,78 @@
+# c2 workflow scenario; fake lab data only.
+schema: 1
+name: legacy-01-confirmed-beaconing
+workflow: c2
+description: >-
+  Migrated from legacy scenario 01. Umbrella flags cdn-update.test as Command and Control and Secure
+  Endpoint shows a malicious beacon detection on WKS-0142, which resolves the domain every 60
+  seconds and connects to its IP (renumbered from the legacy 203.0.113.45, which lies in the lab's
+  production range, to 198.51.100.145). The package blocks the domain and the IP and isolates
+  WKS-0142 (target: host name, connector GUID as a parameter). WKS-0177 queried the domain once and
+  has no detection: it is investigated, not isolated, and listed as considered.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/c2/scenarios/01-confirmed-beaconing.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-C2-0001
+  title: Periodic HTTPS beaconing from wks-0142 to cdn-update.test
+  severity: HIGH
+  source: umbrella
+  workflow_id: c2
+  observables:
+    - {type: domain, value: cdn-update.test}
+    - {type: ip, value: 198.51.100.145}
+    - {type: hostname, value: wks-0142}
+    - {type: hostname, value: wks-0177}
+  trigger: {source: umbrella, beacon_interval_seconds: 60}
+environment:
+  reputations:
+    - {type: domain, value: cdn-update.test, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [umbrella, virustotal], summary: "command and control, malware"}
+    - {type: ip, value: 198.51.100.145, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [umbrella], summary: "C2 server"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0142
+      record: {kind: endpoint, hostname: WKS-0142, connector_guid: 0f3c2a10-0000-4000-8000-000000000142,
+               os: Windows 11, groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0142
+      record: {kind: detection, detection_id: det-wks-0142, name: W32.C2.Beacon, verdict: MALICIOUS,
+               severity: HIGH, endpoint: WKS-0142, status: active, first_seen: "2026-01-15T10:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0142
+      record: {kind: dns_query, endpoint: WKS-0142, domain: cdn-update.test, query_type: A,
+               response_ips: [198.51.100.145], count: 60, categories: [Command and Control, Malware], action: allowed,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0142
+      record: {kind: network_connection, endpoint: WKS-0142, remote_ip: 198.51.100.145, remote_port: 443, protocol: tcp,
+               direction: outbound, domain: cdn-update.test, count: 60, action: allowed, verdict: MALICIOUS,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0177
+      record: {kind: endpoint, hostname: WKS-0177, connector_guid: 0f3c2a10-0000-4000-8000-000000000177,
+               os: Windows 11, groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0177
+      record: {kind: dns_query, endpoint: WKS-0177, domain: cdn-update.test, query_type: A,
+               response_ips: [198.51.100.145], count: 1, categories: [], action: allowed,
+               first_seen: "2026-01-15T10:30:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions:
+    - block_domain:cdn-update.test
+    - block_ip:198.51.100.145
+    - isolate_endpoint:WKS-0142
+  elevated: []
+  considered:
+    - isolate_endpoint:WKS-0177
+  containment: CONTAINED
+  controls: 3

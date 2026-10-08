@@ -1,0 +1,73 @@
+# c2 workflow scenario; fake lab data only.
+schema: 1
+name: legacy-06-shared-hosting-ip
+workflow: c2
+description: >-
+  Migrated from legacy scenario 06. The C2 domain static-assets.test is MALICIOUS but resolves to a
+  CDN address the incident source lists in trigger.shared_infrastructure_ips. The domain is blocked
+  and the infected WKS-0520 isolated; the shared IP is not blocked and is listed as considered.
+  KIOSK-0007 is infected too, but its connector policy does not allow isolation: it is a manual step
+  (contain it on the network by hand), never silently skipped.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/c2/scenarios/06-shared-hosting-ip.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-C2-0006
+  title: Encrypted beaconing from wks-0520 to static-assets.test behind a CDN
+  severity: HIGH
+  workflow_id: c2
+  observables:
+    - {type: domain, value: static-assets.test}
+    - {type: ip, value: 198.51.100.80}
+    - {type: hostname, value: wks-0520}
+    - {type: hostname, value: kiosk-0007}
+  trigger: {shared_infrastructure_ips: [198.51.100.80]}
+environment:
+  reputations:
+    - {type: domain, value: static-assets.test, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [umbrella, virustotal], summary: "command and control"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0520
+      record: {kind: endpoint, hostname: WKS-0520, connector_guid: 0f3c2a10-0000-4000-8000-000000000520,
+               os: Windows 11, groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0520
+      record: {kind: detection, detection_id: det-wks-0520, name: W32.C2.Beacon, verdict: MALICIOUS,
+               severity: HIGH, endpoint: WKS-0520, status: active, first_seen: "2026-01-15T10:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0520
+      record: {kind: network_connection, endpoint: WKS-0520, remote_ip: 198.51.100.80, remote_port: 443, protocol: tcp,
+               direction: outbound, domain: static-assets.test, count: 96, action: allowed, verdict: MALICIOUS,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: KIOSK-0007
+      record: {kind: endpoint, hostname: KIOSK-0007, connector_guid: 0f3c2a10-0000-4000-8000-000000000007,
+               os: Windows 11, groups: [Workstations], isolation_capable: false, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: KIOSK-0007
+      record: {kind: detection, detection_id: det-kiosk-0007, name: W32.C2.Beacon, verdict: MALICIOUS,
+               severity: HIGH, endpoint: KIOSK-0007, status: active, first_seen: "2026-01-15T10:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: KIOSK-0007
+      record: {kind: network_connection, endpoint: KIOSK-0007, remote_ip: 198.51.100.80, remote_port: 443, protocol: tcp,
+               direction: outbound, domain: static-assets.test, count: 96, action: allowed, verdict: MALICIOUS,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions:
+    - block_domain:static-assets.test
+    - isolate_endpoint:WKS-0520
+  considered:
+    - block_ip:198.51.100.80
+  manual_steps:
+    - isolate_endpoint:KIOSK-0007
+  containment: CONTAINED
+  controls: 2

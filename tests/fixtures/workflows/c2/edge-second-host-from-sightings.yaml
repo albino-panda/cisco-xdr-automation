@@ -1,0 +1,80 @@
+# c2 workflow scenario; fake lab data only.
+schema: 1
+name: edge-second-host-from-sightings
+workflow: c2
+description: >-
+  Finding the other endpoints that talk to the C2 domain. The incident names TH-LT-1047 and beacon-
+  gate.test; the Defender XDR enterprise search finds TH-LT-2210 and TH-LT-2211 resolving the same
+  domain. The workflow investigates both: TH-LT-2210 has an active malicious detection and is
+  isolated with TH-LT-1047, while TH-LT-2211 has no malicious activity of its own and is listed as
+  considered (the domain block cuts its channel).
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], microsoft_cloud: [network]}
+incident:
+  incident_id: XDR-C2-0012
+  title: Beaconing from TH-LT-1047 to beacon-gate.test
+  severity: HIGH
+  workflow_id: c2
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+    - {type: domain, value: beacon-gate.test}
+  trigger: {mitre_techniques: [T1071.001]}
+environment:
+  reputations:
+    - {type: domain, value: beacon-gate.test, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [umbrella, virustotal], summary: "command and control"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 0f3c2a10-0000-4000-8000-000000001047,
+               os: Windows 11, groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-th-lt-1047, name: Sample.C2.Beacon, verdict: MALICIOUS,
+               severity: HIGH, endpoint: TH-LT-1047, status: active, first_seen: "2026-01-15T10:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: dns_query, endpoint: TH-LT-1047, domain: beacon-gate.test, query_type: A,
+               response_ips: [], count: 90, categories: [], action: allowed,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:30:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_domain_enterprise
+      subject: beacon-gate.test
+      record: {kind: dns_query, endpoint: TH-LT-2210, domain: beacon-gate.test, query_type: A,
+               response_ips: [], count: 40, categories: [], action: allowed,
+               first_seen: "2026-01-15T10:10:00Z", last_seen: "2026-01-15T11:30:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_domain_enterprise
+      subject: beacon-gate.test
+      record: {kind: dns_query, endpoint: TH-LT-2211, domain: beacon-gate.test, query_type: A,
+               response_ips: [], count: 1, categories: [], action: allowed,
+               first_seen: "2026-01-15T11:02:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: endpoint, hostname: TH-LT-2210, connector_guid: 0f3c2a10-0000-4000-8000-000000002210,
+               os: Windows 11, groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: detection, detection_id: det-th-lt-2210, name: Sample.C2.Beacon, verdict: MALICIOUS,
+               severity: HIGH, endpoint: TH-LT-2210, status: active, first_seen: "2026-01-15T10:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2211
+      record: {kind: endpoint, hostname: TH-LT-2211, connector_guid: 0f3c2a10-0000-4000-8000-000000002211,
+               os: Windows 11, groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions:
+    - block_domain:beacon-gate.test
+    - isolate_endpoint:TH-LT-1047
+    - isolate_endpoint:TH-LT-2210
+  considered:
+    - isolate_endpoint:TH-LT-2211
+  containment: CONTAINED
+  controls: 3

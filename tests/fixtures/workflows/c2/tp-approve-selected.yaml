@@ -1,0 +1,85 @@
+# c2 workflow scenario; fake lab data only.
+schema: 1
+name: tp-approve-selected
+workflow: c2
+description: >-
+  True positive on TH-LT-1047 (same beacon as tp-approve-all). The analyst approves only the domain
+  block, the IP block and the isolation; the URL block and the process termination are rejected (the
+  endpoint is isolated, so the process cannot reach the C2 server). Only the selected actions
+  execute; the others are reported REJECTED_BY_ANALYST and nothing else changes.
+tags: [true_positive, approve_selected]
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-C2-0002
+  title: Periodic HTTPS beaconing from TH-LT-1047 to beacon-gate.test
+  severity: HIGH
+  workflow_id: c2
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+    - {type: domain, value: beacon-gate.test}
+  users: [jsmith@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1071.001]}
+environment:
+  reputations:
+    - {type: domain, value: beacon-gate.test, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [umbrella, virustotal], summary: "command and control"}
+    - {type: ip, value: 198.51.100.45, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [umbrella], summary: "C2 server"}
+    - {type: url, value: "https://beacon-gate.test/api/checkin", verdict: MALICIOUS, risk_score: 85,
+       confidence: 80, integrations: [umbrella, virustotal], summary: "C2 check-in path"}
+    - {type: sha256, value: c2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0d, verdict: MALICIOUS,
+       risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal], summary: "beacon implant"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, groups: [Workstations], users: [jsmith@example.com], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-c2-1047, name: Sample.C2.Beacon, verdict: MALICIOUS, severity: HIGH,
+               endpoint: TH-LT-1047, user: jsmith@example.com, status: active, process_name: svc_update.exe,
+               sha256: c2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0d, mitre_techniques: [T1071.001],
+               first_seen: "2026-01-15T10:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: process_event, event_id: evt-c2-1047-1, endpoint: TH-LT-1047, timestamp: "2026-01-15T09:58:00Z",
+               event_type: process_start, process_name: svc_update.exe, pid: 3120, parent_process_name: explorer.exe,
+               parent_pid: 1180, sha256: c2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0d,
+               user: jsmith@example.com}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: dns_query, endpoint: TH-LT-1047, domain: beacon-gate.test, query_type: A,
+               response_ips: [198.51.100.45], count: 96, categories: [Command and Control], action: allowed,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:35:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: network_connection, endpoint: TH-LT-1047, user: jsmith@example.com, remote_ip: 198.51.100.45,
+               remote_port: 443, protocol: tcp, direction: outbound, domain: beacon-gate.test,
+               url: "https://beacon-gate.test/api/checkin", process_name: svc_update.exe, pid: 3120,
+               sha256: c2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0d, count: 96, action: allowed,
+               verdict: MALICIOUS, first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:35:00Z"}
+analyst: {decision: APPROVE_SELECTED, approvers: [analyst],
+          select: [block_domain:beacon-gate.test, block_ip:198.51.100.45, isolate_endpoint:TH-LT-1047],
+          comment: the desktop team reimages the endpoint}
+expect:
+  actions:
+    - block_domain:beacon-gate.test
+    - block_ip:198.51.100.45
+    - "block_url:https://beacon-gate.test/api/checkin"
+    - isolate_endpoint:TH-LT-1047
+    - terminate_process:TH-LT-1047/3120
+  results:
+    block_domain:beacon-gate.test: SUCCESS
+    block_ip:198.51.100.45: SUCCESS
+    isolate_endpoint:TH-LT-1047: SUCCESS
+    "block_url:https://beacon-gate.test/api/checkin": REJECTED_BY_ANALYST
+    terminate_process:TH-LT-1047/3120: REJECTED_BY_ANALYST
+  containment: CONTAINED
+  controls: 3

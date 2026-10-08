@@ -1,0 +1,187 @@
+# c2 workflow scenario; fake lab data only.
+schema: 1
+name: legacy-04-blast-radius-many-hosts
+workflow: c2
+description: >-
+  Migrated from legacy scenario 04. Six workstations beacon to the same C2 domain, each with a
+  malicious detection. Six isolations exceed blast_radius.max_endpoints (5), so every isolation
+  stays proposed with ELEVATED approval and a blast-radius warning (never split or dropped) and the
+  SOC lead approves. The domain and IP blocks stay STANDARD: they cut the channel for all six hosts.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/c2/scenarios/04-blast-radius-many-hosts.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-C2-0004
+  title: Multiple workstations beaconing to sync-api.test
+  severity: CRITICAL
+  source: umbrella
+  workflow_id: c2
+  observables:
+    - {type: domain, value: sync-api.test}
+    - {type: ip, value: 192.0.2.66}
+    - {type: hostname, value: wks-0301}
+    - {type: hostname, value: wks-0302}
+    - {type: hostname, value: wks-0303}
+    - {type: hostname, value: wks-0304}
+    - {type: hostname, value: wks-0305}
+    - {type: hostname, value: wks-0306}
+  trigger: {source: umbrella}
+environment:
+  reputations:
+    - {type: domain, value: sync-api.test, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [umbrella, virustotal], summary: "command and control"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0301
+      record: {kind: endpoint, hostname: WKS-0301, connector_guid: 0f3c2a10-0000-4000-8000-000000000301,
+               os: Windows 11, groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0301
+      record: {kind: detection, detection_id: det-wks-0301, name: W32.C2.Beacon, verdict: MALICIOUS,
+               severity: HIGH, endpoint: WKS-0301, status: active, first_seen: "2026-01-15T10:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0301
+      record: {kind: dns_query, endpoint: WKS-0301, domain: sync-api.test, query_type: A,
+               response_ips: [192.0.2.66], count: 60, categories: [Command and Control], action: allowed,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0301
+      record: {kind: network_connection, endpoint: WKS-0301, remote_ip: 192.0.2.66, remote_port: 443, protocol: tcp,
+               direction: outbound, domain: sync-api.test, count: 60, action: allowed, verdict: MALICIOUS,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0302
+      record: {kind: endpoint, hostname: WKS-0302, connector_guid: 0f3c2a10-0000-4000-8000-000000000302,
+               os: Windows 11, groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0302
+      record: {kind: detection, detection_id: det-wks-0302, name: W32.C2.Beacon, verdict: MALICIOUS,
+               severity: HIGH, endpoint: WKS-0302, status: active, first_seen: "2026-01-15T10:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0302
+      record: {kind: dns_query, endpoint: WKS-0302, domain: sync-api.test, query_type: A,
+               response_ips: [192.0.2.66], count: 60, categories: [Command and Control], action: allowed,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0302
+      record: {kind: network_connection, endpoint: WKS-0302, remote_ip: 192.0.2.66, remote_port: 443, protocol: tcp,
+               direction: outbound, domain: sync-api.test, count: 60, action: allowed, verdict: MALICIOUS,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0303
+      record: {kind: endpoint, hostname: WKS-0303, connector_guid: 0f3c2a10-0000-4000-8000-000000000303,
+               os: Windows 11, groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0303
+      record: {kind: detection, detection_id: det-wks-0303, name: W32.C2.Beacon, verdict: MALICIOUS,
+               severity: HIGH, endpoint: WKS-0303, status: active, first_seen: "2026-01-15T10:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0303
+      record: {kind: dns_query, endpoint: WKS-0303, domain: sync-api.test, query_type: A,
+               response_ips: [192.0.2.66], count: 60, categories: [Command and Control], action: allowed,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0303
+      record: {kind: network_connection, endpoint: WKS-0303, remote_ip: 192.0.2.66, remote_port: 443, protocol: tcp,
+               direction: outbound, domain: sync-api.test, count: 60, action: allowed, verdict: MALICIOUS,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0304
+      record: {kind: endpoint, hostname: WKS-0304, connector_guid: 0f3c2a10-0000-4000-8000-000000000304,
+               os: Windows 11, groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0304
+      record: {kind: detection, detection_id: det-wks-0304, name: W32.C2.Beacon, verdict: MALICIOUS,
+               severity: HIGH, endpoint: WKS-0304, status: active, first_seen: "2026-01-15T10:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0304
+      record: {kind: dns_query, endpoint: WKS-0304, domain: sync-api.test, query_type: A,
+               response_ips: [192.0.2.66], count: 60, categories: [Command and Control], action: allowed,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0304
+      record: {kind: network_connection, endpoint: WKS-0304, remote_ip: 192.0.2.66, remote_port: 443, protocol: tcp,
+               direction: outbound, domain: sync-api.test, count: 60, action: allowed, verdict: MALICIOUS,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0305
+      record: {kind: endpoint, hostname: WKS-0305, connector_guid: 0f3c2a10-0000-4000-8000-000000000305,
+               os: Windows 11, groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0305
+      record: {kind: detection, detection_id: det-wks-0305, name: W32.C2.Beacon, verdict: MALICIOUS,
+               severity: HIGH, endpoint: WKS-0305, status: active, first_seen: "2026-01-15T10:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0305
+      record: {kind: dns_query, endpoint: WKS-0305, domain: sync-api.test, query_type: A,
+               response_ips: [192.0.2.66], count: 60, categories: [Command and Control], action: allowed,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0305
+      record: {kind: network_connection, endpoint: WKS-0305, remote_ip: 192.0.2.66, remote_port: 443, protocol: tcp,
+               direction: outbound, domain: sync-api.test, count: 60, action: allowed, verdict: MALICIOUS,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0306
+      record: {kind: endpoint, hostname: WKS-0306, connector_guid: 0f3c2a10-0000-4000-8000-000000000306,
+               os: Windows 11, groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0306
+      record: {kind: detection, detection_id: det-wks-0306, name: W32.C2.Beacon, verdict: MALICIOUS,
+               severity: HIGH, endpoint: WKS-0306, status: active, first_seen: "2026-01-15T10:05:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0306
+      record: {kind: dns_query, endpoint: WKS-0306, domain: sync-api.test, query_type: A,
+               response_ips: [192.0.2.66], count: 60, categories: [Command and Control], action: allowed,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0306
+      record: {kind: network_connection, endpoint: WKS-0306, remote_ip: 192.0.2.66, remote_port: 443, protocol: tcp,
+               direction: outbound, domain: sync-api.test, count: 60, action: allowed, verdict: MALICIOUS,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - block_domain:sync-api.test
+    - block_ip:192.0.2.66
+    - isolate_endpoint:WKS-0301
+    - isolate_endpoint:WKS-0302
+    - isolate_endpoint:WKS-0303
+    - isolate_endpoint:WKS-0304
+    - isolate_endpoint:WKS-0305
+    - isolate_endpoint:WKS-0306
+  elevated:
+    - isolate_endpoint:WKS-0301
+    - isolate_endpoint:WKS-0302
+    - isolate_endpoint:WKS-0303
+    - isolate_endpoint:WKS-0304
+    - isolate_endpoint:WKS-0305
+    - isolate_endpoint:WKS-0306
+  warnings: [ELEVATED APPROVAL REQUIRED]
+  containment: CONTAINED
+  controls: 8

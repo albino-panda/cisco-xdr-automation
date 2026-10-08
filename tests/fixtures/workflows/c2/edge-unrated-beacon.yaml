@@ -1,0 +1,52 @@
+# c2 workflow scenario; fake lab data only.
+schema: 1
+name: edge-unrated-beacon
+workflow: c2
+description: >-
+  A process on TH-LT-3310 beacons every 60 seconds to cdn-sync.test (198.51.100.140), but no source
+  rates the domain or the IP and the endpoint has no detection. Nothing is proposed: periodicity
+  alone never blocks or isolates (update agents and SaaS heartbeats beacon too). Both destinations
+  are listed as considered with the contact records, so the analyst sees the beacon and decides.
+tags: [edge_case]
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-C2-0010
+  title: Beaconing from TH-LT-3310 to cdn-sync.test
+  severity: MEDIUM
+  source: secure_cloud_analytics
+  workflow_id: c2
+  observables:
+    - {type: hostname, value: TH-LT-3310}
+    - {type: domain, value: cdn-sync.test}
+  trigger: {source: secure_cloud_analytics}
+environment:
+  reputations: []
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3310
+      record: {kind: endpoint, hostname: TH-LT-3310, connector_guid: 0f3c2a10-0000-4000-8000-000000003310,
+               os: Windows 11, groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3310
+      record: {kind: dns_query, endpoint: TH-LT-3310, domain: cdn-sync.test, query_type: A,
+               response_ips: [198.51.100.140], count: 95, categories: [], action: allowed,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:34:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3310
+      record: {kind: network_connection, endpoint: TH-LT-3310, remote_ip: 198.51.100.140, remote_port: 443, protocol: tcp,
+               direction: outbound, domain: cdn-sync.test,
+               process_name: helper.exe, pid: 7710, count: 95, action: allowed, verdict: UNKNOWN,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:34:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  considered:
+    - block_domain:cdn-sync.test
+    - block_ip:198.51.100.140
+  manual_steps: []
+  handoffs: []
+  final_state: NOT_STARTED

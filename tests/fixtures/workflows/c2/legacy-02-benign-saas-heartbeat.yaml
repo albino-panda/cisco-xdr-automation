@@ -1,0 +1,54 @@
+# c2 workflow scenario; fake lab data only.
+schema: 1
+name: legacy-02-benign-saas-heartbeat
+workflow: c2
+description: >-
+  Migrated from legacy scenario 02. A beaconing detector fires on a regular 300 second check-in from
+  an update agent on WKS-0230. The domain is rated CLEAN and the host has no detection, so nothing
+  is proposed, nothing is listed as considered and the incident stays NOT_STARTED.
+tags: [legacy, benign]
+legacy_source: workflows/c2/scenarios/02-benign-saas-heartbeat.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-C2-0002
+  title: Regular 300 second connections from wks-0230 to telemetry.saas-vendor.test
+  severity: MEDIUM
+  source: splunk
+  workflow_id: c2
+  observables:
+    - {type: domain, value: telemetry.saas-vendor.test}
+    - {type: ip, value: 198.51.100.20}
+    - {type: hostname, value: wks-0230}
+  trigger: {source: splunk, beacon_interval_seconds: 300}
+environment:
+  reputations:
+    - {type: domain, value: telemetry.saas-vendor.test, verdict: CLEAN, risk_score: 5, confidence: 80,
+       integrations: [umbrella, virustotal], summary: "software updates"}
+    - {type: ip, value: 198.51.100.20, verdict: CLEAN, risk_score: 5, confidence: 70,
+       integrations: [umbrella], summary: "SaaS provider"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0230
+      record: {kind: endpoint, hostname: WKS-0230, connector_guid: 0f3c2a10-0000-4000-8000-000000000230,
+               os: Windows 11, groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0230
+      record: {kind: dns_query, endpoint: WKS-0230, domain: telemetry.saas-vendor.test, query_type: A,
+               response_ips: [198.51.100.20], count: 12, categories: [Software/Technology], action: allowed,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WKS-0230
+      record: {kind: network_connection, endpoint: WKS-0230, remote_ip: 198.51.100.20, remote_port: 443, protocol: tcp,
+               direction: outbound, domain: telemetry.saas-vendor.test,
+               process_name: agent_update.exe, pid: 2040, count: 12, action: allowed, verdict: UNKNOWN,
+               first_seen: "2026-01-15T10:00:00Z", last_seen: "2026-01-15T11:00:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  considered: []
+  manual_steps: []
+  final_state: NOT_STARTED
