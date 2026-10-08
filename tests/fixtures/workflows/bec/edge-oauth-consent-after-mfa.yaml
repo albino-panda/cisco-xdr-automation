@@ -1,0 +1,57 @@
+# BEC workflow scenario; fake lab data only (example.com, documentation IPs, fake ids).
+schema: 1
+name: edge-oauth-consent-after-mfa
+workflow: bec
+description: >-
+  Edge case. A mailbox approved an MFA prompt from an IP rated malicious and then consented an
+  unverified OAuth application with mailbox read and send permissions. No mailbox rule and no fraud
+  message are seen yet. The approved MFA prompt is identity compromise evidence and the consent is
+  ongoing abuse, so revocation and disable are both proposed; revoking the OAuth consent stays a
+  manual step (no VERIFIED write endpoint).
+tags: [edge_case, true_positive]
+mode: both
+suite: {entra: [identity], secure_email: [email], secure_endpoint: [endpoint], umbrella: [network],
+        cisco_xdr: [intel], virustotal: [intel]}
+incident:
+  incident_id: XDR-BEC-0012
+  title: Suspicious OAuth consent on a finance mailbox after MFA approval
+  severity: HIGH
+  workflow_id: bec
+  observables:
+    - {type: user, value: kpatel@example.com}
+  users: [kpatel@example.com]
+  trigger: {source: microsoft_cloud}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.200, verdict: MALICIOUS, risk_score: 80, confidence: 75,
+       integrations: [cisco_xdr], summary: adversary-in-the-middle proxy}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: kpatel@example.com
+      record: {kind: user_profile, user: kpatel@example.com, department: Finance, groups: [Finance-AP],
+               risk_level: medium, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: kpatel@example.com
+      record: {kind: cloud_app, app_id: 11111111-2222-4333-8444-555555555555, display_name: Invoice Sync Pro,
+               publisher_verified: false, permissions: [Mail.ReadWrite, Mail.Send, offline_access],
+               consent_type: user, consented_by: kpatel@example.com, created_at: "2026-01-15T10:12:00Z"}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: kpatel@example.com
+      record: {kind: mfa_event, user: kpatel@example.com, timestamp: "2026-01-15T10:05:00Z", method: push,
+               result: approved, ip: 198.51.100.200, app: Office 365}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: kpatel@example.com
+      record: {kind: sign_in, sign_in_id: si-bec-0121, user: kpatel@example.com, timestamp: "2026-01-15T10:05:30Z",
+               ip: 198.51.100.200, country: Unknown, app: Office 365, result: success, mfa_result: satisfied}
+expect:
+  manual_steps: ["OAuth consent 11111111-2222-4333-8444-555555555555 of kpatel@example.com"]
+  handoffs: ["account-takeover:kpatel@example.com"]
+  package: true
+  actions:
+    - revoke_sessions:kpatel@example.com
+    - disable_user:kpatel@example.com
+  elevated: []

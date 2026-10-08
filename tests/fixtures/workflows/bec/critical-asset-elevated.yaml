@@ -1,0 +1,64 @@
+# BEC workflow scenario; fake lab data only (example.com, documentation IPs, fake ids).
+schema: 1
+name: critical-asset-elevated
+workflow: bec
+description: >-
+  An executive mailbox (group Executives) is compromised: Entra rates the user high risk, it signed
+  in from an IP rated malicious, redirects mail outside the organisation and sent a payment request.
+  Revoking its sessions and disabling it are never skipped: both stay proposed with ELEVATED approval
+  and a visible warning, an analyst alone cannot approve them and the lead approves. Quarantining the
+  message is a normal-approval action.
+tags: [critical_asset, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], secure_email: [email], secure_endpoint: [endpoint], umbrella: [network],
+        cisco_xdr: [intel], virustotal: [intel]}
+incident:
+  incident_id: XDR-BEC-0006
+  title: Executive mailbox redirecting mail and requesting a payment
+  severity: CRITICAL
+  workflow_id: bec
+  observables:
+    - {type: email_message_id, value: etd-msg-bec-0006}
+    - {type: email_address, value: exec-01@example.com}
+  users: [exec-01@example.com]
+  trigger: {source: secure_email, mitre_techniques: [T1534, T1114.003]}
+environment:
+  reputations:
+    - {type: ip, value: 192.0.2.77, verdict: MALICIOUS, risk_score: 80, confidence: 75,
+       integrations: [cisco_xdr], summary: anonymising proxy}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: exec-01@example.com
+      record: {kind: user_profile, user: exec-01@example.com, department: Executive, groups: [Executives],
+               risk_level: high, risk_state: at_risk, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: exec-01@example.com
+      record: {kind: mailbox_rule, mailbox: exec-01@example.com, rule_id: rule-bec-0006, name: Assistant,
+               enabled: true, redirect_to: [assistant@remit-desk.example], created_at: "2026-01-15T08:50:00Z"}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: exec-01@example.com
+      record: {kind: sign_in, sign_in_id: si-bec-0061, user: exec-01@example.com, timestamp: "2026-01-15T08:40:00Z",
+               ip: 192.0.2.77, country: Unknown, app: Exchange Online, result: success}
+    - integration: secure_email
+      atomic: investigate_email
+      subject: etd-msg-bec-0006
+      record: {kind: email_message, message_id: etd-msg-bec-0006, sender: exec-01@example.com,
+               sender_domain: example.com, recipients: [ap-clerk-01@example.com], recipient_count: 1,
+               subject_line: Confidential payment today, received_at: "2026-01-15T09:05:00Z",
+               direction: internal, verdict: SUSPICIOUS, threat_types: [bec], delivery_location: inbox}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  manual_steps: ["mailbox rule rule-bec-0006 of exec-01@example.com"]
+  handoffs: ["account-takeover:exec-01@example.com"]
+  actions:
+    - revoke_sessions:exec-01@example.com
+    - disable_user:exec-01@example.com
+    - quarantine_email:etd-msg-bec-0006
+  elevated:
+    - revoke_sessions:exec-01@example.com
+    - disable_user:exec-01@example.com
+  warnings: [ELEVATED APPROVAL REQUIRED, Executive]
+  containment: CONTAINED

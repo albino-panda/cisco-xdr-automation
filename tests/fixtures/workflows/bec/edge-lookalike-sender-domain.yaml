@@ -1,0 +1,58 @@
+# BEC workflow scenario; fake lab data only (example.com, *.test, documentation IPs, fake ids).
+schema: 1
+name: edge-lookalike-sender-domain
+workflow: bec
+description: >-
+  Edge case (T1656). A look-alike domain (the organisation name as a hyphenated token) impersonates
+  the CEO. The gateway did not flag the message, but the workflow's look-alike heuristic and the
+  domain's suspicious reputation do. Of the two campaign messages only the delivered one is
+  proposed for quarantine (the gateway already quarantined the other), and the domain block is
+  proposed. Blocking the sender at the mail gateway stays a manual step.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], secure_email: [email], secure_endpoint: [endpoint], umbrella: [network],
+        cisco_xdr: [intel], virustotal: [intel]}
+incident:
+  incident_id: XDR-BEC-0011
+  title: CEO impersonation requesting gift cards and a wire transfer
+  severity: HIGH
+  workflow_id: bec
+  observables:
+    - {type: email_message_id, value: etd-msg-bec-0111}
+  users: [ap-clerk-02@example.com]
+  trigger: {source: user_report}
+environment:
+  reputations:
+    - {type: domain, value: example-payments.test, verdict: SUSPICIOUS, risk_score: 55, confidence: 60,
+       integrations: [umbrella], summary: newly seen domain}
+  records:
+    - integration: secure_email
+      atomic: investigate_email
+      subject: etd-msg-bec-0111
+      record: {kind: email_message, message_id: etd-msg-bec-0111, sender: ceo@example-payments.test,
+               sender_domain: example-payments.test, recipients: [ap-clerk-02@example.com], recipient_count: 1,
+               subject_line: Quick favour needed today, received_at: "2026-01-15T10:40:00Z", direction: inbound,
+               verdict: UNKNOWN, spf: pass, dkim: pass, dmarc: pass, delivery_location: inbox,
+               campaign_id: camp-bec-0011}
+    - integration: secure_email
+      atomic: search_email_campaign
+      subject: etd-msg-bec-0111
+      record: {kind: email_message, message_id: etd-msg-bec-0112, sender: ceo@example-payments.test,
+               sender_domain: example-payments.test, recipients: [ap-clerk-03@example.com], recipient_count: 1,
+               subject_line: Quick favour needed today, received_at: "2026-01-15T10:41:00Z", direction: inbound,
+               verdict: SUSPICIOUS, threat_types: [bec], delivery_location: quarantine, campaign_id: camp-bec-0011}
+    - integration: entra
+      atomic: investigate_user
+      subject: ap-clerk-02@example.com
+      record: {kind: user_profile, user: ap-clerk-02@example.com, department: Finance, groups: [Finance-AP],
+               risk_level: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - quarantine_email:etd-msg-bec-0111
+    - block_domain:example-payments.test
+  elevated: []
+  excluded: []
+  containment: CONTAINED
+  controls: 2

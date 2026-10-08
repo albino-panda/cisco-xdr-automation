@@ -1,0 +1,61 @@
+# Migrated from the legacy bec spec; fake lab data only (example.com, *.test, documentation IPs).
+# Changes from the legacy file: the gateway's look-alike flag (incident.context.lookalike_domains)
+# became a typed message record flagged by the mail gateway, and the workflow's own look-alike
+# heuristic confirms it; the quarantine targets the message id instead of the domain; the office
+# sign-in IP moved to a documentation range; every action needs human approval (C1).
+schema: 1
+name: legacy-02-external-lookalike-sender
+workflow: bec
+description: >-
+  BEC by impersonation (T1656) with no internal compromise. A newly seen look-alike domain sends a
+  payment request to finance. The domain block and the quarantine of its message are proposed. The
+  external sender has no tenant account, so no identity action is proposed, and the targeted finance
+  user shows no compromise evidence.
+tags: [legacy, true_positive]
+legacy_source: workflows/bec/scenarios/02-external-lookalike-sender.yaml
+mode: both
+suite: {entra: [identity], secure_email: [email], secure_endpoint: [endpoint], umbrella: [network],
+        cisco_xdr: [intel], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-BEC-0002
+  title: Lookalike domain requesting urgent wire transfer
+  severity: HIGH
+  workflow_id: bec
+  source: secure_email
+  observables:
+    - {type: email_address, value: cfo@examp1e.test}
+    - {type: domain, value: examp1e.test}
+    - {type: ip, value: 198.51.100.23}
+    - {type: email_message_id, value: etd-msg-bec-l02}
+  users: [ap-clerk-02@example.com]
+  trigger: {source: secure_email}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.23, verdict: SUSPICIOUS, risk_score: 50, confidence: 50,
+       integrations: [cisco_xdr], summary: sending infrastructure}
+  records:
+    - integration: secure_email
+      atomic: investigate_email
+      subject: etd-msg-bec-l02
+      record: {kind: email_message, message_id: etd-msg-bec-l02, sender: cfo@examp1e.test,
+               sender_domain: examp1e.test, recipients: [ap-clerk-02@example.com], recipient_count: 1,
+               subject_line: Urgent wire transfer, received_at: "2026-01-15T10:00:00Z", direction: inbound,
+               verdict: SUSPICIOUS, threat_types: [bec, impersonation], delivery_location: inbox}
+    - integration: entra
+      atomic: investigate_user
+      subject: ap-clerk-02@example.com
+      record: {kind: user_profile, user: ap-clerk-02@example.com, department: Finance, groups: [Finance-AP],
+               risk_level: none, account_enabled: true}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: ap-clerk-02@example.com
+      record: {kind: sign_in, sign_in_id: si-bec-l021, user: ap-clerk-02@example.com,
+               timestamp: "2026-01-15T07:40:00Z", ip: 198.51.100.41, country: Office, app: Outlook, result: success}
+expect:
+  package: true
+  actions:
+    - block_domain:examp1e.test
+    - quarantine_email:etd-msg-bec-l02
+  elevated: []
+  excluded: []
+  unrouted: []

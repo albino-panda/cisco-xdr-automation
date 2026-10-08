@@ -1,0 +1,87 @@
+# Migrated from the legacy bec spec; fake lab data only (example.com, *.example, documentation IPs).
+# Changes from the legacy file: incident.context facts (fraud_senders, mailbox_rules) became typed
+# records (a mailbox rule and the gateway-flagged message); the quarantine now targets the message id
+# instead of the sender; the office sign-in IP moved to a documentation range; every action needs
+# human approval (C1).
+schema: 1
+name: legacy-01-compromised-finance-mailbox
+workflow: bec
+description: >-
+  True positive. An accounts-payable mailbox signed in successfully from an IP rated malicious,
+  gained an external forwarding rule and sent bank-detail change requests to colleagues. Session
+  revocation, account disable and the quarantine of the fraudulent message are proposed, each behind
+  human approval. No look-alike domain is involved, so nothing is blocked.
+tags: [legacy, true_positive]
+legacy_source: workflows/bec/scenarios/01-compromised-finance-mailbox.yaml
+mode: both
+suite: {entra: [identity], secure_email: [email], secure_endpoint: [endpoint], umbrella: [network],
+        cisco_xdr: [intel], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-BEC-0001
+  title: Internal mailbox requesting vendor bank detail change
+  severity: HIGH
+  workflow_id: bec
+  source: secure_email
+  observables:
+    - {type: email_address, value: ap-clerk-01@example.com}
+    - {type: ip, value: 203.0.113.45}
+    - {type: domain, value: example.com}
+    - {type: email_message_id, value: etd-msg-bec-l01}
+  users: [ap-clerk-01@example.com]
+  trigger: {source: secure_email}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.45, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [cisco_xdr], summary: malicious sign-in source}
+    - {type: domain, value: example.com, verdict: CLEAN, risk_score: 0, confidence: 90,
+       integrations: [umbrella], summary: organisation domain}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: ap-clerk-01@example.com
+      record: {kind: user_profile, user: ap-clerk-01@example.com, department: Finance,
+               manager: finance-lead@example.com, groups: [Finance-AP], risk_level: medium, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: ap-clerk-01@example.com
+      record: {kind: mailbox_rule, mailbox: ap-clerk-01@example.com, rule_id: rule-bec-l01, name: Remittances,
+               enabled: true, forward_to: [invoices@remit-desk.example], created_at: "2026-01-15T09:15:00Z"}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: ap-clerk-01@example.com
+      record: {kind: sign_in, sign_in_id: si-bec-l011, user: ap-clerk-01@example.com,
+               timestamp: "2026-01-15T09:00:00Z", ip: 203.0.113.45, country: Unknown, app: Exchange Online,
+               result: success}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: ap-clerk-01@example.com
+      record: {kind: sign_in, sign_in_id: si-bec-l012, user: ap-clerk-01@example.com,
+               timestamp: "2026-01-15T07:30:00Z", ip: 198.51.100.40, country: Office, app: Outlook, result: success}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: ap-clerk-01@example.com
+      record: {kind: anomaly, anomaly_id: an-bec-l011, anomaly_type: unfamiliar_location, severity: MEDIUM,
+               user: ap-clerk-01@example.com, ip: 203.0.113.45}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: ap-clerk-01@example.com
+      record: {kind: anomaly, anomaly_id: an-bec-l012, anomaly_type: new_device, severity: MEDIUM,
+               user: ap-clerk-01@example.com}
+    - integration: secure_email
+      atomic: investigate_email
+      subject: etd-msg-bec-l01
+      record: {kind: email_message, message_id: etd-msg-bec-l01, sender: ap-clerk-01@example.com,
+               sender_domain: example.com, recipients: [ap-clerk-02@example.com, ap-clerk-03@example.com],
+               recipient_count: 2, subject_line: Vendor bank details changed, received_at: "2026-01-15T09:30:00Z",
+               direction: internal, verdict: SUSPICIOUS, threat_types: [bec], delivery_location: inbox}
+expect:
+  manual_steps: ["mailbox rule rule-bec-l01 of ap-clerk-01@example.com"]
+  handoffs: ["account-takeover:ap-clerk-01@example.com"]
+  package: true
+  actions:
+    - revoke_sessions:ap-clerk-01@example.com
+    - disable_user:ap-clerk-01@example.com
+    - quarantine_email:etd-msg-bec-l01
+  elevated: []
+  excluded: []
+  unrouted: []

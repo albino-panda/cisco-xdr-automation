@@ -1,0 +1,76 @@
+# Migrated from the legacy bec spec; fake lab data only (example.com, *.example, documentation IPs).
+# Changes from the legacy file: the protected.users guardrail became the repository critical-asset
+# policy (group Executives), so PackageBuilder makes the identity actions ELEVATED (C3); the
+# mailbox rule and the fraud message became typed records; the quarantine targets the message id.
+schema: 1
+name: legacy-03-protected-executive-mailbox
+workflow: bec
+description: >-
+  A protected executive mailbox is compromised (Entra risk high), redirects mail outside the
+  organisation and sent payment requests. Session revocation and the account disable stay proposed
+  with ELEVATED approval and a warning, so a lead must approve them; the quarantine of the
+  fraudulent message is a normal-approval action.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/bec/scenarios/03-protected-executive-mailbox.yaml
+mode: both
+suite: {entra: [identity], secure_email: [email], secure_endpoint: [endpoint], umbrella: [network],
+        cisco_xdr: [intel], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-BEC-0003
+  title: Executive mailbox forwarding mail and requesting payment
+  severity: CRITICAL
+  workflow_id: bec
+  source: secure_email
+  observables:
+    - {type: email_address, value: exec-01@example.com}
+    - {type: ip, value: 192.0.2.77}
+    - {type: email_message_id, value: etd-msg-bec-l03}
+  users: [exec-01@example.com]
+  trigger: {source: secure_email}
+environment:
+  reputations:
+    - {type: ip, value: 192.0.2.77, verdict: SUSPICIOUS, risk_score: 60, confidence: 60,
+       integrations: [cisco_xdr], summary: anonymising proxy}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: exec-01@example.com
+      record: {kind: user_profile, user: exec-01@example.com, department: Executive, groups: [Executives],
+               risk_level: high, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: exec-01@example.com
+      record: {kind: mailbox_rule, mailbox: exec-01@example.com, rule_id: rule-bec-l03, name: Assistant copy,
+               enabled: true, redirect_to: [assistant@remit-desk.example], created_at: "2026-01-15T08:50:00Z"}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: exec-01@example.com
+      record: {kind: sign_in, sign_in_id: si-bec-l031, user: exec-01@example.com, timestamp: "2026-01-15T08:40:00Z",
+               ip: 192.0.2.77, country: Unknown, app: Exchange Online, result: success}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: exec-01@example.com
+      record: {kind: anomaly, anomaly_id: an-bec-l031, anomaly_type: impossible_travel, severity: HIGH,
+               user: exec-01@example.com, ip: 192.0.2.77}
+    - integration: secure_email
+      atomic: investigate_email
+      subject: etd-msg-bec-l03
+      record: {kind: email_message, message_id: etd-msg-bec-l03, sender: exec-01@example.com,
+               sender_domain: example.com, recipients: [ap-clerk-01@example.com], recipient_count: 1,
+               subject_line: Payment needed before close of business, received_at: "2026-01-15T09:00:00Z",
+               direction: internal, verdict: SUSPICIOUS, threat_types: [bec], delivery_location: inbox}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  manual_steps: ["mailbox rule rule-bec-l03 of exec-01@example.com"]
+  handoffs: ["account-takeover:exec-01@example.com"]
+  package: true
+  actions:
+    - revoke_sessions:exec-01@example.com
+    - disable_user:exec-01@example.com
+    - quarantine_email:etd-msg-bec-l03
+  elevated:
+    - revoke_sessions:exec-01@example.com
+    - disable_user:exec-01@example.com
+  warnings: [ELEVATED APPROVAL REQUIRED]
+  excluded: []
+  containment: CONTAINED

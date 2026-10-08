@@ -1,0 +1,67 @@
+# Migrated from the legacy bec spec; fake lab data only (example.com, documentation IPs).
+# Changes from the legacy file: the protected break-glass account is ELEVATED by the repository
+# critical-asset policy (C3); the gateway's flag on the organisation's own subdomain became a typed
+# message record that the gateway already quarantined; the legacy skipped_allowlisted block is now
+# shown in the package's excluded targets (allow-listed, never executed).
+schema: 1
+name: legacy-04-breakglass-and-allowlisted-domain
+workflow: bec
+description: >-
+  Guardrail case. A break-glass account shows a successful sign-in from an IP rated malicious but no
+  abuse yet, so only session revocation is proposed, with ELEVATED approval. The gateway flagged a
+  message from the organisation's own subdomain and already quarantined it: the domain block is
+  shown as allow-listed (excluded, never executed) and no message needs quarantine.
+tags: [legacy, true_positive]
+legacy_source: workflows/bec/scenarios/04-breakglass-and-allowlisted-domain.yaml
+mode: both
+suite: {entra: [identity], secure_email: [email], secure_endpoint: [endpoint], umbrella: [network],
+        cisco_xdr: [intel], virustotal: [intel]}
+incident:
+  incident_id: INC-TEST-BEC-0004
+  title: Risky break-glass sign-in during payment-change investigation
+  severity: HIGH
+  workflow_id: bec
+  source: entra
+  observables:
+    - {type: email_address, value: breakglass-01@example.com}
+    - {type: domain, value: pay.example.com}
+    - {type: ip, value: 203.0.113.9}
+    - {type: email_message_id, value: etd-msg-bec-l04}
+  users: [breakglass-01@example.com]
+  trigger: {source: entra}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.9, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [cisco_xdr], summary: malicious sign-in source}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: breakglass-01@example.com
+      record: {kind: user_profile, user: breakglass-01@example.com, department: IT, groups: [Emergency Access],
+               risk_level: low, account_enabled: true}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: breakglass-01@example.com
+      record: {kind: sign_in, sign_in_id: si-bec-l041, user: breakglass-01@example.com,
+               timestamp: "2026-01-15T09:30:00Z", ip: 203.0.113.9, country: Unknown, app: Azure Portal,
+               result: success}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: breakglass-01@example.com
+      record: {kind: anomaly, anomaly_id: an-bec-l041, anomaly_type: unfamiliar_location, severity: MEDIUM,
+               user: breakglass-01@example.com, ip: 203.0.113.9}
+    - integration: secure_email
+      atomic: investigate_email
+      subject: etd-msg-bec-l04
+      record: {kind: email_message, message_id: etd-msg-bec-l04, sender: payroll@pay.example.com,
+               sender_domain: pay.example.com, recipients: [ap-clerk-04@example.com], recipient_count: 1,
+               subject_line: Payroll account update, received_at: "2026-01-15T09:45:00Z", direction: inbound,
+               verdict: SUSPICIOUS, threat_types: [impersonation], delivery_location: quarantine}
+expect:
+  handoffs: ["account-takeover:breakglass-01@example.com"]
+  package: true
+  actions: [revoke_sessions:breakglass-01@example.com]
+  elevated: [revoke_sessions:breakglass-01@example.com]
+  excluded: [block_domain:pay.example.com]
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  unrouted: []

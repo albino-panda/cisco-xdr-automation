@@ -1,0 +1,77 @@
+# BEC workflow scenario; fake lab data only (example.com, documentation IPs, fake ids).
+schema: 1
+name: dry-run
+workflow: bec
+description: >-
+  Dry run of the full package (compromised finance mailbox, fraudulent message, infected laptop).
+  The package is proposed and simulated; nothing changes at any vendor, no control is created and
+  the notifications carry the DRY RUN marker.
+tags: [dry_run, true_positive, approve_all]
+mode: dry_run
+suite: {entra: [identity], secure_email: [email], secure_endpoint: [endpoint], umbrella: [network],
+        cisco_xdr: [intel], virustotal: [intel]}
+incident:
+  incident_id: XDR-BEC-0008
+  title: Payment-change request sent from a compromised finance mailbox
+  severity: HIGH
+  workflow_id: bec
+  observables:
+    - {type: email_message_id, value: etd-msg-bec-0008}
+    - {type: email_address, value: jsmith@example.com}
+    - {type: hostname, value: TH-LT-1047}
+  users: [jsmith@example.com]
+  trigger: {source: secure_email, mitre_techniques: [T1534, T1114.003]}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.80, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [cisco_xdr], summary: known credential-stuffing infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, department: Finance, groups: [Finance-AP],
+               risk_level: medium, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: mailbox_rule, mailbox: jsmith@example.com, rule_id: rule-bec-0008, name: Invoices,
+               enabled: true, forward_to: [invoices@remit-desk.example], created_at: "2026-01-15T09:20:00Z"}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: sign_in, sign_in_id: si-bec-0081, user: jsmith@example.com, timestamp: "2026-01-15T09:10:00Z",
+               ip: 203.0.113.80, country: Unknown, app: Exchange Online, result: success}
+    - integration: secure_email
+      atomic: investigate_email
+      subject: etd-msg-bec-0008
+      record: {kind: email_message, message_id: etd-msg-bec-0008, sender: jsmith@example.com,
+               sender_domain: example.com, recipients: [ap-clerk-02@example.com], recipient_count: 1,
+               subject_line: Updated vendor bank details, received_at: "2026-01-15T09:40:00Z",
+               direction: internal, verdict: SUSPICIOUS, threat_types: [bec], delivery_location: inbox}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, groups: [Workstations], users: [jsmith@example.com], isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-bec-1047-8, name: Infostealer.Generic, verdict: MALICIOUS,
+               severity: HIGH, endpoint: TH-LT-1047, user: jsmith@example.com, status: active}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  manual_steps: ["mailbox rule rule-bec-0008 of jsmith@example.com"]
+  handoffs: ["account-takeover:jsmith@example.com"]
+  actions:
+    - revoke_sessions:jsmith@example.com
+    - disable_user:jsmith@example.com
+    - quarantine_email:etd-msg-bec-0008
+    - isolate_endpoint:TH-LT-1047
+  dry_run_lines:
+    - DRY RUN
+    - "Would revoke sessions: jsmith@example.com"
+    - "Would disable user: jsmith@example.com"
+    - "Would quarantine email: etd-msg-bec-0008"
+    - "Would isolate: TH-LT-1047"
+    - No containment actions executed.
+  notifications: [incident_note, soc_notification, analyst_summary]

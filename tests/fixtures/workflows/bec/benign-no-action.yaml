@@ -1,0 +1,56 @@
+# BEC workflow scenario; fake lab data only (example.com, documentation IPs, fake ids).
+schema: 1
+name: benign-no-action
+workflow: bec
+description: >-
+  Benign. A user reports a bank-detail change from a long-established vendor. The gateway rates the
+  message clean, the vendor domain is clean and no look-alike of the organisation, the reporting
+  user has no risky sign-ins and no mailbox rules. Nothing is proposed and the incident stays
+  NOT_STARTED; finance still verifies the change by phone.
+tags: [benign]
+mode: both
+suite: {entra: [identity], secure_email: [email], secure_endpoint: [endpoint], umbrella: [network],
+        cisco_xdr: [intel], virustotal: [intel]}
+incident:
+  incident_id: XDR-BEC-0004
+  title: User-reported payment change request from a vendor
+  severity: MEDIUM
+  workflow_id: bec
+  observables:
+    - {type: email_message_id, value: etd-msg-bec-0004}
+    - {type: email_address, value: billing@vendor-supplies.example}
+    - {type: domain, value: vendor-supplies.example}
+  users: [ap-clerk-03@example.com]
+  trigger: {source: user_report}
+environment:
+  reputations:
+    - {type: domain, value: vendor-supplies.example, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [umbrella], summary: established business domain}
+    - {type: ip, value: 198.51.100.42, verdict: CLEAN, risk_score: 0, confidence: 70,
+       integrations: [cisco_xdr], summary: office egress}
+  records:
+    - integration: secure_email
+      atomic: investigate_email
+      subject: etd-msg-bec-0004
+      record: {kind: email_message, message_id: etd-msg-bec-0004, sender: billing@vendor-supplies.example,
+               sender_domain: vendor-supplies.example, recipients: [ap-clerk-03@example.com], recipient_count: 1,
+               subject_line: New remittance details, received_at: "2026-01-15T08:00:00Z", direction: inbound,
+               verdict: CLEAN, spf: pass, dkim: pass, dmarc: pass, delivery_location: inbox}
+    - integration: entra
+      atomic: investigate_user
+      subject: ap-clerk-03@example.com
+      record: {kind: user_profile, user: ap-clerk-03@example.com, department: Finance, groups: [Finance-AP],
+               risk_level: none, risk_state: none, account_enabled: true}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: ap-clerk-03@example.com
+      record: {kind: sign_in, sign_in_id: si-bec-0041, user: ap-clerk-03@example.com,
+               timestamp: "2026-01-15T07:45:00Z", ip: 198.51.100.42, country: Office, app: Outlook, result: success}
+expect:
+  manual_steps: []
+  handoffs: []
+  package: false
+  actions: []
+  below_threshold: []
+  unrouted: []
+  degraded_sources: []

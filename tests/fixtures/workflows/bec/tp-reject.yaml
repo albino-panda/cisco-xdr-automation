@@ -1,0 +1,59 @@
+# BEC workflow scenario; fake lab data only (example.com, documentation IPs, fake ids).
+schema: 1
+name: tp-reject
+workflow: bec
+description: >-
+  True positive on a compromised finance mailbox, but the analyst rejects the package (the mail team
+  is already handling the mailbox). Nothing executes, no control is created and the incident closes.
+tags: [true_positive, reject]
+mode: both
+suite: {entra: [identity], secure_email: [email], secure_endpoint: [endpoint], umbrella: [network],
+        cisco_xdr: [intel], virustotal: [intel]}
+incident:
+  incident_id: XDR-BEC-0003
+  title: Payment-change request sent from a compromised finance mailbox
+  severity: HIGH
+  workflow_id: bec
+  observables:
+    - {type: email_message_id, value: etd-msg-bec-0003}
+    - {type: email_address, value: jsmith@example.com}
+  users: [jsmith@example.com]
+  trigger: {source: secure_email, mitre_techniques: [T1534]}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.80, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [cisco_xdr], summary: known credential-stuffing infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, department: Finance, groups: [Finance-AP],
+               risk_level: medium, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: mailbox_rule, mailbox: jsmith@example.com, rule_id: rule-bec-0003, name: Invoices,
+               enabled: true, forward_to: [invoices@remit-desk.example], created_at: "2026-01-15T09:20:00Z"}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: sign_in, sign_in_id: si-bec-0031, user: jsmith@example.com, timestamp: "2026-01-15T09:10:00Z",
+               ip: 203.0.113.80, country: Unknown, app: Exchange Online, result: success}
+    - integration: secure_email
+      atomic: investigate_email
+      subject: etd-msg-bec-0003
+      record: {kind: email_message, message_id: etd-msg-bec-0003, sender: jsmith@example.com,
+               sender_domain: example.com, recipients: [ap-clerk-02@example.com], recipient_count: 1,
+               subject_line: Updated vendor bank details, received_at: "2026-01-15T09:40:00Z",
+               direction: internal, verdict: SUSPICIOUS, threat_types: [bec], delivery_location: inbox}
+analyst: {decision: REJECT, approvers: [analyst], comment: the mail team already handles this mailbox}
+expect:
+  manual_steps: ["mailbox rule rule-bec-0003 of jsmith@example.com"]
+  handoffs: ["account-takeover:jsmith@example.com"]
+  actions:
+    - revoke_sessions:jsmith@example.com
+    - disable_user:jsmith@example.com
+    - quarantine_email:etd-msg-bec-0003
+  decision_state: CLOSED
+  controls: 0
+  final_state: CLOSED

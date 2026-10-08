@@ -1,0 +1,63 @@
+# BEC workflow scenario; fake lab data only (example.com, *.test, documentation IPs, fake ids).
+schema: 1
+name: edge-external-forwarding-rule
+workflow: bec
+description: >-
+  Edge case (T1114.003). A mailbox has two forwarding rules: one to a colleague inside the
+  organisation (not abuse) and one to an outside address (abuse). There is no risky sign-in and no
+  fraud sent, so only the session revocation is proposed (the rule shows someone with mailbox
+  access set it up); disabling the account needs identity compromise evidence as well. Removing the
+  rule is a manual step named in the rationale (no VERIFIED write endpoint).
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], secure_email: [email], secure_endpoint: [endpoint], umbrella: [network],
+        cisco_xdr: [intel], virustotal: [intel]}
+config:
+  exclusions:
+    internal_domains: [example.com, corp.example.com, example.internal]
+incident:
+  incident_id: XDR-BEC-0010
+  title: Inbox rule forwarding mail to an external address
+  severity: MEDIUM
+  workflow_id: bec
+  observables:
+    - {type: email_address, value: mlee@example.com}
+  users: [mlee@example.com]
+  trigger: {source: splunk, mitre_techniques: [T1114.003]}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.43, verdict: CLEAN, risk_score: 0, confidence: 70,
+       integrations: [cisco_xdr], summary: office egress}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: mlee@example.com
+      record: {kind: user_profile, user: mlee@example.com, department: Treasury, groups: [Finance-Treasury],
+               risk_level: none, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: mlee@example.com
+      record: {kind: mailbox_rule, mailbox: mlee@example.com, rule_id: rule-bec-0101, name: Team copy,
+               enabled: true, forward_to: [treasury-team@example.com], created_at: "2025-11-02T10:00:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: mlee@example.com
+      record: {kind: mailbox_rule, mailbox: mlee@example.com, rule_id: rule-bec-0102, name: Statements,
+               enabled: true, forward_to: [statements-archive@mailbox.test], mark_as_read: true,
+               created_at: "2026-01-15T10:30:00Z"}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: mlee@example.com
+      record: {kind: sign_in, sign_in_id: si-bec-0101, user: mlee@example.com, timestamp: "2026-01-15T10:20:00Z",
+               ip: 198.51.100.43, country: Office, app: Outlook, result: success}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  considered: []
+  manual_steps: ["mailbox rule rule-bec-0102 of mlee@example.com"]
+  handoffs: []
+  package: true
+  actions: [revoke_sessions:mlee@example.com]
+  elevated: []
+  below_threshold: []
+  containment: CONTAINED
+  controls: 0

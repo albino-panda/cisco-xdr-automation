@@ -1,0 +1,47 @@
+# BEC workflow scenario; fake lab data only (example.com, *.test, documentation IPs, fake ids).
+schema: 1
+name: degraded-source
+workflow: bec
+description: >-
+  Entra (a required source) is unavailable for every investigation call, so no mailbox profile or
+  sign-in is known. The run notes the degraded source and still recommends quarantining the
+  gateway-flagged message from a look-alike domain and blocking that domain, backed by the mail
+  gateway's evidence; no identity action is proposed without identity evidence.
+tags: [degraded_source, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], secure_email: [email], secure_endpoint: [endpoint], umbrella: [network],
+        cisco_xdr: [intel], virustotal: [intel]}
+incident:
+  incident_id: XDR-BEC-0005
+  title: Look-alike domain requesting an urgent wire transfer
+  severity: HIGH
+  workflow_id: bec
+  observables:
+    - {type: email_message_id, value: etd-msg-bec-0005}
+    - {type: email_address, value: cfo@examp1e.test}
+  users: [ap-clerk-02@example.com]
+  trigger: {source: secure_email, mitre_techniques: [T1656]}
+environment:
+  records:
+    - integration: secure_email
+      atomic: investigate_email
+      subject: etd-msg-bec-0005
+      record: {kind: email_message, message_id: etd-msg-bec-0005, sender: cfo@examp1e.test,
+               sender_domain: examp1e.test, recipients: [ap-clerk-02@example.com], recipient_count: 1,
+               subject_line: Urgent wire transfer today, received_at: "2026-01-15T10:05:00Z", direction: inbound,
+               verdict: SUSPICIOUS, threat_types: [bec], spf: fail, dmarc: fail, delivery_location: inbox}
+    - integration: entra
+      atomic: investigate_user
+      subject: ap-clerk-02@example.com
+      record: {kind: user_profile, user: ap-clerk-02@example.com, department: Finance, risk_level: none}
+  faults:
+    - {kind: UNAVAILABLE, integration: entra, operation: investigate, times: 20}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - quarantine_email:etd-msg-bec-0005
+    - block_domain:examp1e.test
+  elevated: []
+  degraded_sources: [entra]
+  containment: CONTAINED
