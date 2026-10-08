@@ -1,0 +1,79 @@
+# Credential-dumping workflow scenario; fake lab data only.
+schema: 1
+name: degraded-source
+workflow: credential-dumping
+description: >-
+  Entra is unavailable for every account read. The run lists it as a degraded source and still
+  recommends the isolation, the tool hash block and the revocation of both exposed accounts from
+  the Secure Endpoint evidence. Whether the accounts are privileged cannot be assessed, so no
+  disable is proposed: both disables are listed as considered for the analyst.
+tags: [degraded_source, true_positive, approve_all]
+mode: both
+incident:
+  incident_id: XDR-CD-0005
+  title: Credential theft behaviour on TH-LT-1047
+  severity: CRITICAL
+  workflow_id: credential-dumping
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+    - {type: sha256, value: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed}
+  users: [jsmith@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1003.001]}
+environment:
+  reputations:
+    - {type: sha256, value: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed, verdict: MALICIOUS,
+       risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal], summary: credential theft tool}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, ip_addresses: [198.51.100.47], users: [jsmith@example.com, it.support@example.com],
+               groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-cd-1047-1, name: Credential theft - LSASS memory read,
+               category: CredentialAccess, verdict: MALICIOUS, severity: CRITICAL, endpoint: TH-LT-1047,
+               user: jsmith@example.com, sha256: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed,
+               process_name: credtool.exe, mitre_techniques: [T1003.001], status: active,
+               first_seen: "2026-01-15T11:40:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: process_event, event_id: evt-cd-1047-1, endpoint: TH-LT-1047, timestamp: "2026-01-15T11:39:00Z",
+               event_type: process_start, process_name: credtool.exe, pid: 5120, parent_process_name: cmd.exe,
+               sha256: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed,
+               user: jsmith@example.com, verdict: MALICIOUS}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed
+      record: {kind: hash_prevalence, sha256: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed,
+               file_name: credtool.exe, verdict: MALICIOUS, prevalence: 1, endpoints: [TH-LT-1047]}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, display_name: J Smith, department: Finance,
+               groups: [Finance Users], risk_level: low, risk_state: none, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: it.support@example.com
+      record: {kind: user_profile, user: it.support@example.com, display_name: IT Support, department: IT,
+               groups: [Helpdesk], roles: [Helpdesk Administrator], privileged: true, risk_level: medium,
+               risk_state: none, account_enabled: true}
+  faults:
+    - {kind: UNAVAILABLE, integration: entra, operation: investigate, times: 20}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - revoke_sessions:jsmith@example.com
+    - revoke_sessions:it.support@example.com
+    - block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed
+  degraded_sources: [entra]
+  considered: [disable_user:jsmith@example.com, disable_user:it.support@example.com]
+  manual_steps: [credential-reset:TH-LT-1047]
+  risk: {min: 80, max: 100}
+  containment: CONTAINED
+  controls: 2

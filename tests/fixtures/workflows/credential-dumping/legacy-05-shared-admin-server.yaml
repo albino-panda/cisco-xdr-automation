@@ -1,0 +1,96 @@
+# Credential-dumping workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-05-shared-admin-server
+workflow: credential-dumping
+description: >-
+  Legacy 05, converted to typed records (C5: over a blast-radius cap becomes ELEVATED). A shared
+  administration server holds cached logons of four privileged accounts. The Secure Endpoint
+  detection is still unknown, but the malicious tool hash is seen on the server, which confirms
+  credential access. The isolation and the tool hash block need standard approval. Four exposed
+  accounts exceed the blast-radius user cap (3), so every revocation and disable needs ELEVATED
+  approval with a blast-radius warning; the runtime counts every user an action touches, so the
+  revocations are ELEVATED too (stricter than the legacy plan, never weaker). A lead approves.
+tags: [legacy, true_positive, critical_asset, approve_all]
+legacy_source: workflows/credential-dumping/scenarios/05-shared-admin-server.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-0305
+  title: Credential theft behaviour on adm-jump01.example.com
+  severity: CRITICAL
+  workflow_id: credential-dumping
+  observables:
+    - {type: hostname, value: adm-jump01.example.com}
+    - {type: sha256, value: 0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9}
+  trigger: {source: cisco_xdr, mitre_techniques: [T1003.001]}
+environment:
+  reputations:
+    - {type: sha256, value: 0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9, verdict: MALICIOUS,
+       risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal], summary: credential theft tool}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: adm-jump01.example.com
+      record: {kind: endpoint, hostname: adm-jump01.example.com, connector_guid: 00000000-0000-4000-8000-0000000000a1,
+               os: Windows Server 2022, users: [net-admin01@example.com, net-admin02@example.com,
+               sys-admin03@example.com, sys-admin04@example.com], groups: [Admin Servers], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: adm-jump01.example.com
+      record: {kind: detection, detection_id: det-legacy-0305-1, name: Unsigned process opened a handle to LSASS,
+               category: CredentialAccess, verdict: UNKNOWN, severity: MEDIUM, endpoint: adm-jump01.example.com,
+               status: active}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9
+      record: {kind: hash_prevalence, sha256: 0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9,
+               verdict: MALICIOUS, prevalence: 1, endpoints: [adm-jump01.example.com]}
+    - integration: entra
+      atomic: investigate_user
+      subject: net-admin01@example.com
+      record: {kind: user_profile, user: net-admin01@example.com, department: IT, groups: [Network Ops],
+               roles: [Network Administrator], privileged: true, risk_level: medium, risk_state: none,
+               account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: net-admin02@example.com
+      record: {kind: user_profile, user: net-admin02@example.com, department: IT, groups: [Network Ops],
+               roles: [Network Administrator], privileged: true, risk_level: medium, risk_state: none,
+               account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: sys-admin03@example.com
+      record: {kind: user_profile, user: sys-admin03@example.com, department: IT, groups: [Server Ops],
+               roles: [Intune Administrator], risk_level: medium, risk_state: none, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: sys-admin04@example.com
+      record: {kind: user_profile, user: sys-admin04@example.com, department: IT, groups: [Server Ops],
+               roles: [Security Administrator], risk_level: medium, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:ADM-JUMP01.EXAMPLE.COM
+    - block_hash:0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9
+    - revoke_sessions:net-admin01@example.com
+    - revoke_sessions:net-admin02@example.com
+    - revoke_sessions:sys-admin03@example.com
+    - revoke_sessions:sys-admin04@example.com
+    - disable_user:net-admin01@example.com
+    - disable_user:net-admin02@example.com
+    - disable_user:sys-admin03@example.com
+    - disable_user:sys-admin04@example.com
+  elevated:
+    - revoke_sessions:net-admin01@example.com
+    - revoke_sessions:net-admin02@example.com
+    - revoke_sessions:sys-admin03@example.com
+    - revoke_sessions:sys-admin04@example.com
+    - disable_user:net-admin01@example.com
+    - disable_user:net-admin02@example.com
+    - disable_user:sys-admin03@example.com
+    - disable_user:sys-admin04@example.com
+  warnings: [ELEVATED APPROVAL REQUIRED]
+  manual_steps: [credential-reset:ADM-JUMP01.EXAMPLE.COM]
+  containment: CONTAINED
+  controls: 6

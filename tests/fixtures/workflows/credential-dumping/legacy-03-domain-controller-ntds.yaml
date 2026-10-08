@@ -1,0 +1,61 @@
+# Credential-dumping workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-03-domain-controller-ntds
+workflow: credential-dumping
+description: >-
+  Legacy 03, converted to typed records (C3: protected becomes ELEVATED). Credential access is
+  confirmed on dc-01.example.com, a domain controller by the critical-asset host pattern and group.
+  Its isolation stays proposed with ELEVATED approval and the domain-controller warning. Phase 3
+  review of the legacy rule "no account action when a protected domain controller is confirmed":
+  the administrator logged on to the domain controller is still exposed, so the revocation and the
+  disable of that account are proposed too (never silently skipped); both need ELEVATED approval
+  because the account holds a privileged directory role. The domain-wide credential reset stays
+  with the incident commander as a manual step. A lead approves.
+tags: [legacy, true_positive, critical_asset, approve_all]
+legacy_source: workflows/credential-dumping/scenarios/03-domain-controller-ntds.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-0303
+  title: Directory database access on dc-01.example.com
+  severity: CRITICAL
+  workflow_id: credential-dumping
+  observables:
+    - {type: hostname, value: dc-01.example.com}
+    - {type: user, value: server-admin02@example.com}
+  trigger: {source: secure_endpoint, mitre_techniques: [T1003.003]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: dc-01.example.com
+      record: {kind: endpoint, hostname: dc-01.example.com, connector_guid: 00000000-0000-4000-8000-0000000000d1,
+               os: Windows Server 2022, users: [server-admin02@example.com], groups: [Domain Controllers],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: dc-01.example.com
+      record: {kind: detection, detection_id: det-legacy-0303-1, name: Unexpected copy of the directory database,
+               category: CredentialAccess, verdict: MALICIOUS, severity: CRITICAL, endpoint: dc-01.example.com,
+               status: active}
+    - integration: entra
+      atomic: investigate_user
+      subject: server-admin02@example.com
+      record: {kind: user_profile, user: server-admin02@example.com, department: IT, groups: [Server Operators],
+               roles: [Exchange Administrator], privileged: true, risk_level: high, risk_state: none,
+               account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:DC-01.EXAMPLE.COM
+    - revoke_sessions:server-admin02@example.com
+    - disable_user:server-admin02@example.com
+  elevated:
+    - isolate_endpoint:DC-01.EXAMPLE.COM
+    - revoke_sessions:server-admin02@example.com
+    - disable_user:server-admin02@example.com
+  warnings: [ELEVATED APPROVAL REQUIRED, Domain controller, Privileged account]
+  manual_steps: [domain-credential-reset:DC-01.EXAMPLE.COM]
+  handoffs: [account-takeover:server-admin02@example.com]
+  containment: CONTAINED
+  controls: 2

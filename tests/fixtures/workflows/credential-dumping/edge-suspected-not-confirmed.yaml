@@ -1,0 +1,53 @@
+# Credential-dumping workflow scenario; fake lab data only.
+schema: 1
+name: edge-suspected-not-confirmed
+workflow: credential-dumping
+description: >-
+  An unsigned process opened a handle to LSASS on TH-LT-1063. Secure Endpoint rates it only
+  SUSPICIOUS, the process has no reputation verdict, and no malicious detection, process event or
+  tool file is found. Credential access is not confirmed, so nothing is proposed (no isolation and
+  no account action on suspicion alone); the endpoint and the hash are listed as considered for
+  the analyst, with the records that show them.
+tags: [edge_case]
+mode: both
+incident:
+  incident_id: XDR-CD-0012
+  title: LSASS access on TH-LT-1063
+  severity: HIGH
+  workflow_id: credential-dumping
+  observables:
+    - {type: hostname, value: TH-LT-1063}
+  trigger: {source: secure_endpoint, mitre_techniques: [T1003.001]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1063
+      record: {kind: endpoint, hostname: TH-LT-1063, connector_guid: 00000000-0000-4000-8000-000000001063,
+               os: Windows 11, ip_addresses: [198.51.100.63], users: [rkhan@example.com], groups: [Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1063
+      record: {kind: detection, detection_id: det-cd-1063-1, name: Unsigned process opened a handle to LSASS,
+               category: CredentialAccess, verdict: SUSPICIOUS, severity: MEDIUM, endpoint: TH-LT-1063,
+               sha256: 7e57ab1e7e57ab1e7e57ab1e7e57ab1e7e57ab1e7e57ab1e7e57ab1e7e57ab1e, process_name: helper.exe,
+               mitre_techniques: [T1003.001], status: active, first_seen: "2026-01-15T11:50:00Z"}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 7e57ab1e7e57ab1e7e57ab1e7e57ab1e7e57ab1e7e57ab1e7e57ab1e7e57ab1e
+      record: {kind: hash_prevalence, sha256: 7e57ab1e7e57ab1e7e57ab1e7e57ab1e7e57ab1e7e57ab1e7e57ab1e7e57ab1e,
+               file_name: helper.exe, verdict: UNKNOWN, prevalence: 1, endpoints: [TH-LT-1063]}
+    - integration: entra
+      atomic: investigate_user
+      subject: rkhan@example.com
+      record: {kind: user_profile, user: rkhan@example.com, department: Research, groups: [Research Users],
+               risk_level: low, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  considered: [isolate_endpoint:TH-LT-1063, block_hash:7e57ab1e7e57ab1e7e57ab1e7e57ab1e7e57ab1e7e57ab1e7e57ab1e7e57ab1e]
+  manual_steps: []
+  handoffs: []
+  notifications: [incident_note]

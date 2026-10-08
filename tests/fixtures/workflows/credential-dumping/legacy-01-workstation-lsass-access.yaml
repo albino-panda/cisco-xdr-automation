@@ -1,0 +1,83 @@
+# Credential-dumping workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-01-workstation-lsass-access
+workflow: credential-dumping
+description: >-
+  Legacy 01, converted to typed records. Secure Endpoint flags a malicious read of LSASS memory on a
+  standard workstation and the file hash is malicious. The two accounts logged on to the host (the
+  legacy incident.context.logged_on_users, now the endpoint record's users) lose their sessions,
+  and the help-desk account, which the identity provider marks privileged, is also disabled. A
+  third user named in the incident never logged on to the host and is not actioned. New compared
+  with the legacy plan: the malicious tool hash (prevalence 1) is proposed for a block, the
+  credential reset is a manual step and the exposed accounts are handed off to account-takeover.
+  Every action needs human approval (C1); the privileged account's actions are ELEVATED with a
+  privileged-account warning (14.11.6), so the lead approves.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/credential-dumping/scenarios/01-workstation-lsass-access.yaml
+mode: both
+incident:
+  incident_id: INC-TEST-0301
+  title: Credential theft behaviour on ws-0142.example.com
+  severity: CRITICAL
+  workflow_id: credential-dumping
+  observables:
+    - {type: hostname, value: ws-0142.example.com}
+    - {type: sha256, value: 3b1f0c2d4e5a6978b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60718293a4b5c6d}
+    - {type: user, value: alice.nguyen@example.com}
+    - {type: user, value: helpdesk-admin07@example.com}
+    - {type: user, value: bob.martin@example.com}
+  trigger: {source: secure_endpoint, mitre_techniques: [T1003.001]}
+environment:
+  reputations:
+    - {type: sha256, value: 3b1f0c2d4e5a6978b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60718293a4b5c6d, verdict: MALICIOUS,
+       risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal], summary: credential theft tool}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-0142.example.com
+      record: {kind: endpoint, hostname: ws-0142.example.com, connector_guid: 00000000-0000-4000-8000-000000000142,
+               os: Windows 11, users: [alice.nguyen@example.com, helpdesk-admin07@example.com],
+               groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-0142.example.com
+      record: {kind: detection, detection_id: det-legacy-0301-1, name: Suspicious read of LSASS process memory,
+               category: CredentialAccess, verdict: MALICIOUS, severity: CRITICAL, endpoint: ws-0142.example.com,
+               sha256: 3b1f0c2d4e5a6978b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60718293a4b5c6d, status: active}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 3b1f0c2d4e5a6978b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60718293a4b5c6d
+      record: {kind: hash_prevalence, sha256: 3b1f0c2d4e5a6978b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60718293a4b5c6d,
+               verdict: MALICIOUS, prevalence: 1, endpoints: [ws-0142.example.com]}
+    - integration: entra
+      atomic: investigate_user
+      subject: alice.nguyen@example.com
+      record: {kind: user_profile, user: alice.nguyen@example.com, department: Finance, groups: [Finance Users],
+               risk_level: low, risk_state: none, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: helpdesk-admin07@example.com
+      record: {kind: user_profile, user: helpdesk-admin07@example.com, department: IT, groups: [Helpdesk],
+               roles: [Helpdesk Administrator], privileged: true, risk_level: medium, risk_state: none,
+               account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: bob.martin@example.com
+      record: {kind: user_profile, user: bob.martin@example.com, department: Finance, groups: [Finance Users],
+               risk_level: none, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:WS-0142.EXAMPLE.COM
+    - revoke_sessions:alice.nguyen@example.com
+    - revoke_sessions:helpdesk-admin07@example.com
+    - disable_user:helpdesk-admin07@example.com
+    - block_hash:3b1f0c2d4e5a6978b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60718293a4b5c6d
+  elevated: [revoke_sessions:helpdesk-admin07@example.com, disable_user:helpdesk-admin07@example.com]
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  considered: []
+  manual_steps: [credential-reset:WS-0142.EXAMPLE.COM]
+  handoffs: [account-takeover:alice.nguyen@example.com, account-takeover:helpdesk-admin07@example.com]
+  containment: CONTAINED
+  controls: 3

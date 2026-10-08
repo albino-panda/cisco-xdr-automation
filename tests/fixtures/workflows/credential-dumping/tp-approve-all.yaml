@@ -1,0 +1,91 @@
+# Credential-dumping workflow scenario; fake lab data only.
+schema: 1
+name: tp-approve-all
+workflow: credential-dumping
+description: >-
+  True positive on a finance workstation. Secure Endpoint reports a critical detection of LSASS
+  memory being read by a rare tool that VirusTotal and Secure Endpoint rate malicious. Two directory
+  accounts are logged on: a standard user and a help-desk operator the identity provider marks
+  privileged. The privileged account's revocation and disable are ELEVATED with a privileged-account
+  warning (the identity provider's flag, 14.11.6). The lead approves everything: the isolation, the
+  tool hash block, both session revocations and the disable of the privileged account execute and
+  verify. The credential reset
+  stays a manual step and the exposed accounts are handed off to account-takeover.
+tags: [true_positive, approve_all]
+mode: both
+incident:
+  incident_id: XDR-CD-0001
+  title: Credential theft behaviour on TH-LT-1047
+  severity: CRITICAL
+  workflow_id: credential-dumping
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+    - {type: sha256, value: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed}
+  users: [jsmith@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1003.001]}
+environment:
+  reputations:
+    - {type: sha256, value: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed, verdict: MALICIOUS,
+       risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal], summary: credential theft tool}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, ip_addresses: [198.51.100.47], users: [jsmith@example.com, it.support@example.com],
+               groups: [Workstations], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-cd-1047-1, name: Credential theft - LSASS memory read,
+               category: CredentialAccess, verdict: MALICIOUS, severity: CRITICAL, endpoint: TH-LT-1047,
+               user: jsmith@example.com, sha256: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed,
+               process_name: credtool.exe, mitre_techniques: [T1003.001], status: active,
+               first_seen: "2026-01-15T11:40:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: process_event, event_id: evt-cd-1047-1, endpoint: TH-LT-1047, timestamp: "2026-01-15T11:39:00Z",
+               event_type: process_start, process_name: credtool.exe, pid: 5120, parent_process_name: cmd.exe,
+               sha256: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed,
+               user: jsmith@example.com, verdict: MALICIOUS}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed
+      record: {kind: hash_prevalence, sha256: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed,
+               file_name: credtool.exe, verdict: MALICIOUS, prevalence: 1, endpoints: [TH-LT-1047]}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, display_name: J Smith, department: Finance,
+               groups: [Finance Users], risk_level: low, risk_state: none, account_enabled: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: it.support@example.com
+      record: {kind: user_profile, user: it.support@example.com, display_name: IT Support, department: IT,
+               groups: [Helpdesk], roles: [Helpdesk Administrator], privileged: true, risk_level: medium,
+               risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - revoke_sessions:jsmith@example.com
+    - revoke_sessions:it.support@example.com
+    - disable_user:it.support@example.com
+    - block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed
+  elevated: [revoke_sessions:it.support@example.com, disable_user:it.support@example.com]
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  excluded: []
+  unrouted: []
+  below_threshold: []
+  risk: {min: 80, max: 100}
+  confidence: {min: 50, max: 100}
+  degraded_sources: []
+  considered: []
+  manual_steps: [credential-reset:TH-LT-1047]
+  handoffs: [account-takeover:jsmith@example.com, account-takeover:it.support@example.com]
+  evidence_min: 1
+  containment: CONTAINED
+  controls: 3
+  notifications: [incident_note, soc_notification, analyst_summary]

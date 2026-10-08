@@ -1,0 +1,60 @@
+# Credential-dumping workflow scenario; fake lab data only.
+schema: 1
+name: benign-no-action
+workflow: credential-dumping
+description: >-
+  Benign. The organisation's endpoint protection agent reads LSASS memory during a scan. Secure
+  Endpoint rates the access CLEAN, the agent's binary has a CLEAN reputation and is present on
+  thousands of endpoints. Nothing is proposed; the access and the hash are listed as considered so
+  the analyst sees why nothing was contained.
+tags: [benign]
+mode: both
+incident:
+  incident_id: XDR-CD-0004
+  title: LSASS access on TH-LT-2207
+  severity: HIGH
+  workflow_id: credential-dumping
+  observables:
+    - {type: hostname, value: TH-LT-2207}
+    - {type: sha256, value: 5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe}
+  users: [cdiaz@example.com]
+  trigger: {source: cisco_xdr, mitre_techniques: [T1003.001]}
+environment:
+  reputations:
+    - {type: sha256, value: 5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe, verdict: CLEAN,
+       risk_score: 0, confidence: 90, integrations: [secure_endpoint, virustotal], summary: endpoint protection agent}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2207
+      record: {kind: endpoint, hostname: TH-LT-2207, connector_guid: 00000000-0000-4000-8000-000000002207,
+               os: Windows 11, ip_addresses: [198.51.100.107], users: [cdiaz@example.com], groups: [Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2207
+      record: {kind: detection, detection_id: det-cd-2207-1, name: LSASS memory read by endpoint protection agent,
+               category: CredentialAccess, verdict: CLEAN, severity: LOW, endpoint: TH-LT-2207,
+               sha256: 5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe, process_name: epagent.exe,
+               mitre_techniques: [T1003.001], status: resolved, first_seen: "2026-01-15T11:20:00Z"}
+    - integration: secure_endpoint
+      atomic: search_hash_enterprise
+      subject: 5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe
+      record: {kind: hash_prevalence, sha256: 5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe,
+               file_name: epagent.exe, verdict: CLEAN, prevalence: 4200, endpoints: [TH-LT-2207], truncated: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: cdiaz@example.com
+      record: {kind: user_profile, user: cdiaz@example.com, department: Sales, groups: [Sales Users],
+               risk_level: none, risk_state: none, account_enabled: true}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  unrouted: []
+  below_threshold: []
+  degraded_sources: []
+  considered: [isolate_endpoint:TH-LT-2207, block_hash:5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe]
+  manual_steps: []
+  handoffs: []
+  notifications: [incident_note]
