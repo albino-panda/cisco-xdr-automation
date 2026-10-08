@@ -180,7 +180,8 @@ class AllowlistPolicy:
     plus ``exclusions.third_party_lookup.cidrs`` such as the VPN pool) and a domain target (or URL
     host) under the configured ``exclusions.internal_domains`` / ``internal_domain_suffixes`` /
     ``hostnames``, a built-in internal suffix (``local``, ``internal``, ...) or a single-label name
-    are excluded with the reason. Endpoint names match by host identity (a listed short name also
+    are excluded with the reason (``url_block_allowed_domains`` lifts only the ``never_block.domains``
+    reason of a URL host, never the internal-domain or approved-tool reason, 14.12.6). Endpoint names match by host identity (a listed short name also
     covers the FQDN with that first label, a listed FQDN its short name, a trailing dot is
     ignored); URLs match in their canonical spelling
     (:func:`~xdr_response.models.canonical.canonical_url`: case of scheme and host, default port,
@@ -345,10 +346,13 @@ class AllowlistPolicy:
             ip = host_ip(host)
             if ip is not None:
                 return self._ip_reason(ip)
-            reason = self._domain_reason(host)
-            if reason and _domain_matches(host, self._url_ok):
-                return None  # URL-level blocks allowed on owned domains
-            return reason
+            if _domain_matches(host, self._url_ok):
+                # URL-level blocks are allowed on owned public domains: the exception lifts only the
+                # never_block.domains reason. An approved tool's domain and an internal host (an
+                # exclusions.internal_domains sub-zone of the owned domain, an internal suffix, a
+                # listed host name) stay excluded.
+                return self._tool_domain(host) or self._internal_domain_reason(host)
+            return self._domain_reason(host)
         if kind is TargetKind.IP:
             try:
                 ip = ipaddress.ip_address(t)
