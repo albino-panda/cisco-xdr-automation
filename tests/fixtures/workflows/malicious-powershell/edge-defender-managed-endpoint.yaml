@@ -1,0 +1,98 @@
+# Suspicious PowerShell workflow scenario; fake lab data only (no real command lines or indicators).
+schema: 1
+name: edge-defender-managed-endpoint
+workflow: malicious-powershell
+description: >-
+  Edge case: the endpoint is managed by Defender for Endpoint, not Secure Endpoint. The same malicious PowerShell
+  activity reported by Defender leads to an isolation through Defender (machine id), a process termination and indicator
+  blocks; nothing depends on Secure Endpoint.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite:
+  defender_endpoint: [endpoint]
+  virustotal: [intel]
+  umbrella: [network]
+incident:
+  incident_id: XDR-PS-0013
+  title: PowerShell downloaded and ran a payload on TH-LT-6604
+  severity: HIGH
+  workflow_id: malicious-powershell
+  observables:
+  - {type: hostname, value: TH-LT-6604}
+  users: [jsmith@example.com]
+  trigger:
+    source: defender_endpoint
+    mitre_techniques: [T1059.001, T1027]
+environment:
+  reputations:
+  - type: sha256
+    value: c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00
+    verdict: MALICIOUS
+    risk_score: 90
+    confidence: 85
+    integrations: [secure_endpoint, virustotal]
+    summary: downloader payload
+  - type: domain
+    value: cdn-update.test
+    verdict: MALICIOUS
+    risk_score: 85
+    confidence: 80
+    integrations: [virustotal, umbrella]
+    summary: malware distribution
+  records:
+  - integration: defender_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-6604
+    record:
+      kind: endpoint
+      hostname: TH-LT-6604
+      mde_machine_id: a0b1c2d3e4f5a0b1c2d3e4f5a0b1c2d3e4f5a0b1
+      os: Windows 11
+      groups: [Workstations]
+      isolation_capable: true
+      isolation_state: not_isolated
+  - integration: defender_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-6604
+    record: {kind: process_event, event_id: mde-evt-1, endpoint: TH-LT-6604, timestamp: '2026-01-15T11:36:00Z',
+      event_type: process_start, process_name: pwsh.exe, pid: 8800, parent_process_name: outlook.exe, parent_pid: 1500,
+      sha256: 9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a, user: jsmith@example.com}
+  - integration: defender_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-6604
+    record:
+      kind: detection
+      detection_id: mde-det-1
+      name: Sample.ScriptDownloader.Generic
+      verdict: MALICIOUS
+      severity: HIGH
+      category: Execution
+      endpoint: TH-LT-6604
+      process_name: pwsh.exe
+      mitre_techniques: [T1059.001]
+      status: active
+      user: jsmith@example.com
+  - integration: defender_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-6604
+    record: {kind: process_event, event_id: mde-evt-2, endpoint: TH-LT-6604, timestamp: '2026-01-15T11:37:00Z',
+      event_type: file_create, process_name: pwsh.exe, pid: 8800, sha256: c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00,
+      domain: cdn-update.test, user: jsmith@example.com}
+  - integration: defender_endpoint
+    atomic: search_hash_enterprise
+    subject: c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00
+    record:
+      kind: hash_prevalence
+      sha256: c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00
+      file_name: update_helper.exe
+      verdict: MALICIOUS
+      prevalence: 1
+      endpoints: [TH-LT-6604]
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  package: true
+  actions: ['terminate_process:TH-LT-6604/8800', 'isolate_endpoint:TH-LT-6604', 'block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00',
+    'block_domain:cdn-update.test']
+  containment: CONTAINED

@@ -1,0 +1,93 @@
+# Suspicious PowerShell workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-02-software-deployment-script
+workflow: malicious-powershell
+description: >-
+  Migrated legacy scenario 02 (benign). The software deployment agent ran a signed PowerShell script that fetched
+  an installer from the vendor's package mirror. The domain and the installer hash are clean, the hash is common
+  across the fleet and the host has no detections. Running PowerShell (even with encoded content) is not a reason
+  to contain: nothing is proposed and the run is listed as considered.
+tags: [legacy, benign]
+legacy_source: workflows/malicious-powershell/scenarios/02-software-deployment-script.yaml
+mode: dry_run
+suite:
+  secure_endpoint: [endpoint]
+  virustotal: [intel]
+  umbrella: [network]
+  meraki: [network]
+incident:
+  incident_id: INC-TEST-PS-0002
+  title: Encoded PowerShell from software deployment agent on WS-ENG-221
+  severity: MEDIUM
+  workflow_id: malicious-powershell
+  observables:
+  - {type: hostname, value: WS-ENG-221}
+  - {type: domain, value: packages.vendor.example}
+  - {type: sha256, value: bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22}
+  users: []
+  trigger:
+    source: splunk
+    mitre_techniques: [T1059.001, T1027]
+environment:
+  reputations:
+  - type: domain
+    value: packages.vendor.example
+    verdict: CLEAN
+    risk_score: 5
+    confidence: 80
+    integrations: [umbrella, virustotal]
+    summary: software updates
+  - type: sha256
+    value: bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22
+    verdict: CLEAN
+    risk_score: 5
+    confidence: 80
+    integrations: [virustotal]
+    summary: signed installer
+  records:
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-ENG-221
+    record:
+      kind: endpoint
+      hostname: WS-ENG-221
+      connector_guid: 4b1c7a10-0000-4000-8000-000000000221
+      os: Windows 11
+      groups: [Workstations]
+      isolation_capable: true
+      isolation_state: not_isolated
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-ENG-221
+    record: {kind: process_event, event_id: evt-l2-1, endpoint: WS-ENG-221, timestamp: '2026-01-15T11:30:00Z', event_type: process_start,
+      process_name: powershell.exe, pid: 3300, parent_process_name: deploy_agent.exe, parent_pid: 900, user: svc-deploy@example.com,
+      sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-ENG-221
+    record: {kind: process_event, event_id: evt-l2-2, endpoint: WS-ENG-221, timestamp: '2026-01-15T11:31:00Z', event_type: file_create,
+      process_name: powershell.exe, pid: 3300, sha256: bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22,
+      user: svc-deploy@example.com, domain: packages.vendor.example}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-ENG-221
+    record: {kind: process_event, event_id: evt-l2-3, endpoint: WS-ENG-221, timestamp: '2026-01-15T11:32:00Z', event_type: process_start,
+      process_name: vendor_setup.exe, pid: 3350, parent_process_name: powershell.exe, parent_pid: 3300, user: svc-deploy@example.com,
+      sha256: bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22}
+  - integration: secure_endpoint
+    atomic: search_hash_enterprise
+    subject: bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22
+    record:
+      kind: hash_prevalence
+      sha256: bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22
+      file_name: vendor_setup.exe
+      verdict: CLEAN
+      prevalence: 812
+      endpoints: [WS-ENG-221, WS-ENG-222, WS-FIN-014]
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  package: false
+  considered: ['terminate_process:WS-ENG-221/3300']
+  handoffs: []

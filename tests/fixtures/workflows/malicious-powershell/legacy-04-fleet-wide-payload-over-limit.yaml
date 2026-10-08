@@ -1,0 +1,243 @@
+# Suspicious PowerShell workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-04-fleet-wide-payload-over-limit
+workflow: malicious-powershell
+description: >-
+  Migrated legacy scenario 04 (blast radius, aligned with C5). A logon script started the same PowerShell download
+  on six workstations and the malicious payload landed on all of them. Six endpoints is more than the max_endpoints
+  cap of 5, so every isolation stays proposed with ELEVATED approval and a blast-radius warning, and the lead approves.
+  The download domain and the payload hash (six endpoints, below the fleet-wide block limit) are STANDARD.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/malicious-powershell/scenarios/04-fleet-wide-payload-over-limit.yaml
+mode: both
+suite:
+  secure_endpoint: [endpoint]
+  virustotal: [intel]
+  umbrella: [network]
+  meraki: [network]
+incident:
+  incident_id: INC-TEST-PS-0004
+  title: Encoded PowerShell payload on six workstations
+  severity: CRITICAL
+  workflow_id: malicious-powershell
+  observables:
+  - {type: hostname, value: WS-OPS-101}
+  - {type: hostname, value: WS-OPS-102}
+  - {type: hostname, value: WS-OPS-103}
+  - {type: hostname, value: WS-OPS-104}
+  - {type: hostname, value: WS-OPS-105}
+  - {type: hostname, value: WS-OPS-106}
+  - {type: domain, value: update-check.test}
+  - {type: sha256, value: dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44}
+  users: []
+  trigger:
+    source: secure_endpoint
+    mitre_techniques: [T1059.001, T1027]
+environment:
+  reputations:
+  - type: domain
+    value: update-check.test
+    verdict: MALICIOUS
+    risk_score: 85
+    confidence: 80
+    integrations: [umbrella, virustotal]
+    summary: malware
+  - type: sha256
+    value: dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44
+    verdict: MALICIOUS
+    risk_score: 90
+    confidence: 85
+    integrations: [virustotal]
+    summary: malicious payload
+  records:
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-101
+    record:
+      kind: endpoint
+      hostname: WS-OPS-101
+      connector_guid: 4b1c7a10-0000-4000-8000-000000000101
+      os: Windows 11
+      groups: [Workstations]
+      isolation_capable: true
+      isolation_state: not_isolated
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-101
+    record: {kind: process_event, event_id: evt-l4-0-1, endpoint: WS-OPS-101, timestamp: '2026-01-15T11:30:00Z',
+      event_type: process_start, process_name: powershell.exe, pid: 4100, parent_process_name: logon_script.exe,
+      parent_pid: 700, user: jsmith@example.com, sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-101
+    record: {kind: process_event, event_id: evt-l4-0-2, endpoint: WS-OPS-101, timestamp: '2026-01-15T11:31:00Z',
+      event_type: file_create, process_name: powershell.exe, pid: 4100, sha256: dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44,
+      user: jsmith@example.com, domain: update-check.test}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-101
+    record: {kind: process_event, event_id: evt-l4-0-3, endpoint: WS-OPS-101, timestamp: '2026-01-15T11:32:00Z',
+      event_type: process_end, process_name: powershell.exe, pid: 4100, user: jsmith@example.com}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-102
+    record:
+      kind: endpoint
+      hostname: WS-OPS-102
+      connector_guid: 4b1c7a10-0000-4000-8000-000000000102
+      os: Windows 11
+      groups: [Workstations]
+      isolation_capable: true
+      isolation_state: not_isolated
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-102
+    record: {kind: process_event, event_id: evt-l4-1-1, endpoint: WS-OPS-102, timestamp: '2026-01-15T11:30:00Z',
+      event_type: process_start, process_name: powershell.exe, pid: 4101, parent_process_name: logon_script.exe,
+      parent_pid: 700, user: jsmith@example.com, sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-102
+    record: {kind: process_event, event_id: evt-l4-1-2, endpoint: WS-OPS-102, timestamp: '2026-01-15T11:31:00Z',
+      event_type: file_create, process_name: powershell.exe, pid: 4101, sha256: dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44,
+      user: jsmith@example.com, domain: update-check.test}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-102
+    record: {kind: process_event, event_id: evt-l4-1-3, endpoint: WS-OPS-102, timestamp: '2026-01-15T11:32:00Z',
+      event_type: process_end, process_name: powershell.exe, pid: 4101, user: jsmith@example.com}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-103
+    record:
+      kind: endpoint
+      hostname: WS-OPS-103
+      connector_guid: 4b1c7a10-0000-4000-8000-000000000103
+      os: Windows 11
+      groups: [Workstations]
+      isolation_capable: true
+      isolation_state: not_isolated
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-103
+    record: {kind: process_event, event_id: evt-l4-2-1, endpoint: WS-OPS-103, timestamp: '2026-01-15T11:30:00Z',
+      event_type: process_start, process_name: powershell.exe, pid: 4102, parent_process_name: logon_script.exe,
+      parent_pid: 700, user: jsmith@example.com, sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-103
+    record: {kind: process_event, event_id: evt-l4-2-2, endpoint: WS-OPS-103, timestamp: '2026-01-15T11:31:00Z',
+      event_type: file_create, process_name: powershell.exe, pid: 4102, sha256: dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44,
+      user: jsmith@example.com, domain: update-check.test}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-103
+    record: {kind: process_event, event_id: evt-l4-2-3, endpoint: WS-OPS-103, timestamp: '2026-01-15T11:32:00Z',
+      event_type: process_end, process_name: powershell.exe, pid: 4102, user: jsmith@example.com}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-104
+    record:
+      kind: endpoint
+      hostname: WS-OPS-104
+      connector_guid: 4b1c7a10-0000-4000-8000-000000000104
+      os: Windows 11
+      groups: [Workstations]
+      isolation_capable: true
+      isolation_state: not_isolated
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-104
+    record: {kind: process_event, event_id: evt-l4-3-1, endpoint: WS-OPS-104, timestamp: '2026-01-15T11:30:00Z',
+      event_type: process_start, process_name: powershell.exe, pid: 4103, parent_process_name: logon_script.exe,
+      parent_pid: 700, user: jsmith@example.com, sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-104
+    record: {kind: process_event, event_id: evt-l4-3-2, endpoint: WS-OPS-104, timestamp: '2026-01-15T11:31:00Z',
+      event_type: file_create, process_name: powershell.exe, pid: 4103, sha256: dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44,
+      user: jsmith@example.com, domain: update-check.test}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-104
+    record: {kind: process_event, event_id: evt-l4-3-3, endpoint: WS-OPS-104, timestamp: '2026-01-15T11:32:00Z',
+      event_type: process_end, process_name: powershell.exe, pid: 4103, user: jsmith@example.com}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-105
+    record:
+      kind: endpoint
+      hostname: WS-OPS-105
+      connector_guid: 4b1c7a10-0000-4000-8000-000000000105
+      os: Windows 11
+      groups: [Workstations]
+      isolation_capable: true
+      isolation_state: not_isolated
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-105
+    record: {kind: process_event, event_id: evt-l4-4-1, endpoint: WS-OPS-105, timestamp: '2026-01-15T11:30:00Z',
+      event_type: process_start, process_name: powershell.exe, pid: 4104, parent_process_name: logon_script.exe,
+      parent_pid: 700, user: jsmith@example.com, sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-105
+    record: {kind: process_event, event_id: evt-l4-4-2, endpoint: WS-OPS-105, timestamp: '2026-01-15T11:31:00Z',
+      event_type: file_create, process_name: powershell.exe, pid: 4104, sha256: dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44,
+      user: jsmith@example.com, domain: update-check.test}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-105
+    record: {kind: process_event, event_id: evt-l4-4-3, endpoint: WS-OPS-105, timestamp: '2026-01-15T11:32:00Z',
+      event_type: process_end, process_name: powershell.exe, pid: 4104, user: jsmith@example.com}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-106
+    record:
+      kind: endpoint
+      hostname: WS-OPS-106
+      connector_guid: 4b1c7a10-0000-4000-8000-000000000106
+      os: Windows 11
+      groups: [Workstations]
+      isolation_capable: true
+      isolation_state: not_isolated
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-106
+    record: {kind: process_event, event_id: evt-l4-5-1, endpoint: WS-OPS-106, timestamp: '2026-01-15T11:30:00Z',
+      event_type: process_start, process_name: powershell.exe, pid: 4105, parent_process_name: logon_script.exe,
+      parent_pid: 700, user: jsmith@example.com, sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-106
+    record: {kind: process_event, event_id: evt-l4-5-2, endpoint: WS-OPS-106, timestamp: '2026-01-15T11:31:00Z',
+      event_type: file_create, process_name: powershell.exe, pid: 4105, sha256: dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44,
+      user: jsmith@example.com, domain: update-check.test}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-OPS-106
+    record: {kind: process_event, event_id: evt-l4-5-3, endpoint: WS-OPS-106, timestamp: '2026-01-15T11:32:00Z',
+      event_type: process_end, process_name: powershell.exe, pid: 4105, user: jsmith@example.com}
+  - integration: secure_endpoint
+    atomic: search_hash_enterprise
+    subject: dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44
+    record:
+      kind: hash_prevalence
+      sha256: dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44
+      file_name: update_check.exe
+      verdict: MALICIOUS
+      prevalence: 6
+      endpoints: [WS-OPS-101, WS-OPS-102, WS-OPS-103, WS-OPS-104, WS-OPS-105, WS-OPS-106]
+analyst:
+  decision: APPROVE_ALL
+  approvers: [lead]
+expect:
+  package: true
+  actions: ['block_domain:update-check.test', 'block_hash:dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44',
+    'isolate_endpoint:WS-OPS-101', 'isolate_endpoint:WS-OPS-102', 'isolate_endpoint:WS-OPS-103', 'isolate_endpoint:WS-OPS-104',
+    'isolate_endpoint:WS-OPS-105', 'isolate_endpoint:WS-OPS-106']
+  elevated: ['isolate_endpoint:WS-OPS-101', 'isolate_endpoint:WS-OPS-102', 'isolate_endpoint:WS-OPS-103', 'isolate_endpoint:WS-OPS-104',
+    'isolate_endpoint:WS-OPS-105', 'isolate_endpoint:WS-OPS-106']
+  warnings: [ELEVATED APPROVAL REQUIRED]
+  containment: CONTAINED
+  controls: 8

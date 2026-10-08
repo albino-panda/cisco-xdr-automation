@@ -1,0 +1,98 @@
+# Suspicious PowerShell workflow scenario; fake lab data only (no real command lines or indicators).
+schema: 1
+name: benign-no-action
+workflow: malicious-powershell
+description: >-
+  Benign. The IT software-deployment agent started PowerShell, which fetched an installer from the vendor's package
+  mirror and ran it. The mirror domain and the installer are clean and the installer is common across the fleet;
+  no endpoint detection exists. Running PowerShell is not malicious on its own, so nothing is proposed; the PowerShell
+  run is listed as considered with the records that were checked.
+tags: [benign]
+mode: dry_run
+suite:
+  secure_endpoint: [endpoint]
+  virustotal: [intel]
+  umbrella: [network]
+  meraki: [network]
+incident:
+  incident_id: XDR-PS-0004
+  title: PowerShell started by the deployment agent on TH-LT-2210
+  severity: MEDIUM
+  workflow_id: malicious-powershell
+  observables:
+  - {type: hostname, value: TH-LT-2210}
+  users: [jsmith@example.com]
+  trigger:
+    source: splunk
+    mitre_techniques: [T1059.001]
+environment:
+  reputations:
+  - type: domain
+    value: packages.vendor.example
+    verdict: CLEAN
+    risk_score: 5
+    confidence: 80
+    integrations: [virustotal, umbrella]
+    summary: software updates
+  - type: sha256
+    value: b0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafe
+    verdict: CLEAN
+    risk_score: 5
+    confidence: 80
+    integrations: [virustotal]
+    summary: signed vendor installer
+  records:
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-2210
+    record:
+      kind: endpoint
+      hostname: TH-LT-2210
+      connector_guid: 00000000-0000-4000-8000-000000002210
+      os: Windows 11
+      groups: [Workstations]
+      isolation_capable: true
+      isolation_state: not_isolated
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-2210
+    record: {kind: process_event, event_id: evt-bn-1, endpoint: TH-LT-2210, timestamp: '2026-01-15T11:30:00Z', event_type: process_start,
+      process_name: powershell.exe, pid: 6100, parent_process_name: deploy_agent.exe, parent_pid: 900, user: svc-deploy@example.com,
+      sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-2210
+    record: {kind: process_event, event_id: evt-bn-2, endpoint: TH-LT-2210, timestamp: '2026-01-15T11:31:00Z', event_type: file_create,
+      process_name: powershell.exe, pid: 6100, sha256: b0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafe,
+      user: svc-deploy@example.com, domain: packages.vendor.example}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-2210
+    record: {kind: process_event, event_id: evt-bn-3, endpoint: TH-LT-2210, timestamp: '2026-01-15T11:32:00Z', event_type: process_start,
+      process_name: vendor_setup.exe, pid: 6150, parent_process_name: powershell.exe, parent_pid: 6100, user: svc-deploy@example.com,
+      sha256: b0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafe}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-2210
+    record: {kind: network_connection, endpoint: TH-LT-2210, user: svc-deploy@example.com, remote_port: 443, protocol: tcp,
+      direction: outbound, process_name: powershell.exe, first_seen: '2026-01-15T11:39:00Z', count: 1, action: allowed,
+      sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2, domain: packages.vendor.example,
+      verdict: CLEAN}
+  - integration: secure_endpoint
+    atomic: search_hash_enterprise
+    subject: b0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafe
+    record:
+      kind: hash_prevalence
+      sha256: b0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafeb0b0cafe
+      file_name: vendor_setup.exe
+      verdict: CLEAN
+      prevalence: 812
+      endpoints: [TH-LT-2210, TH-LT-2211, TH-LT-2212]
+      signer: Example Software Vendor Ltd.
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  package: false
+  considered: ['terminate_process:TH-LT-2210/6100']
+  handoffs: []

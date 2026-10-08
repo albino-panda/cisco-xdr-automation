@@ -1,0 +1,110 @@
+# Suspicious PowerShell workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-01-encoded-cradle-payload-executed
+workflow: malicious-powershell
+description: >-
+  Migrated legacy scenario 01 (true positive). An Office application started PowerShell (the vendor reports encoded
+  content); it downloaded a file from a newly seen malicious domain and ran it. The payload hash is malicious and
+  seen only on this host. The PowerShell process had already exited. The package blocks the download domain and
+  isolates the host (as in the legacy plan) and, per the brief's package, blocks the payload hash; each behind approval.
+  The payload is handed off to the malware workflow.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/malicious-powershell/scenarios/01-encoded-cradle-payload-executed.yaml
+mode: both
+suite:
+  secure_endpoint: [endpoint]
+  virustotal: [intel]
+  umbrella: [network]
+  meraki: [network]
+incident:
+  incident_id: INC-TEST-PS-0001
+  title: Encoded PowerShell downloaded and ran a payload on WS-FIN-014
+  severity: HIGH
+  workflow_id: malicious-powershell
+  observables:
+  - {type: hostname, value: WS-FIN-014}
+  - {type: domain, value: cdn-update.test}
+  - {type: sha256, value: aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11}
+  users: [j.doe@example.com]
+  trigger:
+    source: secure_endpoint
+    mitre_techniques: [T1059.001, T1027]
+environment:
+  reputations:
+  - type: domain
+    value: cdn-update.test
+    verdict: MALICIOUS
+    risk_score: 85
+    confidence: 80
+    integrations: [umbrella, virustotal]
+    summary: malware
+  - type: sha256
+    value: aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11
+    verdict: MALICIOUS
+    risk_score: 90
+    confidence: 85
+    integrations: [virustotal]
+    summary: malicious payload
+  records:
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-FIN-014
+    record:
+      kind: endpoint
+      hostname: WS-FIN-014
+      connector_guid: 4b1c7a10-0000-4000-8000-000000000014
+      os: Windows 11
+      groups: [Finance Users]
+      isolation_capable: true
+      isolation_state: not_isolated
+      users: [j.doe@example.com]
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-FIN-014
+    record: {kind: process_event, event_id: evt-l1-1, endpoint: WS-FIN-014, timestamp: '2026-01-15T11:30:00Z', event_type: process_start,
+      process_name: powershell.exe, pid: 2400, parent_process_name: winword.exe, parent_pid: 2000, user: j.doe@example.com,
+      sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-FIN-014
+    record: {kind: process_event, event_id: evt-l1-2, endpoint: WS-FIN-014, timestamp: '2026-01-15T11:31:00Z', event_type: file_create,
+      process_name: powershell.exe, pid: 2400, sha256: aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11,
+      user: j.doe@example.com, domain: cdn-update.test}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-FIN-014
+    record: {kind: process_event, event_id: evt-l1-3, endpoint: WS-FIN-014, timestamp: '2026-01-15T11:32:00Z', event_type: process_start,
+      process_name: invoice_tool.exe, pid: 2450, parent_process_name: powershell.exe, parent_pid: 2400, user: j.doe@example.com,
+      sha256: aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-FIN-014
+    record: {kind: process_event, event_id: evt-l1-4, endpoint: WS-FIN-014, timestamp: '2026-01-15T11:33:00Z', event_type: process_end,
+      process_name: powershell.exe, pid: 2400, user: j.doe@example.com}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-FIN-014
+    record: {kind: detection, detection_id: det-l1-1, name: Malicious file executed from user temp folder, verdict: MALICIOUS,
+      severity: HIGH, category: Execution, endpoint: WS-FIN-014, user: j.doe@example.com, status: active, first_seen: '2026-01-15T11:37:00Z',
+      process_name: invoice_tool.exe, sha256: aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11}
+  - integration: secure_endpoint
+    atomic: search_hash_enterprise
+    subject: aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11
+    record:
+      kind: hash_prevalence
+      sha256: aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11
+      file_name: invoice_tool.exe
+      verdict: MALICIOUS
+      prevalence: 1
+      endpoints: [WS-FIN-014]
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  package: true
+  actions: ['block_domain:cdn-update.test', 'isolate_endpoint:WS-FIN-014', 'block_hash:aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11']
+  elevated: []
+  considered: ['terminate_process:WS-FIN-014/2400']
+  handoffs: ['malware:aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11']
+  containment: CONTAINED
+  controls: 3

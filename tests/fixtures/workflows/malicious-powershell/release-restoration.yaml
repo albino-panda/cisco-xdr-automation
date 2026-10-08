@@ -1,0 +1,125 @@
+# Suspicious PowerShell workflow scenario; fake lab data only (no real command lines or indicators).
+schema: 1
+name: release-restoration
+workflow: malicious-powershell
+description: >-
+  Approve and contain, then a separate human release decision restores every reversible control (isolation, hash,
+  domain and IP blocks). The process termination is not reversible and registers no control.
+tags: [release, true_positive, approve_all]
+mode: live
+suite:
+  secure_endpoint: [endpoint]
+  virustotal: [intel]
+  umbrella: [network]
+  meraki: [network]
+incident:
+  incident_id: XDR-PS-0009
+  title: PowerShell downloaded and ran a payload on TH-LT-1047
+  severity: HIGH
+  workflow_id: malicious-powershell
+  observables:
+  - {type: hostname, value: TH-LT-1047}
+  users: [jsmith@example.com]
+  trigger:
+    source: secure_endpoint
+    mitre_techniques: [T1059.001, T1027]
+environment:
+  reputations:
+  - type: sha256
+    value: c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00
+    verdict: MALICIOUS
+    risk_score: 90
+    confidence: 85
+    integrations: [secure_endpoint, virustotal]
+    summary: downloader payload
+  - type: domain
+    value: cdn-update.test
+    verdict: MALICIOUS
+    risk_score: 85
+    confidence: 80
+    integrations: [virustotal, umbrella]
+    summary: malware distribution
+  - type: ip
+    value: 198.51.100.77
+    verdict: MALICIOUS
+    risk_score: 80
+    confidence: 75
+    integrations: [virustotal]
+    summary: callback server
+  records:
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-1047
+    record:
+      kind: endpoint
+      hostname: TH-LT-1047
+      connector_guid: 00000000-0000-4000-8000-000000001047
+      os: Windows 11
+      groups: [Workstations]
+      isolation_capable: true
+      isolation_state: not_isolated
+      users: [jsmith@example.com]
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-1047
+    record: {kind: process_event, event_id: evt-ps-1, endpoint: TH-LT-1047, timestamp: '2026-01-15T11:36:00Z', event_type: process_start,
+      process_name: powershell.exe, pid: 4242, parent_process_name: winword.exe, parent_pid: 1180, user: jsmith@example.com,
+      sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-1047
+    record:
+      kind: detection
+      detection_id: det-ps-1
+      name: Sample.ScriptDownloader.Generic
+      verdict: MALICIOUS
+      severity: HIGH
+      category: Execution
+      endpoint: TH-LT-1047
+      user: jsmith@example.com
+      status: active
+      first_seen: '2026-01-15T11:37:00Z'
+      process_name: powershell.exe
+      mitre_techniques: [T1059.001, T1027]
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-1047
+    record: {kind: process_event, event_id: evt-ps-2, endpoint: TH-LT-1047, timestamp: '2026-01-15T11:37:00Z', event_type: file_create,
+      process_name: powershell.exe, pid: 4242, sha256: c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00,
+      user: jsmith@example.com, domain: cdn-update.test, file_path: 'C:/Users/jsmith/AppData/Local/Temp/update_helper.exe'}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-1047
+    record: {kind: process_event, event_id: evt-ps-3, endpoint: TH-LT-1047, timestamp: '2026-01-15T11:38:00Z', event_type: process_start,
+      process_name: update_helper.exe, pid: 5120, parent_process_name: powershell.exe, parent_pid: 4242, user: jsmith@example.com,
+      sha256: c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-1047
+    record: {kind: network_connection, endpoint: TH-LT-1047, user: jsmith@example.com, remote_port: 443, protocol: tcp,
+      direction: outbound, process_name: powershell.exe, first_seen: '2026-01-15T11:39:00Z', count: 16, action: allowed,
+      sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2, remote_ip: 198.51.100.77, verdict: MALICIOUS}
+  - integration: secure_endpoint
+    atomic: search_hash_enterprise
+    subject: c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00
+    record:
+      kind: hash_prevalence
+      sha256: c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00
+      file_name: update_helper.exe
+      verdict: MALICIOUS
+      prevalence: 1
+      endpoints: [TH-LT-1047]
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+release:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  package: true
+  actions: ['terminate_process:TH-LT-1047/4242', 'isolate_endpoint:TH-LT-1047', 'block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00',
+    'block_domain:cdn-update.test', 'block_ip:198.51.100.77']
+  containment: CONTAINED
+  controls: 4
+  restoration: RESTORED
+  final_state: RESTORED

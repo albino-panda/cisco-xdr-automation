@@ -1,0 +1,108 @@
+# Suspicious PowerShell workflow scenario; fake lab data only (no real command lines or indicators).
+schema: 1
+name: edge-signed-admin-script
+workflow: malicious-powershell
+description: >-
+  Edge case: a signed administration script. The endpoint management agent started PowerShell with encoded content
+  to run the IT team's signed inventory script; the endpoint vendor raised a LOW, SUSPICIOUS informational detection
+  about the encoded content (reported technique T1027). The script hash is signed by the organisation's IT signer,
+  clean and common across the fleet, the only destination is the internal inventory service, and no malicious payload
+  or malicious detection exists. A suspicious characteristic of the command line is not enough: nothing is proposed,
+  and the PowerShell run is listed as considered with the detection and telemetry that were checked.
+tags: [edge_case, benign]
+mode: dry_run
+suite:
+  secure_endpoint: [endpoint]
+  virustotal: [intel]
+  umbrella: [network]
+  meraki: [network]
+incident:
+  incident_id: XDR-PS-0010
+  title: Encoded PowerShell from the management agent on TH-LT-3301
+  severity: LOW
+  workflow_id: malicious-powershell
+  observables:
+  - {type: hostname, value: TH-LT-3301}
+  users: [svc-endpoint-mgmt@example.com]
+  trigger:
+    source: secure_endpoint
+    mitre_techniques: [T1059.001, T1027]
+environment:
+  reputations:
+  - type: sha256
+    value: 5c51ed005c51ed005c51ed005c51ed005c51ed005c51ed005c51ed005c51ed00
+    verdict: CLEAN
+    risk_score: 5
+    confidence: 80
+    integrations: [virustotal]
+    summary: signed administration script
+  records:
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-3301
+    record:
+      kind: endpoint
+      hostname: TH-LT-3301
+      connector_guid: 00000000-0000-4000-8000-000000003301
+      os: Windows 11
+      groups: [Workstations]
+      isolation_capable: true
+      isolation_state: not_isolated
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-3301
+    record: {kind: process_event, event_id: evt-adm-1, endpoint: TH-LT-3301, timestamp: '2026-01-15T11:20:00Z',
+      event_type: process_start, process_name: powershell.exe, pid: 7300, parent_process_name: mgmt_agent.exe, parent_pid: 880,
+      user: svc-endpoint-mgmt@example.com, sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-3301
+    record:
+      kind: detection
+      detection_id: det-adm-1
+      name: Informational.EncodedScriptContent
+      verdict: SUSPICIOUS
+      severity: LOW
+      category: Execution
+      endpoint: TH-LT-3301
+      user: svc-endpoint-mgmt@example.com
+      status: active
+      first_seen: '2026-01-15T11:37:00Z'
+      process_name: powershell.exe
+      mitre_techniques: [T1027]
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-3301
+    record: {kind: process_event, event_id: evt-adm-2, endpoint: TH-LT-3301, timestamp: '2026-01-15T11:20:30Z',
+      event_type: file_create, process_name: powershell.exe, pid: 7300, sha256: 5c51ed005c51ed005c51ed005c51ed005c51ed005c51ed005c51ed005c51ed00,
+      user: svc-endpoint-mgmt@example.com, file_path: 'C:/ProgramData/ExampleIT/inventory.ps1'}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-3301
+    record: {kind: network_connection, endpoint: TH-LT-3301, user: svc-endpoint-mgmt@example.com, remote_port: 443,
+      protocol: tcp, direction: outbound, process_name: powershell.exe, first_seen: '2026-01-15T11:39:00Z', count: 1,
+      action: allowed, sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2, domain: inventory.corp.example.com,
+      verdict: CLEAN}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-3301
+    record: {kind: process_event, event_id: evt-adm-3, endpoint: TH-LT-3301, timestamp: '2026-01-15T11:21:00Z',
+      event_type: process_end, process_name: powershell.exe, pid: 7300, user: svc-endpoint-mgmt@example.com}
+  - integration: secure_endpoint
+    atomic: search_hash_enterprise
+    subject: 5c51ed005c51ed005c51ed005c51ed005c51ed005c51ed005c51ed005c51ed00
+    record:
+      kind: hash_prevalence
+      sha256: 5c51ed005c51ed005c51ed005c51ed005c51ed005c51ed005c51ed005c51ed00
+      file_name: inventory.ps1
+      verdict: CLEAN
+      prevalence: 640
+      endpoints: [TH-LT-3301, TH-LT-3302]
+      signer: Example Corp IT Automation
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  package: false
+  considered: ['terminate_process:TH-LT-3301/7300']
+  handoffs: []

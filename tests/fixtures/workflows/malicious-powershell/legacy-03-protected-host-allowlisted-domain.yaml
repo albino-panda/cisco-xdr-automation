@@ -1,0 +1,115 @@
+# Suspicious PowerShell workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-03-protected-host-allowlisted-domain
+workflow: malicious-powershell
+description: >-
+  Migrated legacy scenario 03 (guardrails, aligned with C3). PowerShell on domain controller DC-02 (the vendor reports
+  obfuscated content) downloaded a malicious payload from the organisation's own web share files.example.com. The
+  suspicious domain is confirmed as the payload host, but it is allow-listed: its block is shown as an excluded
+  target, never executed. The domain controller is a critical asset, so its isolation is proposed with ELEVATED
+  approval and a visible warning (never skipped) and the lead approves. The payload hash block (new in the brief's
+  package) is STANDARD.
+tags: [legacy, critical_asset, true_positive, approve_all]
+legacy_source: workflows/malicious-powershell/scenarios/03-protected-host-allowlisted-domain.yaml
+mode: both
+suite:
+  secure_endpoint: [endpoint]
+  virustotal: [intel]
+  umbrella: [network]
+  meraki: [network]
+incident:
+  incident_id: INC-TEST-PS-0003
+  title: Obfuscated PowerShell on DC-02 retrieved a payload from files.example.com
+  severity: HIGH
+  workflow_id: malicious-powershell
+  observables:
+  - {type: hostname, value: DC-02}
+  - {type: domain, value: files.example.com}
+  - {type: sha256, value: cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33}
+  users: []
+  trigger:
+    source: secure_endpoint
+    mitre_techniques: [T1059.001, T1027]
+environment:
+  reputations:
+  - type: domain
+    value: files.example.com
+    verdict: SUSPICIOUS
+    risk_score: 50
+    confidence: 60
+    integrations: [umbrella]
+    summary: business services
+  - type: sha256
+    value: cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33
+    verdict: MALICIOUS
+    risk_score: 90
+    confidence: 85
+    integrations: [virustotal]
+    summary: malicious payload
+  records:
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: DC-02
+    record:
+      kind: endpoint
+      hostname: DC-02
+      connector_guid: 4b1c7a10-0000-4000-8000-0000000dc002
+      os: Windows 11
+      groups: [Domain Controllers]
+      isolation_capable: true
+      isolation_state: not_isolated
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: DC-02
+    record: {kind: process_event, event_id: evt-l3-1, endpoint: DC-02, timestamp: '2026-01-15T11:30:00Z', event_type: process_start,
+      process_name: powershell.exe, pid: 5100, parent_process_name: services.exe, parent_pid: 600, user: svc-backup@example.com,
+      sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: DC-02
+    record: {kind: process_event, event_id: evt-l3-2, endpoint: DC-02, timestamp: '2026-01-15T11:31:00Z', event_type: file_create,
+      process_name: powershell.exe, pid: 5100, sha256: cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33,
+      user: svc-backup@example.com, domain: files.example.com}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: DC-02
+    record: {kind: process_event, event_id: evt-l3-3, endpoint: DC-02, timestamp: '2026-01-15T11:32:00Z', event_type: process_end,
+      process_name: powershell.exe, pid: 5100, user: svc-backup@example.com}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: DC-02
+    record:
+      kind: detection
+      detection_id: det-l3-1
+      name: Malicious file written by PowerShell
+      verdict: MALICIOUS
+      severity: HIGH
+      category: Execution
+      endpoint: DC-02
+      user: svc-backup@example.com
+      status: active
+      first_seen: '2026-01-15T11:37:00Z'
+      process_name: powershell.exe
+      sha256: cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33
+      mitre_techniques: [T1027]
+  - integration: secure_endpoint
+    atomic: search_hash_enterprise
+    subject: cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33
+    record:
+      kind: hash_prevalence
+      sha256: cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33
+      file_name: share_sync.exe
+      verdict: MALICIOUS
+      prevalence: 1
+      endpoints: [DC-02]
+analyst:
+  decision: APPROVE_ALL
+  approvers: [lead]
+expect:
+  package: true
+  actions: ['isolate_endpoint:DC-02', 'block_hash:cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33']
+  elevated: ['isolate_endpoint:DC-02']
+  excluded: ['block_domain:files.example.com']
+  warnings: [ELEVATED APPROVAL REQUIRED, Domain controller]
+  containment: CONTAINED
+  controls: 2

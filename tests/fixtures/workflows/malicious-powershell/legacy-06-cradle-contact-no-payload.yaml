@@ -1,0 +1,73 @@
+# Suspicious PowerShell workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-06-cradle-contact-no-payload
+workflow: malicious-powershell
+description: >-
+  Migrated legacy scenario 06 (edge case). Script logging shows PowerShell contacting a malicious domain, but the
+  download never completed: there is no payload and the host has no malicious detection. The domain is blocked to
+  stop a retry; the process is not terminated and the host is not isolated, because neither a malicious payload
+  nor a detection is shown (a bad destination alone does not prove the process malicious). The run is listed as
+  considered with that reason.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/malicious-powershell/scenarios/06-cradle-contact-no-payload.yaml
+mode: both
+suite:
+  secure_endpoint: [endpoint]
+  virustotal: [intel]
+  umbrella: [network]
+  meraki: [network]
+incident:
+  incident_id: INC-TEST-PS-0006
+  title: Encoded PowerShell contacted a malicious domain from WS-SAL-030
+  severity: MEDIUM
+  workflow_id: malicious-powershell
+  observables:
+  - {type: hostname, value: WS-SAL-030}
+  - {type: domain, value: stage-loader.test}
+  users: []
+  trigger:
+    source: splunk
+    mitre_techniques: [T1059.001, T1027]
+environment:
+  reputations:
+  - type: domain
+    value: stage-loader.test
+    verdict: MALICIOUS
+    risk_score: 85
+    confidence: 80
+    integrations: [umbrella, virustotal]
+    summary: malware
+  records:
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-SAL-030
+    record:
+      kind: endpoint
+      hostname: WS-SAL-030
+      connector_guid: 4b1c7a10-0000-4000-8000-000000000030
+      os: Windows 11
+      groups: [Workstations]
+      isolation_capable: true
+      isolation_state: not_isolated
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-SAL-030
+    record: {kind: process_event, event_id: evt-l6-1, endpoint: WS-SAL-030, timestamp: '2026-01-15T11:30:00Z', event_type: process_start,
+      process_name: powershell.exe, pid: 7700, parent_process_name: explorer.exe, parent_pid: 1000, user: jsmith@example.com,
+      sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-SAL-030
+    record: {kind: process_event, event_id: evt-l6-2, endpoint: WS-SAL-030, timestamp: '2026-01-15T11:31:00Z', event_type: network,
+      process_name: powershell.exe, pid: 7700, domain: stage-loader.test, user: jsmith@example.com}
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  package: true
+  actions: ['block_domain:stage-loader.test']
+  elevated: []
+  considered: ['terminate_process:WS-SAL-030/7700']
+  handoffs: []
+  containment: CONTAINED
+  controls: 1

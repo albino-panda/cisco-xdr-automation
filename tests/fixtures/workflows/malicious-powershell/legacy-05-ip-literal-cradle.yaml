@@ -1,0 +1,88 @@
+# Suspicious PowerShell workflow scenario; fake lab data only. Migrated from the legacy spec scenario.
+schema: 1
+name: legacy-05-ip-literal-cradle
+workflow: malicious-powershell
+description: >-
+  Migrated legacy scenario 05 (PowerShell-specific edge case). PowerShell downloaded straight from an external IP
+  address, so there is no domain to block and the dropped file's hash is not known. The host has a malicious Secure
+  Endpoint detection after the download, and the IP is malicious (Secure Endpoint flags the connection and Cisco
+  XDR reports a Talos verdict), so the endpoint is isolated (legacy executed-payload rule). The brief's package
+  now also blocks the C2 IP (the legacy spec left IP blocks to the c2 workflow). The legacy address 203.0.113.45
+  lies in the lab's production-server CIDR, so the migrated scenario uses 198.51.100.45 to keep the C2 block STANDARD.
+  The PowerShell process had exited.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/malicious-powershell/scenarios/05-ip-literal-cradle.yaml
+mode: both
+suite:
+  secure_endpoint: [endpoint]
+  cisco_xdr: [intel]
+  virustotal: [intel]
+  umbrella: [network]
+  meraki: [network]
+incident:
+  incident_id: INC-TEST-PS-0005
+  title: Encoded PowerShell downloaded from an IP address on WS-HR-007
+  severity: HIGH
+  workflow_id: malicious-powershell
+  observables:
+  - {type: hostname, value: WS-HR-007}
+  - {type: ip, value: 198.51.100.45}
+  users: [a.lee@example.com]
+  trigger:
+    source: secure_endpoint
+    mitre_techniques: [T1059.001, T1027]
+environment:
+  reputations:
+  - type: ip
+    value: 198.51.100.45
+    verdict: MALICIOUS
+    risk_score: 80
+    confidence: 75
+    integrations: [cisco_xdr, virustotal]
+    summary: malware distribution (Talos)
+  records:
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-HR-007
+    record:
+      kind: endpoint
+      hostname: WS-HR-007
+      connector_guid: 4b1c7a10-0000-4000-8000-000000000007
+      os: Windows 11
+      groups: [HR Users]
+      isolation_capable: true
+      isolation_state: not_isolated
+      users: [a.lee@example.com]
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-HR-007
+    record: {kind: process_event, event_id: evt-l5-1, endpoint: WS-HR-007, timestamp: '2026-01-15T11:30:00Z', event_type: process_start,
+      process_name: powershell.exe, pid: 6600, parent_process_name: explorer.exe, parent_pid: 1000, user: a.lee@example.com,
+      sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-HR-007
+    record: {kind: network_connection, endpoint: WS-HR-007, user: a.lee@example.com, remote_port: 443, protocol: tcp,
+      direction: outbound, process_name: powershell.exe, first_seen: '2026-01-15T11:31:00Z', count: 1, action: allowed,
+      sha256: a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2a1a1b2b2, remote_ip: 198.51.100.45, verdict: MALICIOUS}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-HR-007
+    record: {kind: process_event, event_id: evt-l5-2, endpoint: WS-HR-007, timestamp: '2026-01-15T11:33:00Z', event_type: process_end,
+      process_name: powershell.exe, pid: 6600, user: a.lee@example.com}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: WS-HR-007
+    record: {kind: detection, detection_id: det-l5-1, name: Malicious file executed after PowerShell download, verdict: MALICIOUS,
+      severity: HIGH, category: Execution, endpoint: WS-HR-007, user: a.lee@example.com, status: active, first_seen: '2026-01-15T11:37:00Z',
+      process_name: payload_stage.exe}
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  package: true
+  actions: ['isolate_endpoint:WS-HR-007', 'block_ip:198.51.100.45']
+  elevated: []
+  considered: ['terminate_process:WS-HR-007/6600']
+  containment: CONTAINED
+  controls: 2

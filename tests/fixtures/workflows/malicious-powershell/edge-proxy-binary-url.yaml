@@ -1,0 +1,118 @@
+# Suspicious PowerShell workflow scenario; fake lab data only (no real command lines or indicators).
+schema: 1
+name: edge-proxy-binary-url
+workflow: malicious-powershell
+description: >-
+  Edge case: a signed system binary used as a proxy rather than PowerShell. A browser download led to mshta fetching
+  content from a malicious URL; mshta wrote and started a payload that the vendor detects, and a run-key persistence
+  item for the payload appeared. The package terminates mshta, isolates the endpoint and blocks the payload hash,
+  the malicious URL and its hosting domain (only suspicious on its own, but the process that contacted it retrieved
+  a malicious payload, so the domain is confirmed as a payload host). The persistence item is handed off to the
+  persistence workflow and the payload to the malware workflow.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite:
+  secure_endpoint: [endpoint]
+  virustotal: [intel]
+  umbrella: [network]
+  meraki: [network]
+incident:
+  incident_id: XDR-PS-0012
+  title: mshta started a payload on TH-LT-5503
+  severity: HIGH
+  workflow_id: malicious-powershell
+  observables:
+  - {type: hostname, value: TH-LT-5503}
+  users: [jsmith@example.com]
+  trigger:
+    source: secure_endpoint
+    mitre_techniques: [T1218.005]
+environment:
+  reputations:
+  - type: sha256
+    value: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed
+    verdict: MALICIOUS
+    risk_score: 90
+    confidence: 85
+    integrations: [virustotal]
+    summary: dropper
+  - type: url
+    value: https://media-cdn.test/view/doc
+    verdict: MALICIOUS
+    risk_score: 85
+    confidence: 80
+    integrations: [virustotal]
+    summary: malicious script content
+  - type: domain
+    value: media-cdn.test
+    verdict: SUSPICIOUS
+    risk_score: 50
+    confidence: 60
+    integrations: [umbrella]
+    summary: newly seen
+  records:
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-5503
+    record:
+      kind: endpoint
+      hostname: TH-LT-5503
+      connector_guid: 00000000-0000-4000-8000-000000005503
+      os: Windows 11
+      groups: [Workstations]
+      isolation_capable: true
+      isolation_state: not_isolated
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-5503
+    record: {kind: process_event, event_id: evt-hta-1, endpoint: TH-LT-5503, timestamp: '2026-01-15T11:40:00Z',
+      event_type: process_start, process_name: mshta.exe, pid: 3100, parent_process_name: browser.exe, parent_pid: 2200,
+      user: jsmith@example.com, sha256: 0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-5503
+    record: {kind: network_connection, endpoint: TH-LT-5503, user: jsmith@example.com, remote_port: 443, protocol: tcp,
+      direction: outbound, process_name: mshta.exe, first_seen: '2026-01-15T11:39:00Z', count: 1, action: allowed,
+      sha256: 0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e, domain: media-cdn.test, url: 'https://media-cdn.test/view/doc'}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-5503
+    record: {kind: process_event, event_id: evt-hta-2, endpoint: TH-LT-5503, timestamp: '2026-01-15T11:41:00Z',
+      event_type: file_create, process_name: mshta.exe, pid: 3100, sha256: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed,
+      user: jsmith@example.com}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-5503
+    record: {kind: process_event, event_id: evt-hta-3, endpoint: TH-LT-5503, timestamp: '2026-01-15T11:42:00Z',
+      event_type: process_start, process_name: doc_viewer.exe, pid: 3150, parent_process_name: mshta.exe, parent_pid: 3100,
+      user: jsmith@example.com, sha256: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-5503
+    record: {kind: detection, detection_id: det-hta-1, name: Sample.Dropper.Generic, verdict: MALICIOUS, severity: HIGH,
+      category: Execution, endpoint: TH-LT-5503, user: jsmith@example.com, status: active, first_seen: '2026-01-15T11:37:00Z',
+      process_name: doc_viewer.exe, sha256: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-5503
+    record: {kind: persistence_item, endpoint: TH-LT-5503, item_id: runkey-1, mechanism: run_key, name: DocViewerUpdate,
+      sha256: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed, verdict: MALICIOUS, user: jsmith@example.com}
+  - integration: secure_endpoint
+    atomic: search_hash_enterprise
+    subject: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed
+    record:
+      kind: hash_prevalence
+      sha256: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed
+      file_name: doc_viewer.exe
+      verdict: MALICIOUS
+      prevalence: 1
+      endpoints: [TH-LT-5503]
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  package: true
+  actions: ['terminate_process:TH-LT-5503/3100', 'isolate_endpoint:TH-LT-5503', 'block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed',
+    'block_url:https://media-cdn.test/view/doc', 'block_domain:media-cdn.test']
+  handoffs: ['malware:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed', 'persistence:TH-LT-5503']
+  containment: CONTAINED
