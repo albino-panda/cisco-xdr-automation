@@ -6,6 +6,40 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+Phase 4: four workflows migrated to the framework (c2, dns-tunneling, exfiltration,
+cloud-compromise) and the new suspicious-authentication, with the same owner rule: investigation and
+recommendation are automatic, every state-changing action waits for a human approval (ELEVATED with
+a visible warning for critical assets), and a release needs its own human approval. Integration
+notes and exit criteria: architecture 14.12.
+
+### Added (Phase 4)
+- Workflows `c2`, `dns-tunneling`, `exfiltration` and `cloud-compromise` (legacy `workflow.yaml` and
+  `scenarios/` removed, carried as `legacy-*` fixtures) and the new `suspicious-authentication`, each
+  with a 17-section README, hooks, unit and lifecycle tests and at least the 14.5.3 scenario set
+  (87 scenarios; 328 in `tests/fixtures/workflows/`).
+- Lab reputations accept `categories` and `first_seen` (scenario `environment.reputations` and
+  `SimulatedEnvironment.set_reputation`); they reach `EnrichmentRecord.categories` and `.first_seen`
+  like a real enricher's answer.
+- Cross-workflow tests: Phase 4 routing pairs and title ties, and the Phase 4 account hand-offs to
+  account-takeover.
+
+### Changed (Phase 4)
+- Ransomware's title trigger names encrypted files (`*files encrypted*`, `*encrypted files*`,
+  `*share encrypted*`, `*mass encryption*`, ...) instead of `*encrypted*`, so encrypted-channel C2
+  titles route to c2.
+- cloud-compromise passes the grant's `directory_scope_id` to role removal.
+
+### Fixed (Phase 4)
+- Entra role removal: the adapter resolves the framework's `<user>/<roleDefinitionId>` target to the
+  user's object id and the role's assignment through VERIFIED reads before the delete and when
+  verifying. Before, it matched the target against assignment ids, so with a principal id it could
+  report `ALREADY_CONTAINED` and `VERIFIED` while the role was still assigned. A role held at several
+  scopes without a named scope is refused, and nothing is deleted.
+- exfiltration and dns-tunneling cite the enrichment records whose vendor category or first-seen time
+  backs a block. Before, the rationale named the category but the evidence did not cite its record.
+- Atomic `used_by` lists, `workflows/README.md`, the generated MITRE mapping and workflow index, and
+  the root and engine README examples (now `web-attacks`) follow the migration.
+
 Phase 3: five workflows migrated to the framework (malicious-powershell, credential-dumping,
 lateral-movement, persistence, unauthorized-rmm), with the same owner rule: investigation and
 recommendation are automatic, every state-changing action waits for a human approval (ELEVATED with

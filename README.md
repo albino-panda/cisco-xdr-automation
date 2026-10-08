@@ -137,7 +137,7 @@ What Phase 0 does not do yet:
 - No production identity provider. `InMemoryApproverAuthenticator` is for tests and the lab only. Plug in your own `ApproverAuthenticator` before live use.
 - Scoring: the deterministic scoring engine ([`scoring/README.md`](src/xdr_response/scoring/README.md), [docs/threat-scoring.md](docs/threat-scoring.md)) scores workflow recommendations with separate risk and confidence. Incidents that no migrated workflow handles take the Phase 0 `RuleBasedRecommender` path.
 - An adapter implements an endpoint only if [docs/integrations.md](docs/integrations.md) lists it as VERIFIED with a source. Other operations raise `UnverifiedEndpointError` ("unverified endpoint").
-- No HTTP intake ships with the repository: a deployment exposes one that receives only the XDR incident ID (see [tools/deployment/xdr-trigger-workflow.md](tools/deployment/xdr-trigger-workflow.md)). Phase 2 migrated eight workflows to the framework (ransomware, phishing, account-takeover, mail-bombing, malware, mfa-fatigue, password-spray, bec) and Phase 3 five more (malicious-powershell, credential-dumping, lateral-movement, persistence, unauthorized-rmm); index in [docs/workflows/README.md](docs/workflows/README.md). They investigate and recommend only; every action still needs a human approval. The 7 legacy specs not yet migrated (Phases 4 and 5) replay through the runtime in dry run.
+- No HTTP intake ships with the repository: a deployment exposes one that receives only the XDR incident ID (see [tools/deployment/xdr-trigger-workflow.md](tools/deployment/xdr-trigger-workflow.md)). Phase 2 migrated eight workflows to the framework (ransomware, phishing, account-takeover, mail-bombing, malware, mfa-fatigue, password-spray, bec) Phase 3 five more (malicious-powershell, credential-dumping, lateral-movement, persistence, unauthorized-rmm) and Phase 4 five more (c2, dns-tunneling, exfiltration, cloud-compromise and the new suspicious-authentication); index in [docs/workflows/README.md](docs/workflows/README.md). They investigate and recommend only; every action still needs a human approval. The 3 legacy specs not yet migrated (Phase 5) replay through the runtime in dry run.
 
 Phases 1 to 5 are in [architecture section 12](docs/architecture.md#12-recommended-development-phases).
 
@@ -147,7 +147,7 @@ The spec layer from 0.1.0 is kept and still tested:
 
 | | Count | Index |
 |---|---|---|
-| Workflows | 20: 13 migrated (241 scenarios in `tests/fixtures/workflows/`), 7 legacy specs (39 scenarios) | [docs/workflows/README.md](docs/workflows/README.md), [workflows/README.md](workflows/README.md) |
+| Workflows | 21: 18 migrated (328 scenarios in `tests/fixtures/workflows/`), 3 legacy specs (16 scenarios) | [docs/workflows/README.md](docs/workflows/README.md), [workflows/README.md](workflows/README.md) |
 | Atomic actions | 15 | [atomic/README.md](atomic/README.md) |
 | Integration specs | 9 | [integrations/README.md](integrations/README.md) |
 | MITRE ATT&CK mapping | | [docs/mitre-mapping](docs/mitre-mapping/README.md) |
@@ -156,15 +156,15 @@ The spec layer from 0.1.0 is kept and still tested:
 
 ```
 PYTHONPATH=engine python -m xdr_plan check
-PYTHONPATH=engine python -m xdr_plan plan c2 workflows/c2/scenarios/01-confirmed-beaconing.yaml
+PYTHONPATH=engine python -m xdr_plan plan web-attacks workflows/web-attacks/scenarios/01-confirmed-web-shell.yaml
 ```
 
 How this feeds later phases:
 
-- **Phase 1** (done) added `plan_bridge`: each planned action becomes a proposal for `PackageBuilder`, which adds numbered evidence, the idempotency key and the approval level. All 105 scenarios replayed through the runtime in dry run; the 39 of the 7 specs not yet migrated still do (`tests/simulation/test_legacy_replay.py`, `python tools/simulator/simulate.py --legacy <workflow> [<scenario>]`).
+- **Phase 1** (done) added `plan_bridge`: each planned action becomes a proposal for `PackageBuilder`, which adds numbered evidence, the idempotency key and the approval level. All 105 scenarios replayed through the runtime in dry run; the 16 of the 3 specs not yet migrated still do (`tests/simulation/test_legacy_replay.py`, `python tools/simulator/simulate.py --legacy <workflow> [<scenario>]`).
 - In the replay, spec guardrails become runtime policy: protected assets become critical assets (ELEVATED, never silently skipped), allow-lists become never-block lists, blast-radius caps become `thresholds` caps.
 - The specs were aligned with the lifecycle (conflicts C1 to C5 in [architecture section 1.3](docs/architecture.md#13-conflicts-with-the-non-negotiable-lifecycle)): every containment atomic, `revoke-session` included, requires approval; `auto_approve` is gone and refused; protected and over-limit actions stay planned as ELEVATED; unlock codes are never copied.
-- **Phases 2 to 5** turn each workflow into data for the framework: rules, scoring weights, MITRE mapping, scenarios. Workflows never hold vendor HTTP code or approval logic. A migrated workflow deletes its `workflow.yaml` and `scenarios/`; its legacy scenarios live on as `legacy-*` fixtures (Phase 2: eight workflows done; Phase 3: five more).
+- **Phases 2 to 5** turn each workflow into data for the framework: rules, scoring weights, MITRE mapping, scenarios. Workflows never hold vendor HTTP code or approval logic. A migrated workflow deletes its `workflow.yaml` and `scenarios/`; its legacy scenarios live on as `legacy-*` fixtures (Phase 2: eight workflows done; Phase 3: five more; Phase 4: five more, one of them new).
 
 ## Documentation
 
