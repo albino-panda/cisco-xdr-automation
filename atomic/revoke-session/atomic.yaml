@@ -33,4 +33,3 @@ outputs:
   description: Empty on success.
 used_by:
 - privilege-escalation
-- cloud-compromise

@@ -36,7 +36,7 @@ Add a domain to the automation block list in Umbrella and, optionally, Cloudflar
 
 ## Used by
 
-[`c2`](../../workflows/c2/README.md), [`dns-tunneling`](../../workflows/dns-tunneling/README.md), [`exfiltration`](../../workflows/exfiltration/README.md)
+No legacy spec. The migrated workflows use `xdr_response.atomics` instead; see [docs/workflows/README.md](../../docs/workflows/README.md).
 
 ## Building it in XDR Automation
 

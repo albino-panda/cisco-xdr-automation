@@ -52,9 +52,6 @@ outputs:
   type: string
   description: Empty on success.
 used_by:
-- c2
-- dns-tunneling
 - privilege-escalation
-- exfiltration
 - vulnerability-exploitation
 - web-attacks

@@ -37,7 +37,7 @@ Reputation, geolocation, ASN and internal sightings for an IP address.
 
 ## Used by
 
-[`c2`](../../workflows/c2/README.md), [`exfiltration`](../../workflows/exfiltration/README.md), [`vulnerability-exploitation`](../../workflows/vulnerability-exploitation/README.md), [`cloud-compromise`](../../workflows/cloud-compromise/README.md), [`web-attacks`](../../workflows/web-attacks/README.md)
+[`vulnerability-exploitation`](../../workflows/vulnerability-exploitation/README.md), [`web-attacks`](../../workflows/web-attacks/README.md)
 
 ## Building it in XDR Automation
 

@@ -42,7 +42,4 @@ outputs:
   type: string
   description: Empty on success.
 used_by:
-- c2
-- dns-tunneling
-- exfiltration
 - web-attacks

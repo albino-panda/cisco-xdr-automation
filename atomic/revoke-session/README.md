@@ -35,7 +35,7 @@ Invalidate refresh tokens and browser sessions for a user.
 
 ## Used by
 
-[`privilege-escalation`](../../workflows/privilege-escalation/README.md), [`cloud-compromise`](../../workflows/cloud-compromise/README.md)
+[`privilege-escalation`](../../workflows/privilege-escalation/README.md)
 
 ## Building it in XDR Automation
 

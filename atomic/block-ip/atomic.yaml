@@ -37,8 +37,5 @@ outputs:
   type: string
   description: Empty on success.
 used_by:
-- c2
-- exfiltration
 - vulnerability-exploitation
-- cloud-compromise
 - web-attacks

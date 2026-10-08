@@ -38,7 +38,7 @@ Identity context for an account: profile, risk state, recent sign-ins, MFA event
 
 ## Used by
 
-[`privilege-escalation`](../../workflows/privilege-escalation/README.md), [`exfiltration`](../../workflows/exfiltration/README.md), [`cloud-compromise`](../../workflows/cloud-compromise/README.md)
+[`privilege-escalation`](../../workflows/privilege-escalation/README.md)
 
 ## Building it in XDR Automation
 

@@ -36,7 +36,7 @@ Send a concise alert to the SOC channel through an XDR Automation target.
 
 ## Used by
 
-[`c2`](../../workflows/c2/README.md), [`dns-tunneling`](../../workflows/dns-tunneling/README.md), [`privilege-escalation`](../../workflows/privilege-escalation/README.md), [`exfiltration`](../../workflows/exfiltration/README.md), [`vulnerability-exploitation`](../../workflows/vulnerability-exploitation/README.md), [`cloud-compromise`](../../workflows/cloud-compromise/README.md), [`web-attacks`](../../workflows/web-attacks/README.md)
+[`privilege-escalation`](../../workflows/privilege-escalation/README.md), [`vulnerability-exploitation`](../../workflows/vulnerability-exploitation/README.md), [`web-attacks`](../../workflows/web-attacks/README.md)
 
 ## Building it in XDR Automation
 
