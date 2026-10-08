@@ -1,0 +1,56 @@
+# cloud-compromise workflow scenario; fake lab data only.
+schema: 1
+name: release-restoration
+workflow: cloud-compromise
+description: >-
+  bdiaz (Entra high risk) signs in from a malicious IP and adds a client secret to an app registration.
+  The analyst approves the revocation, the disable and the IP block. After the secret is removed by hand,
+  the password is reset and MFA is re-registered, a separate human release decision re-enables the account
+  and removes the block; both restorations execute and verify (RESTORED). The revocation is not reversible
+  and is not part of the release.
+tags: [release, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], microsoft_cloud: [identity], cisco_xdr: [intel], meraki: [network]}
+incident:
+  incident_id: XDR-CC-0009
+  title: New client secret on app registration after risky sign-in by bdiaz@example.com
+  severity: HIGH
+  workflow_id: cloud-compromise
+  observables:
+    - {type: user, value: bdiaz@example.com}
+    - {type: ip, value: 198.51.100.199}
+  users: [bdiaz@example.com]
+  trigger: {source: microsoft_cloud, mitre_techniques: [T1098.001]}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.199, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: attacker infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: bdiaz@example.com
+      record: {kind: user_profile, user: bdiaz@example.com, display_name: B Diaz, department: Finance,
+               groups: [Finance Users], account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: bdiaz@example.com
+      record: {kind: sign_in, sign_in_id: si-cc-0009-1, user: bdiaz@example.com,
+               timestamp: "2026-01-15T08:45:00Z", ip: 198.51.100.199, country: PL, app: Azure Portal,
+               result: success, mfa_result: satisfied, risk_level: high}
+    - integration: entra
+      atomic: search_user_activity
+      subject: bdiaz@example.com
+      record: {kind: cloud_app, app_id: 00000000-0000-4000-8000-0000000c1009, display_name: Invoice Bot (test),
+               publisher_verified: false, permissions: [Mail.Send], consent_type: unknown,
+               created_at: "2025-11-01T09:00:00Z", credential_added_at: "2026-01-15T08:52:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+release: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions:
+    - revoke_sessions:bdiaz@example.com
+    - disable_user:bdiaz@example.com
+    - block_ip:198.51.100.199
+  containment: CONTAINED
+  controls: 2
+  restoration: RESTORED
+  final_state: RESTORED

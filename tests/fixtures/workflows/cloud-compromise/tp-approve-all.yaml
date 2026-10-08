@@ -1,0 +1,95 @@
+# cloud-compromise workflow scenario; fake lab data only.
+schema: 1
+name: tp-approve-all
+workflow: cloud-compromise
+description: >-
+  True positive: dlee (Entra high risk) signs in successfully from an IP that Cisco XDR rates malicious
+  and, twenty minutes later, a client secret is added to the app registration dlee owns; Defender XDR
+  raises an unresolved HIGH alert for the credential addition. The package revokes dlee's sessions and
+  tokens, disables the account that planted the credential and blocks the attacker IP; removing the
+  secret and disabling the service principal are manual steps, and the account is handed off to
+  account-takeover. The analyst approves everything; every action executes and verifies.
+tags: [true_positive, approve_all]
+mode: both
+suite: {entra: [identity], microsoft_cloud: [identity], cisco_xdr: [intel], meraki: [network]}
+incident:
+  incident_id: XDR-CC-0001
+  title: New client secret on app registration after risky sign-in by dlee@example.com
+  severity: HIGH
+  workflow_id: cloud-compromise
+  observables:
+    - {type: user, value: dlee@example.com}
+    - {type: ip, value: 203.0.113.145}
+  users: [dlee@example.com]
+  trigger: {source: microsoft_cloud, mitre_techniques: [T1098.001]}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.145, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: known credential-abuse infrastructure}
+    - {type: ip, value: 198.51.100.10, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [cisco_xdr], summary: corporate office egress}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: dlee@example.com
+      record: {kind: user_profile, user: dlee@example.com, object_id: 00000000-0000-4000-8000-00000000c001,
+               display_name: D Lee, department: Sales, groups: [Sales Users], roles: [], privileged: false,
+               account_enabled: true, risk_level: high, risk_state: at_risk, mfa_registered: true}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: dlee@example.com
+      record: {kind: sign_in, sign_in_id: si-cc-0001-1, user: dlee@example.com,
+               timestamp: "2026-01-15T08:30:00Z", ip: 198.51.100.10, country: GB, app: Microsoft Teams,
+               result: success, mfa_result: satisfied, risk_level: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: dlee@example.com
+      record: {kind: sign_in, sign_in_id: si-cc-0001-2, user: dlee@example.com,
+               timestamp: "2026-01-15T10:05:00Z", ip: 203.0.113.145, country: NL, app: Azure Portal,
+               result: success, mfa_result: satisfied, risk_level: medium}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: dlee@example.com
+      record: {kind: anomaly, anomaly_id: rd-cc-0001-1, anomaly_type: unfamiliar_location, severity: HIGH,
+               user: dlee@example.com, ip: 203.0.113.145, detail: sign-in from a location never seen for the user,
+               first_seen: "2026-01-15T10:05:00Z"}
+    - integration: entra
+      atomic: search_user_activity
+      subject: dlee@example.com
+      record: {kind: cloud_app, app_id: 00000000-0000-4000-8000-0000000c1001,
+               display_name: Sales Reporting Connector (test), publisher_verified: false,
+               permissions: [Mail.Read, Files.Read.All, offline_access], consent_type: unknown,
+               created_at: "2025-06-01T09:00:00Z", credential_added_at: "2026-01-15T10:25:00Z"}
+    - integration: microsoft_cloud
+      atomic: search_user_activity
+      subject: dlee@example.com
+      record: {kind: detection, detection_id: da-cc-0001-1, name: Unusual addition of credentials to an OAuth app,
+               verdict: SUSPICIOUS, severity: HIGH, category: Persistence, user: dlee@example.com,
+               mitre_techniques: [T1098.001], status: active, first_seen: "2026-01-15T10:26:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - revoke_sessions:dlee@example.com
+    - disable_user:dlee@example.com
+    - block_ip:203.0.113.145
+  elevated: []
+  excluded: []
+  unrouted: []
+  below_threshold: []
+  risk: {min: 60, max: 100}
+  confidence: {min: 50, max: 100}
+  degraded_sources: []
+  considered: []
+  manual_steps:
+    - remove-app-credentials:00000000-0000-4000-8000-0000000c1001
+    - disable-service-principal:00000000-0000-4000-8000-0000000c1001
+  handoffs: [account-takeover:dlee@example.com]
+  evidence_min: 1
+  containment: CONTAINED
+  results:
+    revoke_sessions:dlee@example.com: SUCCESS
+    disable_user:dlee@example.com: SUCCESS
+    block_ip:203.0.113.145: SUCCESS
+  controls: 2
+  notifications: [incident_note, soc_notification, analyst_summary]

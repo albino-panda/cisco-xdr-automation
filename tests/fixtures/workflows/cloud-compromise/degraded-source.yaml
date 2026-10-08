@@ -1,0 +1,58 @@
+# cloud-compromise workflow scenario; fake lab data only.
+schema: 1
+name: degraded-source
+workflow: cloud-compromise
+description: >-
+  Microsoft Defender XDR (microsoft_cloud) is unavailable, so no cloud alert or application record is
+  read for akim. Entra still rates akim high risk and shows a successful sign-in from an IP that Cisco XDR
+  rates malicious: the revocation and the IP block are recommended from that evidence alone, the run
+  lists microsoft_cloud as a degraded source and confidence drops. The failed source never blocks the
+  recommendation.
+tags: [degraded_source, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], microsoft_cloud: [identity], cisco_xdr: [intel], meraki: [network]}
+incident:
+  incident_id: XDR-CC-0005
+  title: Suspicious OAuth application activity for akim@example.com
+  severity: HIGH
+  workflow_id: cloud-compromise
+  observables:
+    - {type: user, value: akim@example.com}
+    - {type: ip, value: 203.0.113.201}
+  users: [akim@example.com]
+  trigger: {source: microsoft_cloud, mitre_techniques: [T1528]}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.201, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: anonymising proxy exit used for credential abuse}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: akim@example.com
+      record: {kind: user_profile, user: akim@example.com, display_name: A Kim, department: Legal,
+               groups: [Legal Users], account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: akim@example.com
+      record: {kind: sign_in, sign_in_id: si-cc-0005-1, user: akim@example.com,
+               timestamp: "2026-01-15T11:30:00Z", ip: 203.0.113.201, country: RO, app: Office 365 Exchange Online,
+               result: success, mfa_result: satisfied, risk_level: medium}
+    - integration: microsoft_cloud
+      atomic: search_user_activity
+      subject: akim@example.com
+      record: {kind: detection, detection_id: da-cc-0005-1, name: Suspicious OAuth app consent, verdict: MALICIOUS,
+               severity: HIGH, category: CredentialAccess, user: akim@example.com, status: active,
+               first_seen: "2026-01-15T11:40:00Z"}
+  faults:
+    - {kind: UNAVAILABLE, integration: microsoft_cloud, operation: investigate, times: 20}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - revoke_sessions:akim@example.com
+    - block_ip:203.0.113.201
+  degraded_sources: [microsoft_cloud]
+  confidence: {min: 1, max: 90}
+  handoffs: [account-takeover:akim@example.com]
+  containment: CONTAINED
+  controls: 1

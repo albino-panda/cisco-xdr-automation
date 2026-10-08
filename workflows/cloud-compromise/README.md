@@ -1,118 +1,308 @@
-# Workflow: Cloud compromise
+# Cloud compromise
 
-Respond to abuse of cloud identities, app credentials or OAuth consent.
+Workflow id `cloud-compromise`, version 2.0.0, Phase 4. Definition:
+[`definition.py`](../../src/xdr_response/workflows/cloud_compromise/definition.py), hooks:
+[`hooks.py`](../../src/xdr_response/workflows/cloud_compromise/hooks.py). Binding design:
+[`docs/architecture.md`](../../docs/architecture.md) sections 13 and 14.
 
-|  |  |
-|---|---|
-| Default severity | high |
-| Status | Specification. Not yet built in XDR Automation. |
-| Machine-readable spec | [`workflow.yaml`](workflow.yaml) |
-| Integrations | [Cisco XDR](../../integrations/cisco-xdr/README.md), [Cisco Umbrella / Secure Access](../../integrations/umbrella/README.md), [Splunk](../../integrations/splunk/README.md), [Microsoft Entra ID (via Microsoft Graph)](../../integrations/microsoft-entra/README.md), [Cisco Meraki](../../integrations/meraki/README.md), [Cloudflare](../../integrations/cloudflare/README.md), [ServiceNow](../../integrations/servicenow/README.md) |
+## Purpose
 
-## Triggers
+Respond to the abuse of Microsoft cloud identities and of what an attacker plants in the tenant with them:
+new application credentials, OAuth consents, service-principal changes and privileged directory role
+assignments. The workflow investigates the accounts an incident names in Microsoft Entra ID and Microsoft
+Defender XDR (profile, roles and session state, sign-ins and risk detections, then the accounts' cloud
+activity: role assignments, application credentials, consents and the cloud alerts raised for them) and
+the sign-in source IPs, and then **recommends** a containment package:
 
-- **Incident rule** in XDR Automation matching the techniques below or the detection titles your sources produce.
-- **Pivot menu** on an incident or observable for manual runs.
-- **Playbook task** in the matching XDR incident response playbook.
+- revoke the sign-in sessions, and with them the refresh tokens issued to applications, of a compromised
+  account or of an account that consented to a risky OAuth application ("revoke token" and "revoke
+  session");
+- disable a compromised account that is privileged or that planted cloud persistence ("disable compromised
+  account");
+- remove a privileged directory role granted by, or to, a compromised account ("remove unauthorized role");
+- block the attacker sign-in IP.
 
-## Detection signals
+Application credentials, OAuth permission grants and service principals ("disable principal" for an
+application) have no VERIFIED write in `docs/integrations.md`: the workflow reports them as **manual steps**
+with the records that show them and never puts them in the package.
 
-Typical alerts that should route to this workflow:
+Investigation and recommendation are automatic. The workflow never changes anything itself: every action
+waits for a human approval, approved actions are executed and verified by the lifecycle, and undoing a
+reversible action needs a separate human release approval.
 
-- New credential added to an app registration or service principal
-- Risky OAuth consent
-- Unusual admin activity from new locations
+## Trigger
 
-## MITRE ATT&CK
+- **XDR incident rule** (priority 130): the incident's detections report `T1098.001` (additional cloud
+  credentials), `T1098.003` (additional cloud roles) or `T1528` (steal application access token) and the
+  incident carries a user observable.
+- **XDR incident rule** (priority 105): the incident title names an OAuth consent, a consent grant, an app
+  registration, a service principal, a client secret, an application credential, a certificate added to an
+  app or a directory role, and the incident carries a user observable.
+- **Manual**: an analyst starts the workflow from an incident or a user pivot.
 
-| Technique | Name |
-|---|---|
-| [T1078.004](https://attack.mitre.org/techniques/T1078/004/) | Valid Accounts: Cloud Accounts |
-| [T1098.001](https://attack.mitre.org/techniques/T1098/001/) | Additional Cloud Credentials |
-| [T1528](https://attack.mitre.org/techniques/T1528/) | Steal Application Access Token |
-| [T1530](https://attack.mitre.org/techniques/T1530/) | Data from Cloud Storage |
+A sign-in alone (`T1078.004` reported on its own) routes to `account-takeover` (priority 100); this workflow
+outranks it when cloud persistence is reported, and hands compromised accounts off to it. Entry-vector
+workflows with higher priority (phishing, password-spray and bec at 110, mfa-fatigue at 200) keep their
+incidents. The XDR trigger only sends the incident id; the incident is re-read through the VERIFIED APIs
+(`tools/deployment/xdr-trigger-workflow.md`).
 
-## Response flow
+## Required integrations
 
-1. **Intake.** Load the incident summary, observables and the guardrails file.
-2. **Enrich.** [`enrich-ip`](../../atomic/enrich-ip/README.md).
-3. **Investigate.** [`investigate-user`](../../atomic/investigate-user/README.md).
-4. **Decide.** Build a containment plan from the rules below and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
-5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
-6. **Record.** Add an incident note and [`create-ticket`](../../atomic/create-ticket/README.md).
-7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
+The expected sources. When one is disabled or failing the run notes it and confidence drops; a
+recommendation backed by other evidence is still made.
 
-### Containment actions
-
-| Action | When | Approval |
+| Integration | Purpose | Read atomics |
 |---|---|---|
-| [`revoke-session`](../../atomic/revoke-session/README.md) | Investigated user with high identity risk, medium risk plus at least one sign-in anomaly, or a successful sign-in from an IP enriched as malicious. | yes |
-| [`disable-user`](../../atomic/disable-user/README.md) | Investigated user holding a privileged role, with high identity risk or a successful sign-in from an IP enriched as malicious. | yes |
-| [`block-ip`](../../atomic/block-ip/README.md) | IP enriched as malicious, or suspicious and used for a successful sign-in by a high-risk user. Internal and allow-listed ranges are skipped by the guardrails. | yes |
+| `entra` | User profile, directory roles and session state, sign-in logs and risk context; executes the approved session revocation, account disable and role-assignment removal | `investigate_user`, `investigate_authentication`, `search_user_activity` |
+| `microsoft_cloud` | Defender XDR alerts (alerts_v2) for the accounts' cloud activity: OAuth applications, new application credentials, suspicious cloud API activity | `investigate_user`, `search_user_activity`, `search_ip_enterprise` |
+| `cisco_xdr` | Verdicts for the sign-in source IPs and enterprise sightings of those IPs | `enrich_ip`, `search_ip_enterprise` |
 
-### Containment rules
+## Optional integrations
 
-The `plan` list in [`workflow.yaml`](workflow.yaml) holds the exact expressions. The engine then applies the guardrails (protected users and groups, internal and allow-listed IPs, blast-radius caps) to every matched target.
-
-| Rule id | Atomic | Condition in plain English |
+| Integration | Purpose | Read atomics |
 |---|---|---|
-| `revoke_compromised_user_sessions` | `revoke-session` | For each investigated user: Entra risk is high, or risk is medium and at least one anomaly is reported, or a sign-in succeeded from an IP that `enrich-ip` rated malicious. Also catches users who granted a risky consent; revocation invalidates refresh tokens issued to apps for that user. |
-| `disable_compromised_privileged_users` | `disable-user` | For each investigated user with at least one entry in `profile.privileged_roles`: Entra risk is high, or a sign-in succeeded from a malicious IP. A privileged role alone, or medium risk with anomalies alone, never disables. |
-| `block_attacker_ips` | `block-ip` | For each enriched IP: verdict is malicious, or verdict is suspicious and a high-risk investigated user signed in successfully from it. Expiry comes from `guardrails.expiry_hours.block-ip` (default 168 hours). |
+| `virustotal` | Second opinion on public sign-in source IPs (never non-public addresses) | `enrich_ip` |
+| `alienvault_otx` | Second opinion on public sign-in source IPs (never non-public addresses) | `enrich_ip` |
+| `meraki` | Executes the approved attacker IP block as an MX layer 3 firewall rule (no reads) | none |
+| `defender_endpoint` | IP prevalence on managed endpoints; executes an approved IP block as an indicator | `search_ip_enterprise` |
+| `splunk` | Optional SIEM search for sign-ins, cloud audit activity and IP prevalence (generic rows) | `investigate_authentication`, `search_user_activity`, `search_ip_enterprise` |
 
-### Error handling
+## Input data
 
-| Step | `on_error` | Why |
-|---|---|---|
-| `load_incident`, `load_guardrails` | stop | Without the incident or the guardrails nothing may be planned or contained. |
-| `enrich_ip`, `investigate_user` | continue | A missing record only removes evidence; no rule fires without it. |
-| `build_plan`, `approval` | escalate | A human decides when the plan or the approval cannot be produced. |
-| `revoke_session`, `disable_user` | escalate | A compromised identity that could not be contained needs a human now. |
-| `block_ip` | continue | A perimeter block is a secondary control for cloud identities; the failure is recorded in the note and ticket. |
-| `incident_note`, `notify_soc` | continue | Recording and notification failures do not change containment. |
-| `create_ticket` | escalate | The ticket carries the manual removal of app credentials and consents and must not be lost. |
+- The Cisco XDR incident: id, title, severity, source, trigger (reported techniques and context such as an
+  application name or a change ticket), `users` and observables. Trigger context is data shown to the
+  analyst, never evidence.
+- Observable types used: `user` (the investigated accounts) and `ip` / `ipv6` (sign-in sources). Accounts
+  that only appear in the investigated records (the receiver of a role, an application's consenting user)
+  are judged from those records.
+- Records the atomics return: user profiles (risk, roles, `privileged`, session timestamp), sign-ins, risk
+  detections, Defender XDR cloud alerts (detections without an endpoint), role changes (`user`, `role_name`,
+  `role_definition_id`, `change`, `actor`), cloud applications (`app_id`, publisher verification,
+  permissions, consent type and consenting user, credential and creation times, vendor verdict), IP
+  enrichment and enterprise sightings.
+- Policy from `config/`: critical assets (privileged and break-glass account patterns, directory roles such
+  as Global Administrator or Application Administrator, production and network CIDRs), allow-lists
+  (`never_block` users, IPs and CIDRs), disclosure exclusions and scoring thresholds.
 
-## Inputs
+## Investigation steps
 
-| Variable | Type | Required | Description |
+All steps are read-only atomics (`ReadOnlyAdapters`); a failing source becomes a degraded source, never an
+error that stops the run.
+
+| Step | Atomic | Subjects | Lookback | What it learns |
+|---|---|---|---|---|
+| `user_profile` | `investigate_user` | incident `users` and user observables | 24 h | profile, account state, risk state, directory roles, Defender XDR alerts for the account |
+| `authentication` | `investigate_authentication` | same accounts | 72 h | sign-ins (IP, location, app, result, MFA, risk) and identity-provider risk detections |
+| `cloud_activity` | `search_user_activity` | same accounts | 7 days | role assignments made by or to the account, application credentials added, OAuth consents granted, service-principal changes and cloud alerts |
+| `ip_reputation` | `enrich_ip` | incident IPs and every sign-in IP found by the steps above | n/a | per-source verdicts and the aggregate verdict (third parties never receive non-public IPs) |
+| `ip_prevalence` | `search_ip_enterprise` | the same IPs | 7 days | internal endpoints and other accounts that use the IP (shared infrastructure) |
+
+## Correlation logic
+
+- Records are grouped per account (profile, sign-ins, risk detections, cloud alerts), per application
+  (`app_id`, with the accounts whose activity shows it) and per role change.
+- Framework links: `sign_in_to_activity` ties a successful sign-in to the account's later role, consent or
+  application activity within 1440 minutes; `same_ip` and `same_user` cluster accounts and IPs that share
+  records (blast radius).
+- The hooks decide, from records only, which account shows a **compromise indicator**. *Strong*
+  indicators: the identity provider rates the account high risk or confirmed compromised; a successful
+  sign-in from an IP that a source rates malicious (or that a HIGH vendor malicious-IP detection names); a
+  successful sign-in the identity provider rates high risk; a HIGH or CRITICAL risk detection with a
+  successful sign-in; a session token replay; an active Defender XDR cloud alert rated malicious. *Weak*
+  indicators: a successful sign-in from an IP rated only suspicious; medium identity risk with risk
+  detections; an unresolved HIGH cloud alert without a classification.
+- A **risky application** is rated malicious or suspicious by a vendor, or had a credential added, was
+  registered or changed, or received a consent (unverified publisher) by a compromised account.
+- An **unauthorized role** is a privileged directory role assigned, activated or made eligible for an
+  account during the window, not removed since, and granted by a compromised account or received by one.
+  A privileged grant between accounts with no compromise indicator is shown as considered, and so is a
+  grant dated more than 24 hours before the earliest dated compromise record (sign-in, risk detection or
+  alert) of the account that ties it to the incident: a pre-existing assignment the incident did not
+  create.
+- **Revoke** applies to every compromised account and to every account that granted a *user* consent to a
+  risky application. **Disable** applies to an account with a strong indicator that is privileged (profile
+  roles, the source's flag or a privileged role it received) or planted persistence (granted a privileged
+  role, added an application credential, granted tenant-wide consent to a risky application).
+- **Attacker IP**: a sign-in source of an investigated account that a source rates malicious (or that is
+  rated suspicious and was used for a successful sign-in by a high-risk account) and that is **not shared**:
+  no internal endpoint reaches it and no other account signs in from it.
+
+## Risk calculation
+
+Each target is scored by the scoring engine from exactly the records its rule cites (separate
+`risk_score` and `confidence_score`, both integers 0-100, with the explanation and settings hash in the
+rationale):
+
+- identity-provider risk detections and a high user risk are `authentication_anomaly` signals;
+- privileged role assignments and vendor-rated applications are `persistence` signals; cloud persistence
+  is this workflow's primary evidence, so `persistence` weighs 1.0 here (default 0.8; caps and penalties are
+  not overridable);
+- Defender XDR cloud alerts are detection signals;
+- IP enrichment is `reputation` (capped at 50; one vendor's MALICIOUS is never an aggregate MALICIOUS);
+- the hooks add signals computed from cited records: a successful sign-in from an IP rated malicious (80)
+  or suspicious (70), a credential added to or a consent granted to an unrated application by a compromised
+  account (70), and a sign-in source IP used against an investigated account (60 to 80). Each is attributed
+  to the source of the records it cites.
+
+A failed expected source (`entra`, `microsoft_cloud`, `cisco_xdr`) costs confidence and is listed; it never
+blocks a recommendation that other evidence supports. Critical assets add the critical-asset bonus to risk;
+they never change confidence. Minimum risk per rule: revoke 50, disable 60, role removal 50, block 50 (below
+the minimum an action is listed as "considered, not proposed", never hidden). Dry run and live score
+identically.
+
+## Containment recommendations
+
+| Rule | Action (builder) | Target | Evidence (numbered in the package) |
 |---|---|---|---|
-| `incident_id` | string | no | Cisco XDR incident ID, used for notes and audit. |
-| `dry_run` | boolean | no | When true, report the planned change without making it. Default true for containment. |
-| `observables` | list | no | Overrides the incident observables. |
+| `revoke_compromised_sessions` | `revoke_sessions` (`revoke_entra_sessions`) | every compromised account and every account that consented to a risky application | the indicator records (profile, attacker sign-ins, risk detections, cloud alerts, IP enrichment that rated the source) and the consent records with the application's rating |
+| `disable_compromised_account` | `disable_user` (`disable_entra_user`) | an account with a strong indicator that is privileged or planted cloud persistence | the same indicator records plus the role change, application credential or consent records it planted |
+| `remove_unauthorized_role` | `remove_privileged_role` (`remove_privileged_role`) | `<user>/<roleDefinitionId>` of a privileged role granted by or to a compromised account | the role change record and the records that prove the compromise of the actor or receiver |
+| `block_attacker_ip` | `block_ip` (`block_ip`) | a non-shared sign-in source IP rated malicious (or suspicious and used by a high-risk account) | the sign-in and detection records from that IP and the MALICIOUS or SUSPICIOUS enrichment answers |
 
-## Guardrails
+Every recommendation carries numbered evidence that cites investigation or enrichment records of the run
+(the lifecycle refuses anything else) and a rationale with the score explanation. Password reset and MFA
+re-registration are not recommended actions: the help desk does them after out-of-band identity
+verification, before any release.
 
-- `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
-- Blast-radius limits cap how many hosts, users or indicators a single run may touch.
-- Every containment action is reversible except session revocation, and the rollback is written into the incident note.
+### Hand-offs, manual steps and items not proposed
 
-## Scenarios
+- Manual steps (no VERIFIED write; never in the package), per risky application: `remove-app-credentials:<app id>`
+  (when a credential was added), `revoke-oauth-consent:<app id>` (when a consent was granted) and
+  `disable-service-principal:<app id>`; and `remove-role:<user>/<role>` when a role change record carries no
+  role definition id.
+- Considered, not proposed: `revoke_sessions:<admin>` for a tenant-wide consent to a risky application by an
+  administrator with no compromise indicator (revocation would not stop the application's own tokens);
+  `disable_user:<account>` for an uncompromised account that added a credential to a risky application;
+  `remove_privileged_role:<target>` for a privileged grant between accounts with no compromise indicator;
+  `block_ip:<ip>` for a rated sign-in IP that is shared infrastructure.
+- Hand-offs: every compromised account to `account-takeover` for the broader account review (mailbox rules,
+  sign-ins, endpoints). This workflow keeps its own containment.
 
-Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them with `PYTHONPATH=engine python -m xdr_plan check cloud-compromise`.
+They appear in the run notes and in the analyst summary ("Considered, deliberately not proposed", "Manual
+steps", "Suggested hand-offs"), each with the record ids that show it. A hand-off is a suggestion only: it
+starts nothing and never changes the package (architecture 14.10.1).
 
-| File | What it proves |
-|---|---|
-| [`01-admin-takeover-rogue-app-credential.yaml`](scenarios/01-admin-takeover-rogue-app-credential.yaml) | True positive: a high-risk admin is revoked and disabled, a consenting medium-risk user with an anomaly is only revoked, the malicious IP and the suspicious IP the admin used are blocked, the clean IP is not. |
-| [`02-approved-certificate-rotation.yaml`](scenarios/02-approved-certificate-rotation.yaml) | Benign: an approved certificate rotation by a privileged app owner with no risk, no anomalies and clean internal sign-ins produces no actions. |
-| [`03-protected-break-glass-admin.yaml`](scenarios/03-protected-break-glass-admin.yaml) | Guardrail: a break-glass Global Administrator matches the revoke and disable rules but both are planned with `elevated: true`; the attacker IP is still blocked. |
-| [`04-service-principal-secret-used-from-attacker-ip.yaml`](scenarios/04-service-principal-secret-used-from-attacker-ip.yaml) | Cloud edge case: app-only use of a leaked service principal secret. A failed sign-in from the attacker IP does not revoke or disable the clean owner; only the IP is blocked and secret removal stays manual. |
-| [`05-tenant-admins-over-disable-limit.yaml`](scenarios/05-tenant-admins-over-disable-limit.yaml) | Guardrail: four compromised admins exceed `max_users_disabled`, so every disable stays planned with `elevated: true` and the plan escalates; revocations and the IP block still run. |
+## Approval requirements
 
-## Notes
+- Every action, including session revocation, role removal and every later release or restoration, needs an
+  explicit human approval by an authenticated HUMAN principal holding the approver role. AI and automation
+  principals can never approve, and there is no auto-approval switch.
+- ELEVATED approval (a principal with the elevated role, and a visible warning on the decision card)
+  applies when a target matches a critical-asset class (a privileged or break-glass account by user
+  pattern, group, directory role such as Global Administrator or Cloud Application Administrator, or the
+  identity source's privileged flag; an executive account; an IP in a production or network-infrastructure
+  CIDR), when the catalog always elevates the action (`remove_privileged_role` and its restoration
+  `restore_privileged_role` are always ELEVATED), or when a blast-radius cap is exceeded (more than three
+  accounts). `PackageBuilder` decides this; the workflow only passes the investigated asset context (groups,
+  roles) and can never lower it.
+- Allow-listed targets (for example `breakglass@example.com` or a VPN pool CIDR) are shown as excluded with
+  the reason and never executed; nothing is dropped silently.
 
-- Rogue app credentials and OAuth consents are removed manually; automation here covers user identities and IPs only. The ticket body lists the steps: review the app registrations and service principals in the incident context and directory audit log, remove client secrets and certificates added in the window without an approved change, revoke delegated permission grants and app role assignments for the suspicious app, review cloud storage and mailbox access (T1530), and reset credentials and MFA before re-enabling disabled accounts.
-- Revoking a user's sessions does not stop app-only tokens obtained with a service principal credential (scenario 04); only removing that credential does.
-- `profile.privileged_roles` and the sign-in fields `ip` and `result` are the shapes the rules expect inside `investigate-user` output. `atomic.yaml` documents them only in prose.
-- Templates use placeholders under `incident.`, `plan.`, `ticket.`, `workflow.` and `approver.`. Every containment action's rollback is written into the incident note and the ticket.
+## Containment execution
 
-## Related workflows
+After the approval the lifecycle executes exactly the approved actions through the execution guard with the
+HMAC approval token; the workflow is not involved:
 
-[`account-takeover`](../account-takeover/README.md), [`exfiltration`](../exfiltration/README.md), [`privilege-escalation`](../privilege-escalation/README.md)
+- `revoke_sessions`: Entra `POST /users/{id}/revokeSignInSessions` (VERIFIED, not reversible, effective
+  within minutes, no effect on external users; it also invalidates the refresh tokens issued to applications
+  for the account);
+- `disable_user`: Entra `PATCH /users/{id}` with `accountEnabled: false` (VERIFIED), or the native Cisco XDR
+  disable action when configured;
+- `remove_privileged_role`: Entra `DELETE /roleManagement/directory/roleAssignments/{id}` (VERIFIED) after
+  the assignment is captured for the release;
+- `block_ip`: the native Cisco XDR action when configured, else a Meraki MX layer 3 rule or a Defender for
+  Endpoint IP indicator. Direct Umbrella IP blocking is UNVERIFIED and never used.
 
-## Building it in XDR Automation
+A target already in the desired state reports `ALREADY_CONTAINED`. In dry run the lifecycle prints the DRY
+RUN block (`Would revoke sessions: ...`, `Would disable user: ...`, `Would remove role: ...`,
+`Would block: ...`) and changes nothing.
 
-1. Import the Cisco-managed atomics this workflow needs from the Exchange, plus the custom atomics in [`atomic/`](../../atomic/README.md).
-2. Create the workflow from [`workflow.yaml`](workflow.yaml): variables from `inputs`, one group per `phase`, conditions from `when`.
-3. Test with `dry_run = true` against a test incident (see [docs/testing](../../docs/testing/README.md)).
-4. Export the workflow JSON and commit it here as `workflow.export.json`.
+## Verification
+
+Automatic, after execution, with the product's own read call: Entra
+`GET /users/{id}?$select=signInSessionsValidFromDateTime` (revocation), `accountEnabled` (disable) and
+`GET /roleManagement/directory/roleAssignments?$filter=principalId eq '..'` (role removal), Meraki
+`GET .../l3FirewallRules` (VERIFIED). Defender indicators have no VERIFIED read and report
+`UNABLE_TO_VERIFY`, which never counts as contained. The overall result is CONTAINED, PARTIALLY_CONTAINED or
+CONTAINMENT_FAILED. Manual steps are not verified by the workflow; the analyst records them in the incident.
+
+## Rollback
+
+- `revoke_sessions`: not reversible; the user signs in again after the help desk reset.
+- `disable_user`: `enable_user` (Entra `accountEnabled: true`), only after the password reset, MFA
+  re-registration and the manual removal of planted credentials and consents.
+- `remove_privileged_role`: `restore_privileged_role` (Entra `POST /roleManagement/directory/roleAssignments`
+  with the captured role, principal and scope), always ELEVATED, only when the assignment proves legitimate.
+- `block_ip`: `unblock_ip` (remove the tagged MX rule or the indicator).
+
+Reversible actions are registered as temporary controls; review reminders never release anything. A release
+package is proposed from the registry and executed only after its own human release approval, then verified.
+
+## Failure handling
+
+- A failed or degraded source (health UNAVAILABLE, AUTH_FAILED, RATE_LIMITED) is noted, lowers confidence and
+  never blocks a recommendation backed by other evidence: with Defender XDR down, an Entra high-risk account
+  with an attacker sign-in is still revoked.
+- A failing step, expression or hook is noted and skipped; partial results stay usable.
+- A recommendation without an enabled executor is reported as UNROUTED for manual handling, never dropped.
+- During execution a failed action is reported FAILED (PARTIALLY_CONTAINED or CONTAINMENT_FAILED) and the
+  incident needs remediation; nothing is retried silently and the other approved actions still run.
+
+## MITRE mapping
+
+| Tactic | Technique | Sub-technique | Why the workflow responds |
+|---|---|---|---|
+| TA0001 Initial Access | T1078 Valid Accounts | T1078.004 Cloud Accounts | The incident is the use of a cloud identity with valid credentials; the package revokes the sessions, disables the account when needed and blocks the source IP. |
+| TA0003 Persistence | T1098 Account Manipulation | T1098.001 Additional Cloud Credentials | A credential added to an application or service principal by a compromised account is investigated; the account is disabled and the credential removal is a manual step. |
+| TA0003 Persistence | T1098 Account Manipulation | T1098.003 Additional Cloud Roles | A privileged directory role granted by or to a compromised account is recommended for removal (always ELEVATED) and the granting account for disable. |
+| TA0006 Credential Access | T1528 Steal Application Access Token | none | A consent to a risky OAuth application hands it the user's tokens; revocation invalidates the refresh tokens issued to applications and the consent revocation is a manual step. |
+
+No other technique is mapped. The legacy specification also listed data from cloud storage; the workflow
+neither investigates nor contains storage access (no VERIFIED read), so that mapping is dropped rather than
+forced (see Known limitations).
+
+## Testing instructions
+
+- Scenarios: `tests/fixtures/workflows/cloud-compromise/` (the minimum set of 14.5.3, four edge cases: admin
+  OAuth consent, user consent phishing, rogue role assignment, shared attacker IP; and the migrated legacy
+  scenarios 01 to 05). They run automatically, in dry run and simulated live, in
+  `tests/simulation/test_workflow_scenarios.py`.
+- Unit and lifecycle tests: `tests/workflows/cloud_compromise/`.
+- Commands:
+
+```bash
+python -m pytest -q -p no:cacheprovider tests/workflows/cloud_compromise tests/simulation/test_workflow_scenarios.py -k "cloud-compromise or cloud_compromise"
+python tools/validation/check_workflow_readmes.py --workflow cloud-compromise
+python tools/simulator/simulate.py --workflow cloud-compromise --scenario tp-approve-all --check
+python tools/simulator/simulate.py --workflow cloud-compromise --scenario tp-approve-all --live --check
+```
+
+All test data is fake: `example.com` accounts, documentation IP ranges, fake application and role ids.
+
+## Known limitations
+
+- Application credentials, OAuth permission grants and service principals have no VERIFIED Graph write in
+  `docs/integrations.md` (`revoke_app_credentials` is UNVERIFIED and there is no service-principal or consent
+  action type), so removing a credential, revoking a consent and disabling a service principal are manual
+  steps in the run notes and analyst summary, never package actions.
+- With the real adapters role changes and application records are not normalized: the Entra directory audit
+  log and the servicePrincipals and oauth2PermissionGrants reads are not in `docs/integrations.md`. On a
+  tenant the cloud-persistence indicators therefore come only from Defender XDR alerts (alerts_v2), sign-in
+  risk and IP reputation, and role removal and the application manual steps need typed records from another
+  source.
+- Role removal targets `<user>/<roleDefinitionId>`. The real Entra adapter resolves the user's object id and
+  the assignment of that role (at the scope of the grant when the role change record names it) through VERIFIED
+  reads before the delete and again in verification (architecture 14.12.3). When the user holds the role at
+  several scopes and the record names none, the approved removal fails visibly and the analyst removes the right
+  assignment by hand.
+- Session revocation is not reversible, can take a few minutes, does not affect external (guest) users and
+  does not stop application-only tokens of a service principal: tenant-wide (admin) consents and
+  service-principal secrets need the manual steps.
+- Whether a role assignment or an application credential was an approved change cannot be read from a
+  VERIFIED source (no change-management integration); a privileged grant between accounts with no compromise
+  indicator is shown as considered, not proposed, and the analyst checks the change record.
+- Direct Umbrella IP blocking is UNVERIFIED; IP blocks route to Meraki MX, a Defender for Endpoint indicator
+  or the native Cisco XDR action. A non-public sign-in IP (corporate VPN pool) is excluded only when
+  `allowlists.never_block` lists it or it is in a non-public range.
+- Access to cloud storage and mailboxes by the application or the accounts (Data from Cloud Storage) is not
+  investigated: no VERIFIED read exists; it is the exfiltration workflow's and the analyst's review.

@@ -1,0 +1,56 @@
+# cloud-compromise workflow scenario; fake lab data only.
+schema: 1
+name: edge-admin-oauth-consent
+workflow: cloud-compromise
+description: >-
+  OAuth consent by an administrator: lwalker (Cloud Application Administrator, no identity risk, office
+  sign-in only) grants tenant-wide admin consent to an unverified application that Defender XDR rates
+  suspicious. No account shows a compromise indicator, and revoking the administrator's sessions would not
+  stop the application's own tokens, so no account action is proposed: the revocation is shown as
+  considered, and revoking the consent and disabling the service principal are manual steps. Nothing is
+  silently dropped and nothing is handed off.
+tags: [edge_case]
+mode: both
+suite: {entra: [identity], microsoft_cloud: [identity], cisco_xdr: [intel], meraki: [network]}
+incident:
+  incident_id: XDR-CC-0012
+  title: Admin consent granted to unverified OAuth application Contoso Mail Insights (test)
+  severity: MEDIUM
+  workflow_id: cloud-compromise
+  observables:
+    - {type: user, value: lwalker@example.com}
+  users: [lwalker@example.com]
+  trigger: {source: microsoft_cloud, mitre_techniques: [T1528]}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.10, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [cisco_xdr], summary: corporate office egress}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: lwalker@example.com
+      record: {kind: user_profile, user: lwalker@example.com, display_name: L Walker, department: IT,
+               groups: [Application Owners], roles: [Cloud Application Administrator], privileged: true,
+               account_enabled: true, risk_level: none, risk_state: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: lwalker@example.com
+      record: {kind: sign_in, sign_in_id: si-cc-0012-1, user: lwalker@example.com,
+               timestamp: "2026-01-15T09:10:00Z", ip: 198.51.100.10, country: GB, app: Microsoft Entra admin center,
+               result: success, mfa_result: satisfied, risk_level: none}
+    - integration: microsoft_cloud
+      atomic: search_user_activity
+      subject: lwalker@example.com
+      record: {kind: cloud_app, app_id: 00000000-0000-4000-8000-0000000c1012, display_name: Contoso Mail Insights (test),
+               publisher_verified: false, permissions: [Mail.Read, User.Read.All], consent_type: admin,
+               consented_by: lwalker@example.com, created_at: "2026-01-15T09:20:00Z", verdict: SUSPICIOUS}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  below_threshold: []
+  considered: [revoke_sessions:lwalker@example.com]
+  manual_steps:
+    - revoke-oauth-consent:00000000-0000-4000-8000-0000000c1012
+    - disable-service-principal:00000000-0000-4000-8000-0000000c1012
+  handoffs: []

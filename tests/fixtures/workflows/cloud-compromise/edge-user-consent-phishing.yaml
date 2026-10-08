@@ -1,0 +1,60 @@
+# cloud-compromise workflow scenario; fake lab data only.
+schema: 1
+name: edge-user-consent-phishing
+workflow: cloud-compromise
+description: >-
+  Consent phishing without an identity compromise: mgarcia signs in only from the office and Entra rates
+  the account low risk, but mgarcia granted a user consent (mail read and offline access) to an
+  application that Defender XDR rates malicious. Revoking mgarcia's sessions invalidates the refresh
+  tokens the application received; the consent revocation and the service-principal disable are manual
+  steps. The account is not disabled and not handed off: nothing shows that its credentials are in
+  attacker hands.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], microsoft_cloud: [identity], cisco_xdr: [intel], meraki: [network]}
+incident:
+  incident_id: XDR-CC-0011
+  title: Risky OAuth consent grant by mgarcia@example.com
+  severity: MEDIUM
+  workflow_id: cloud-compromise
+  observables:
+    - {type: user, value: mgarcia@example.com}
+  users: [mgarcia@example.com]
+  trigger: {source: microsoft_cloud, mitre_techniques: [T1528]}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.10, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [cisco_xdr], summary: corporate office egress}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: mgarcia@example.com
+      record: {kind: user_profile, user: mgarcia@example.com, display_name: M Garcia, department: Marketing,
+               groups: [Marketing Users], roles: [], account_enabled: true, risk_level: low, risk_state: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: mgarcia@example.com
+      record: {kind: sign_in, sign_in_id: si-cc-0011-1, user: mgarcia@example.com,
+               timestamp: "2026-01-15T09:40:00Z", ip: 198.51.100.10, country: GB, app: Office 365 Exchange Online,
+               result: success, mfa_result: satisfied, risk_level: none}
+    - integration: microsoft_cloud
+      atomic: search_user_activity
+      subject: mgarcia@example.com
+      record: {kind: cloud_app, app_id: 00000000-0000-4000-8000-0000000c1011, display_name: PDF Viewer Online (test),
+               publisher_verified: false, permissions: [Mail.Read, offline_access, User.Read], consent_type: user,
+               consented_by: mgarcia@example.com, created_at: "2026-01-15T09:52:00Z", verdict: MALICIOUS}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions: [revoke_sessions:mgarcia@example.com]
+  elevated: []
+  below_threshold: []
+  considered: []
+  manual_steps:
+    - revoke-oauth-consent:00000000-0000-4000-8000-0000000c1011
+    - disable-service-principal:00000000-0000-4000-8000-0000000c1011
+  handoffs: []
+  containment: CONTAINED
+  results:
+    revoke_sessions:mgarcia@example.com: SUCCESS
+  controls: 0

@@ -1,0 +1,51 @@
+# cloud-compromise workflow scenario; fake lab data only.
+schema: 1
+name: edge-shared-attacker-ip
+workflow: cloud-compromise
+description: >-
+  sfox (Entra high risk) signs in successfully from an IP that Cisco XDR rates malicious, but the
+  enterprise search shows an internal endpoint reaching the same address (a shared egress or proxy). The
+  revocation is proposed; the IP is not blocked because blocking shared infrastructure would cut off
+  internal users, and the withheld block is shown as considered with the records that show the sharing.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], microsoft_cloud: [identity, network], cisco_xdr: [intel], meraki: [network]}
+incident:
+  incident_id: XDR-CC-0014
+  title: Risky OAuth consent grant by sfox@example.com from a hosting provider
+  severity: HIGH
+  workflow_id: cloud-compromise
+  observables:
+    - {type: user, value: sfox@example.com}
+    - {type: ip, value: 198.51.100.222}
+  users: [sfox@example.com]
+  trigger: {source: microsoft_cloud, mitre_techniques: [T1528]}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.222, verdict: MALICIOUS, risk_score: 85, confidence: 75,
+       integrations: [cisco_xdr], summary: hosting provider range with abuse reports}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: sfox@example.com
+      record: {kind: user_profile, user: sfox@example.com, display_name: S Fox, department: Sales,
+               groups: [Sales Users], account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: sfox@example.com
+      record: {kind: sign_in, sign_in_id: si-cc-0014-1, user: sfox@example.com,
+               timestamp: "2026-01-15T10:30:00Z", ip: 198.51.100.222, country: DE, app: Office 365 Exchange Online,
+               result: success, mfa_result: satisfied, risk_level: high}
+    - integration: microsoft_cloud
+      atomic: search_ip_enterprise
+      subject: 198.51.100.222
+      record: {kind: network_connection, endpoint: TH-LT-2001, remote_ip: 198.51.100.222, remote_port: 443,
+               protocol: tcp, direction: outbound, count: 42, action: allowed, first_seen: "2026-01-14T08:00:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions: [revoke_sessions:sfox@example.com]
+  considered: [block_ip:198.51.100.222]
+  manual_steps: []
+  handoffs: [account-takeover:sfox@example.com]
+  containment: CONTAINED
+  controls: 0

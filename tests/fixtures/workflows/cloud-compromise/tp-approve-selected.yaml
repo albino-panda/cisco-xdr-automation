@@ -1,0 +1,65 @@
+# cloud-compromise workflow scenario; fake lab data only.
+schema: 1
+name: tp-approve-selected
+workflow: cloud-compromise
+description: >-
+  True positive: rpatel (Entra high risk) signs in from an IP that Cisco XDR rates malicious and then
+  adds a certificate to an app registration rpatel owns. The package proposes revoke, disable and the IP
+  block; the analyst approves only the revocation and the block (the account owner is travelling and the
+  manager asks to keep the account enabled while the help desk resets it). The disable is reported
+  REJECTED_BY_ANALYST and nothing is done to the account beyond the revocation.
+tags: [true_positive, approve_selected]
+mode: both
+suite: {entra: [identity], microsoft_cloud: [identity], cisco_xdr: [intel], meraki: [network]}
+incident:
+  incident_id: XDR-CC-0002
+  title: Certificate added to app registration after risky sign-in by rpatel@example.com
+  severity: HIGH
+  workflow_id: cloud-compromise
+  observables:
+    - {type: user, value: rpatel@example.com}
+    - {type: ip, value: 198.51.100.161}
+  users: [rpatel@example.com]
+  trigger: {source: microsoft_cloud, mitre_techniques: [T1098.001]}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.161, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [cisco_xdr], summary: hosting provider abused for credential attacks}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: rpatel@example.com
+      record: {kind: user_profile, user: rpatel@example.com, display_name: R Patel, department: Engineering,
+               groups: [Engineering Users], roles: [], account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: rpatel@example.com
+      record: {kind: sign_in, sign_in_id: si-cc-0002-1, user: rpatel@example.com,
+               timestamp: "2026-01-15T07:55:00Z", ip: 198.51.100.161, country: SG, app: Azure Portal,
+               result: success, mfa_result: satisfied, risk_level: high}
+    - integration: entra
+      atomic: search_user_activity
+      subject: rpatel@example.com
+      record: {kind: cloud_app, app_id: 00000000-0000-4000-8000-0000000c1002, display_name: Build Metrics Exporter (test),
+               publisher_verified: false, permissions: [Sites.Read.All], consent_type: unknown,
+               created_at: "2025-03-10T09:00:00Z", credential_added_at: "2026-01-15T08:04:00Z"}
+analyst:
+  decision: APPROVE_SELECTED
+  approvers: [analyst]
+  select: [revoke_sessions:rpatel@example.com, block_ip:198.51.100.161]
+expect:
+  actions:
+    - revoke_sessions:rpatel@example.com
+    - disable_user:rpatel@example.com
+    - block_ip:198.51.100.161
+  elevated: []
+  manual_steps:
+    - remove-app-credentials:00000000-0000-4000-8000-0000000c1002
+    - disable-service-principal:00000000-0000-4000-8000-0000000c1002
+  handoffs: [account-takeover:rpatel@example.com]
+  results:
+    revoke_sessions:rpatel@example.com: SUCCESS
+    block_ip:198.51.100.161: SUCCESS
+    disable_user:rpatel@example.com: REJECTED_BY_ANALYST
+  containment: CONTAINED
+  controls: 1

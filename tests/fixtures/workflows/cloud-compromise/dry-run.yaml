@@ -1,0 +1,60 @@
+# cloud-compromise workflow scenario; fake lab data only.
+schema: 1
+name: dry-run
+workflow: cloud-compromise
+description: >-
+  Dry run of a confirmed cloud compromise: jsmith (Entra high risk) signs in from a malicious IP and adds
+  a client secret to an app registration. The package (revoke, disable, block) is proposed and
+  simulated; nothing changes at any vendor and the incident stays AWAITING_APPROVAL after the simulated
+  approval.
+tags: [dry_run, true_positive]
+mode: dry_run
+suite: {entra: [identity], microsoft_cloud: [identity], cisco_xdr: [intel], meraki: [network]}
+incident:
+  incident_id: XDR-CC-0008
+  title: New client secret on app registration after risky sign-in by jsmith@example.com
+  severity: HIGH
+  workflow_id: cloud-compromise
+  observables:
+    - {type: user, value: jsmith@example.com}
+  users: [jsmith@example.com]
+  trigger: {source: microsoft_cloud, mitre_techniques: [T1098.001]}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.145, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: known credential-abuse infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, display_name: J Smith, department: Finance,
+               groups: [Finance Users], account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: sign_in, sign_in_id: si-cc-0008-1, user: jsmith@example.com,
+               timestamp: "2026-01-15T11:05:00Z", ip: 203.0.113.145, country: NL, app: Azure Portal,
+               result: success, mfa_result: satisfied, risk_level: high}
+    - integration: entra
+      atomic: search_user_activity
+      subject: jsmith@example.com
+      record: {kind: cloud_app, app_id: 00000000-0000-4000-8000-0000000c1008, display_name: Finance Export (test),
+               publisher_verified: false, permissions: [Files.Read.All], consent_type: unknown,
+               created_at: "2025-08-01T09:00:00Z", credential_added_at: "2026-01-15T11:12:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions:
+    - revoke_sessions:jsmith@example.com
+    - disable_user:jsmith@example.com
+    - block_ip:203.0.113.145
+  dry_run_lines:
+    - DRY RUN
+    - "Would revoke sessions: jsmith@example.com"
+    - "Would disable user: jsmith@example.com"
+    - "Would block: 203.0.113.145"
+    - No containment actions executed.
+  manual_steps:
+    - remove-app-credentials:00000000-0000-4000-8000-0000000c1008
+    - disable-service-principal:00000000-0000-4000-8000-0000000c1008
+  handoffs: [account-takeover:jsmith@example.com]
+  notifications: [incident_note, soc_notification, analyst_summary]

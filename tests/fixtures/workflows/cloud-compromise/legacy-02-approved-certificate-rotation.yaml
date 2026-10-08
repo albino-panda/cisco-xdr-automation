@@ -1,0 +1,60 @@
+# cloud-compromise workflow scenario; fake lab data only.
+# Migrated from the legacy spec scenario 02. Changes: typed records instead of legacy result items; the
+# legacy internal (non-documentation) address becomes the documentation address 198.51.100.5 (test-data rule); the
+# certificate rotation is an application record of a verified publisher in the owner's cloud activity.
+# The change ticket stays incident data (never evidence). A privileged role alone never triggers anything.
+schema: 1
+name: legacy-02-approved-certificate-rotation
+workflow: cloud-compromise
+description: >-
+  The "new credential on an app registration" detection fires for a scheduled certificate rotation done by
+  the app owner under an approved change, from the corporate network. The owner holds a privileged role
+  but has no identity risk, no detections and only a clean sign-in, so nothing is proposed. This proves a
+  privileged role alone never triggers containment.
+tags: [legacy, benign]
+legacy_source: workflows/cloud-compromise/scenarios/02-approved-certificate-rotation.yaml
+mode: both
+suite: {entra: [identity], microsoft_cloud: [identity], cisco_xdr: [intel], meraki: [network]}
+incident:
+  incident_id: INC-TEST-0302
+  title: New certificate added to app registration Payroll Export (test)
+  severity: MEDIUM
+  source: Microsoft Entra audit log via Splunk
+  workflow_id: cloud-compromise
+  observables:
+    - {type: user, value: app-owner-03@example.com}
+    - {type: ip, value: 198.51.100.5}
+  users: [app-owner-03@example.com]
+  trigger: {source: splunk, mitre_techniques: [T1098.001], app_display_name: Payroll Export (test),
+            credential_type: certificate, change_ticket: CHG-TEST-0042}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.5, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [cisco_xdr], summary: head office egress}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: app-owner-03@example.com
+      record: {kind: user_profile, user: app-owner-03@example.com, department: IT, groups: [Application Owners],
+               roles: [Cloud Application Administrator], account_enabled: true, risk_level: none,
+               risk_state: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: app-owner-03@example.com
+      record: {kind: sign_in, sign_in_id: si-legacy-0302-1, user: app-owner-03@example.com,
+               timestamp: "2026-01-15T09:00:00Z", ip: 198.51.100.5, country: GB,
+               app: Microsoft Entra admin center, result: success, mfa_result: satisfied, risk_level: none}
+    - integration: entra
+      atomic: search_user_activity
+      subject: app-owner-03@example.com
+      record: {kind: cloud_app, app_id: 00000000-0000-4000-8000-0000000c0302, display_name: Payroll Export (test),
+               publisher_verified: true, permissions: [User.Read.All], consent_type: unknown,
+               created_at: "2024-01-10T09:00:00Z", credential_added_at: "2026-01-15T09:10:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  below_threshold: []
+  considered: []
+  manual_steps: []
+  handoffs: []

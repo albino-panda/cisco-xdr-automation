@@ -1,0 +1,54 @@
+# cloud-compromise workflow scenario; fake lab data only.
+schema: 1
+name: benign-no-action
+workflow: cloud-compromise
+description: >-
+  The "new credential on an app registration" detection fires for a scheduled certificate rotation:
+  kmorris owns the app registration of a verified publisher, Entra rates the account no risk and the
+  only sign-in is from the office. No account shows a compromise indicator and the application is not
+  risky, so nothing is proposed, considered or handed off.
+tags: [benign]
+mode: both
+suite: {entra: [identity], microsoft_cloud: [identity], cisco_xdr: [intel], meraki: [network]}
+incident:
+  incident_id: XDR-CC-0004
+  title: New certificate added to app registration HR Sync (test)
+  severity: MEDIUM
+  workflow_id: cloud-compromise
+  observables:
+    - {type: user, value: kmorris@example.com}
+    - {type: ip, value: 198.51.100.10}
+  users: [kmorris@example.com]
+  trigger: {source: microsoft_cloud, mitre_techniques: [T1098.001]}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.10, verdict: CLEAN, risk_score: 0, confidence: 80,
+       integrations: [cisco_xdr], summary: corporate office egress}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: kmorris@example.com
+      record: {kind: user_profile, user: kmorris@example.com, display_name: K Morris, department: IT,
+               groups: [Application Owners], roles: [], account_enabled: true, risk_level: none, risk_state: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: kmorris@example.com
+      record: {kind: sign_in, sign_in_id: si-cc-0004-1, user: kmorris@example.com,
+               timestamp: "2026-01-15T09:00:00Z", ip: 198.51.100.10, country: GB, app: Microsoft Entra admin center,
+               result: success, mfa_result: satisfied, risk_level: none}
+    - integration: entra
+      atomic: search_user_activity
+      subject: kmorris@example.com
+      record: {kind: cloud_app, app_id: 00000000-0000-4000-8000-0000000c1004, display_name: HR Sync (test),
+               publisher_verified: true, permissions: [User.Read.All], consent_type: unknown,
+               created_at: "2024-02-01T09:00:00Z", credential_added_at: "2026-01-15T09:05:00Z", verdict: CLEAN}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  below_threshold: []
+  unrouted: []
+  degraded_sources: []
+  considered: []
+  manual_steps: []
+  handoffs: []

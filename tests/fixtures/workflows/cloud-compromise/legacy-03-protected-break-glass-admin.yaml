@@ -1,0 +1,62 @@
+# cloud-compromise workflow scenario; fake lab data only.
+# Migrated from the legacy spec scenario 03. Changes: typed records instead of legacy result items; the
+# legacy is_protected flag becomes the critical-asset policy (privileged_account: user pattern breakglass*
+# and the Global Administrator role), so PackageBuilder decides ELEVATED (C3).
+schema: 1
+name: legacy-03-protected-break-glass-admin
+workflow: cloud-compromise
+description: >-
+  A break-glass Global Administrator shows high risk and a successful sign-in from a malicious IP. The
+  revoke and disable conditions hold and the account is a privileged account, so both actions stay in the
+  package with ELEVATED approval and a warning; an analyst alone is refused and the lead approves. The
+  attacker IP block is a standard action.
+tags: [legacy, critical_asset, true_positive, approve_all]
+legacy_source: workflows/cloud-compromise/scenarios/03-protected-break-glass-admin.yaml
+mode: both
+suite: {entra: [identity], microsoft_cloud: [identity], cisco_xdr: [intel], meraki: [network]}
+incident:
+  incident_id: INC-TEST-0303
+  title: Unusual admin activity from new location on emergency access account
+  severity: CRITICAL
+  source: Microsoft Entra ID Protection
+  workflow_id: cloud-compromise
+  observables:
+    - {type: user, value: breakglass-01@example.com}
+    - {type: ip, value: 203.0.113.99}
+  users: [breakglass-01@example.com]
+  trigger: {source: entra, mitre_techniques: [T1078.004], account_type: emergency_access}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.99, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: attacker infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: breakglass-01@example.com
+      record: {kind: user_profile, user: breakglass-01@example.com, department: IT, groups: [Cloud Emergency Access],
+               roles: [Global Administrator], privileged: true, account_enabled: true, risk_level: high,
+               risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: breakglass-01@example.com
+      record: {kind: sign_in, sign_in_id: si-legacy-0303-1, user: breakglass-01@example.com,
+               timestamp: "2026-01-15T04:20:00Z", ip: 203.0.113.99, country: unfamiliar, app: Azure Portal,
+               result: success, mfa_result: satisfied, risk_level: high}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: breakglass-01@example.com
+      record: {kind: anomaly, anomaly_id: rd-legacy-0303-1, anomaly_type: unfamiliar_location, severity: MEDIUM,
+               user: breakglass-01@example.com, ip: 203.0.113.99, first_seen: "2026-01-15T04:20:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - revoke_sessions:breakglass-01@example.com
+    - disable_user:breakglass-01@example.com
+    - block_ip:203.0.113.99
+  elevated:
+    - revoke_sessions:breakglass-01@example.com
+    - disable_user:breakglass-01@example.com
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  handoffs: [account-takeover:breakglass-01@example.com]
+  containment: CONTAINED
+  controls: 2

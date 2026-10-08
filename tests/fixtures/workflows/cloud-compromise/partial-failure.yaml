@@ -1,0 +1,58 @@
+# cloud-compromise workflow scenario; fake lab data only.
+schema: 1
+name: partial-failure
+workflow: cloud-compromise
+description: >-
+  pchan (Entra high risk) signs in from a malicious IP and adds a client secret to an app registration
+  pchan owns. The analyst approves the revocation, the disable and the IP block; the Meraki rule fails at
+  execution, so the block is FAILED, the other two actions succeed and the containment is
+  PARTIALLY_CONTAINED. Nothing is retried silently.
+tags: [partial_failure, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], microsoft_cloud: [identity], cisco_xdr: [intel], meraki: [network]}
+incident:
+  incident_id: XDR-CC-0007
+  title: New client secret on app registration after risky sign-in by pchan@example.com
+  severity: HIGH
+  workflow_id: cloud-compromise
+  observables:
+    - {type: user, value: pchan@example.com}
+    - {type: ip, value: 203.0.113.150}
+  users: [pchan@example.com]
+  trigger: {source: microsoft_cloud, mitre_techniques: [T1098.001]}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.150, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: attacker infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: pchan@example.com
+      record: {kind: user_profile, user: pchan@example.com, display_name: P Chan, department: Operations,
+               groups: [Operations Users], account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: pchan@example.com
+      record: {kind: sign_in, sign_in_id: si-cc-0007-1, user: pchan@example.com,
+               timestamp: "2026-01-15T09:15:00Z", ip: 203.0.113.150, country: VN, app: Azure Portal,
+               result: success, mfa_result: satisfied, risk_level: high}
+    - integration: entra
+      atomic: search_user_activity
+      subject: pchan@example.com
+      record: {kind: cloud_app, app_id: 00000000-0000-4000-8000-0000000c1007, display_name: Ops Scheduler (test),
+               publisher_verified: false, permissions: [Files.ReadWrite.All], consent_type: unknown,
+               created_at: "2025-09-01T09:00:00Z", credential_added_at: "2026-01-15T09:22:00Z"}
+  faults:
+    - {kind: FAIL, integration: meraki, operation: block_ip, times: 10}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions:
+    - revoke_sessions:pchan@example.com
+    - disable_user:pchan@example.com
+    - block_ip:203.0.113.150
+  containment: PARTIALLY_CONTAINED
+  results:
+    revoke_sessions:pchan@example.com: SUCCESS
+    disable_user:pchan@example.com: SUCCESS
+    block_ip:203.0.113.150: FAILED
+  controls: 1

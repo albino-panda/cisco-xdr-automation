@@ -1,0 +1,139 @@
+# cloud-compromise workflow scenario; fake lab data only.
+# Migrated from the legacy spec scenario 05. Changes: typed records instead of legacy result items; the
+# risky delegated consent of the incident context becomes an application record in the first admin's
+# cloud activity (a manual consent revocation). Every account holds a privileged-account role, so
+# PackageBuilder makes both its revocation and its disable ELEVATED (C3), and four users also exceed the
+# blast-radius cap of 3 (C5): stricter than the legacy plan (which elevated only the disables), never
+# weaker. The legacy escalation is the ELEVATED approval by the lead.
+schema: 1
+name: legacy-05-tenant-admins-over-disable-limit
+workflow: cloud-compromise
+description: >-
+  Consent phishing hits the cloud admin team: four privileged accounts sign in successfully from the same
+  malicious IP. Revocation and disable are proposed for all four, every account action needs ELEVATED
+  approval (privileged accounts, and four users exceed the blast-radius cap) and a lead approves. The IP
+  block is unaffected.
+tags: [legacy, critical_asset, true_positive, approve_all]
+legacy_source: workflows/cloud-compromise/scenarios/05-tenant-admins-over-disable-limit.yaml
+mode: both
+suite: {entra: [identity], microsoft_cloud: [identity], cisco_xdr: [intel], meraki: [network]}
+incident:
+  incident_id: INC-TEST-0305
+  title: Risky OAuth consent and admin sign-ins from one unfamiliar IP
+  severity: CRITICAL
+  source: Cisco XDR
+  workflow_id: cloud-compromise
+  observables:
+    - {type: ip, value: 198.51.100.120}
+    - {type: user, value: cloud-admin-01@example.com}
+    - {type: user, value: cloud-admin-02@example.com}
+    - {type: user, value: cloud-admin-03@example.com}
+    - {type: user, value: cloud-admin-04@example.com}
+  users: [cloud-admin-01@example.com, cloud-admin-02@example.com, cloud-admin-03@example.com,
+          cloud-admin-04@example.com]
+  trigger: {source: cisco_xdr, mitre_techniques: [T1528], app_display_name: Document Viewer Plus (test),
+            consent_type: delegated}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.120, verdict: MALICIOUS, risk_score: 90, confidence: 80,
+       integrations: [cisco_xdr], summary: attacker infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: cloud-admin-01@example.com
+      record: {kind: user_profile, user: cloud-admin-01@example.com, department: IT, groups: [Cloud Operations],
+               roles: [Privileged Role Administrator], account_enabled: true, risk_level: medium,
+               risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: cloud-admin-01@example.com
+      record: {kind: sign_in, sign_in_id: si-legacy-0305-1, user: cloud-admin-01@example.com,
+               timestamp: "2026-01-15T09:01:00Z", ip: 198.51.100.120, country: unfamiliar,
+               app: Document Viewer Plus (test), result: success, mfa_result: satisfied, risk_level: medium}
+    - integration: entra
+      atomic: search_user_activity
+      subject: cloud-admin-01@example.com
+      record: {kind: cloud_app, app_id: 00000000-0000-4000-8000-0000000c0305, display_name: Document Viewer Plus (test),
+               publisher_verified: false, permissions: [Mail.Read, Files.Read.All, offline_access],
+               consent_type: user, consented_by: cloud-admin-01@example.com, created_at: "2026-01-15T09:02:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: cloud-admin-02@example.com
+      record: {kind: user_profile, user: cloud-admin-02@example.com, department: IT, groups: [Cloud Operations],
+               roles: [Application Administrator], account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: cloud-admin-02@example.com
+      record: {kind: sign_in, sign_in_id: si-legacy-0305-2, user: cloud-admin-02@example.com,
+               timestamp: "2026-01-15T09:02:00Z", ip: 198.51.100.120, country: unfamiliar,
+               app: Document Viewer Plus (test), result: success, mfa_result: satisfied, risk_level: medium}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: cloud-admin-02@example.com
+      record: {kind: anomaly, anomaly_id: rd-legacy-0305-2, anomaly_type: unfamiliar_location, severity: MEDIUM,
+               user: cloud-admin-02@example.com, ip: 198.51.100.120, first_seen: "2026-01-15T09:02:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: cloud-admin-03@example.com
+      record: {kind: user_profile, user: cloud-admin-03@example.com, department: IT, groups: [Cloud Operations],
+               roles: [Exchange Administrator], account_enabled: true, risk_level: low, risk_state: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: cloud-admin-03@example.com
+      record: {kind: sign_in, sign_in_id: si-legacy-0305-3, user: cloud-admin-03@example.com,
+               timestamp: "2026-01-15T09:03:00Z", ip: 198.51.100.120, country: unfamiliar,
+               app: Document Viewer Plus (test), result: success, mfa_result: satisfied, risk_level: low}
+    - integration: entra
+      atomic: investigate_user
+      subject: cloud-admin-04@example.com
+      record: {kind: user_profile, user: cloud-admin-04@example.com, department: IT, groups: [Cloud Operations],
+               roles: [Cloud Application Administrator], account_enabled: true, risk_level: high,
+               risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: cloud-admin-04@example.com
+      record: {kind: sign_in, sign_in_id: si-legacy-0305-4, user: cloud-admin-04@example.com,
+               timestamp: "2026-01-15T09:04:00Z", ip: 198.51.100.120, country: unfamiliar,
+               app: Document Viewer Plus (test), result: success, mfa_result: satisfied, risk_level: medium}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: cloud-admin-04@example.com
+      record: {kind: anomaly, anomaly_id: rd-legacy-0305-4a, anomaly_type: unfamiliar_location, severity: MEDIUM,
+               user: cloud-admin-04@example.com, ip: 198.51.100.120, first_seen: "2026-01-15T09:04:00Z"}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: cloud-admin-04@example.com
+      record: {kind: anomaly, anomaly_id: rd-legacy-0305-4b, anomaly_type: new_device, severity: MEDIUM,
+               user: cloud-admin-04@example.com, ip: 198.51.100.120, first_seen: "2026-01-15T09:04:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - revoke_sessions:cloud-admin-01@example.com
+    - revoke_sessions:cloud-admin-02@example.com
+    - revoke_sessions:cloud-admin-03@example.com
+    - revoke_sessions:cloud-admin-04@example.com
+    - disable_user:cloud-admin-01@example.com
+    - disable_user:cloud-admin-02@example.com
+    - disable_user:cloud-admin-03@example.com
+    - disable_user:cloud-admin-04@example.com
+    - block_ip:198.51.100.120
+  elevated:
+    - revoke_sessions:cloud-admin-01@example.com
+    - revoke_sessions:cloud-admin-02@example.com
+    - revoke_sessions:cloud-admin-03@example.com
+    - revoke_sessions:cloud-admin-04@example.com
+    - disable_user:cloud-admin-01@example.com
+    - disable_user:cloud-admin-02@example.com
+    - disable_user:cloud-admin-03@example.com
+    - disable_user:cloud-admin-04@example.com
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account, blast-radius]
+  manual_steps:
+    - revoke-oauth-consent:00000000-0000-4000-8000-0000000c0305
+    - disable-service-principal:00000000-0000-4000-8000-0000000c0305
+  handoffs:
+    - account-takeover:cloud-admin-01@example.com
+    - account-takeover:cloud-admin-02@example.com
+    - account-takeover:cloud-admin-03@example.com
+    - account-takeover:cloud-admin-04@example.com
+  containment: CONTAINED
+  controls: 5

@@ -1,0 +1,52 @@
+# cloud-compromise workflow scenario; fake lab data only.
+schema: 1
+name: critical-asset-elevated
+workflow: cloud-compromise
+description: >-
+  The compromised account adm-jdoe holds the Cloud Application Administrator role, Entra rates it high
+  risk and it signed in successfully from an IP that Cisco XDR rates malicious. Revoking its sessions and
+  disabling it need ELEVATED approval with a visible privileged-account warning: an analyst alone is
+  refused and the lead approves. The IP block is a standard action in the same package.
+tags: [critical_asset, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], microsoft_cloud: [identity], cisco_xdr: [intel], meraki: [network]}
+incident:
+  incident_id: XDR-CC-0006
+  title: Unusual application administration by adm-jdoe@example.com after risky sign-in
+  severity: CRITICAL
+  workflow_id: cloud-compromise
+  observables:
+    - {type: user, value: adm-jdoe@example.com}
+    - {type: ip, value: 198.51.100.188}
+  users: [adm-jdoe@example.com]
+  trigger: {source: entra, mitre_techniques: [T1098.001]}
+environment:
+  reputations:
+    - {type: ip, value: 198.51.100.188, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [cisco_xdr], summary: credential-abuse infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: adm-jdoe@example.com
+      record: {kind: user_profile, user: adm-jdoe@example.com, display_name: J Doe (admin), department: IT,
+               groups: [IT Admins], roles: [Cloud Application Administrator], privileged: true,
+               account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: adm-jdoe@example.com
+      record: {kind: sign_in, sign_in_id: si-cc-0006-1, user: adm-jdoe@example.com,
+               timestamp: "2026-01-15T10:05:00Z", ip: 198.51.100.188, country: BR, app: Azure Portal,
+               result: success, mfa_result: satisfied, risk_level: high}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - revoke_sessions:adm-jdoe@example.com
+    - disable_user:adm-jdoe@example.com
+    - block_ip:198.51.100.188
+  elevated:
+    - revoke_sessions:adm-jdoe@example.com
+    - disable_user:adm-jdoe@example.com
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  handoffs: [account-takeover:adm-jdoe@example.com]
+  containment: CONTAINED
+  controls: 2

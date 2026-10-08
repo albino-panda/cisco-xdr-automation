@@ -1,0 +1,83 @@
+# cloud-compromise workflow scenario; fake lab data only.
+schema: 1
+name: edge-rogue-role-assignment
+workflow: cloud-compromise
+description: >-
+  A compromised Privileged Role Administrator (adm-okafor: Entra high risk, successful sign-in from a
+  malicious IP) assigns Global Administrator to a second account, backup-ops. The package revokes and
+  disables the compromised administrator (ELEVATED: privileged account), removes the Global Administrator
+  assignment from backup-ops (always ELEVATED: role removal) and blocks the IP. The earlier Exchange
+  Administrator assignment of mail-ops (also named by the incident, no compromise indicator), made by the
+  identity team, is shown as considered, not proposed. The lead approves; every action executes and
+  verifies.
+tags: [edge_case, critical_asset, true_positive, approve_all]
+mode: both
+suite: {entra: [identity], microsoft_cloud: [identity], cisco_xdr: [intel], meraki: [network]}
+incident:
+  incident_id: XDR-CC-0013
+  title: Global Administrator directory role assigned by adm-okafor@example.com after risky sign-in
+  severity: CRITICAL
+  workflow_id: cloud-compromise
+  observables:
+    - {type: user, value: adm-okafor@example.com}
+    - {type: user, value: mail-ops@example.com}
+    - {type: ip, value: 203.0.113.212}
+  users: [adm-okafor@example.com]
+  trigger: {source: entra, mitre_techniques: [T1098.003]}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.212, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [cisco_xdr], summary: attacker infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: adm-okafor@example.com
+      record: {kind: user_profile, user: adm-okafor@example.com, display_name: O Okafor (admin), department: IT,
+               groups: [IT Admins], roles: [Privileged Role Administrator], privileged: true,
+               account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: adm-okafor@example.com
+      record: {kind: sign_in, sign_in_id: si-cc-0013-1, user: adm-okafor@example.com,
+               timestamp: "2026-01-15T10:00:00Z", ip: 203.0.113.212, country: unfamiliar, app: Azure Portal,
+               result: success, mfa_result: satisfied, risk_level: high}
+    - integration: entra
+      atomic: search_user_activity
+      subject: adm-okafor@example.com
+      record: {kind: role_change, user: backup-ops@example.com, role_name: Global Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000e1, change: assigned, privileged: true,
+               actor: adm-okafor@example.com, timestamp: "2026-01-15T10:12:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: mail-ops@example.com
+      record: {kind: user_profile, user: mail-ops@example.com, display_name: Mail Operations, department: IT,
+               groups: [Messaging Team], roles: [Exchange Administrator], account_enabled: true,
+               risk_level: none, risk_state: none}
+    - integration: entra
+      atomic: search_user_activity
+      subject: mail-ops@example.com
+      record: {kind: role_change, user: mail-ops@example.com, role_name: Exchange Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000e2, change: assigned, privileged: true,
+               actor: id-team@example.com, timestamp: "2026-01-12T14:00:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - revoke_sessions:adm-okafor@example.com
+    - disable_user:adm-okafor@example.com
+    - remove_privileged_role:backup-ops@example.com/00000000-0000-4000-8000-0000000000e1
+    - block_ip:203.0.113.212
+  elevated:
+    - revoke_sessions:adm-okafor@example.com
+    - disable_user:adm-okafor@example.com
+    - remove_privileged_role:backup-ops@example.com/00000000-0000-4000-8000-0000000000e1
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  considered: [remove_privileged_role:mail-ops@example.com/00000000-0000-4000-8000-0000000000e2]
+  manual_steps: []
+  handoffs: [account-takeover:adm-okafor@example.com]
+  containment: CONTAINED
+  results:
+    revoke_sessions:adm-okafor@example.com: SUCCESS
+    disable_user:adm-okafor@example.com: SUCCESS
+    remove_privileged_role:backup-ops@example.com/00000000-0000-4000-8000-0000000000e1: SUCCESS
+    block_ip:203.0.113.212: SUCCESS
+  controls: 3
