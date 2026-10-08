@@ -244,7 +244,7 @@ Native XDR action: **disable/restore user, yes**. **Revoke sessions, confirm com
 | **Remove role** | SC | `DELETE /roleManagement/directory/roleAssignments/{id}` returns 204 | `RoleManagement.ReadWrite.Directory` | VERIFIED | https://learn.microsoft.com/en-us/graph/api/unifiedroleassignment-delete?view=graph-rest-1.0 |
 | **Restore role** (rollback) | SC | `POST /roleManagement/directory/roleAssignments` with `{roleDefinitionId, principalId, directoryScopeId}` returns 201 | `RoleManagement.ReadWrite.Directory` | VERIFIED | https://learn.microsoft.com/en-us/graph/api/rbacapplication-post-roleassignments?view=graph-rest-1.0 |
 
-Rollback for "remove role" must capture `roleDefinitionId`, `principalId` and `directoryScopeId` **before** the delete. Role removal and role restore should always be ELEVATED.
+Rollback for "remove role" must capture `roleDefinitionId`, `principalId` and `directoryScopeId` **before** the delete. Role removal and role restore should always be ELEVATED. The framework names a role assignment `<user>/<roleDefinitionId>`; the adapter resolves it with the VERIFIED reads above (`GET /users/{id or userPrincipalName}` for the object id, then the role assignments of that principal) before the delete and when verifying, and refuses a role held at several scopes unless `params.directory_scope_id` names one (architecture 14.12.3).
 
 ### 2.9 `defender_endpoint` (Microsoft Defender for Endpoint)
 

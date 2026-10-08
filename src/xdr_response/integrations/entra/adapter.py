@@ -4,7 +4,11 @@ State changes: disable / enable account (PATCH ``accountEnabled``), revoke sign-
 confirm user compromised, remove / restore a directory role assignment. Every reversible write
 reads the current state first (idempotency) and every verifiable one is re-read afterwards.
 Role removal captures ``roleDefinitionId``, ``principalId`` and ``directoryScopeId`` **before** the
-delete so the release can recreate the assignment. riskyUser get/dismiss, password reset, MFA reset
+delete so the release can recreate the assignment. Its target is the framework's ``ROLE_ASSIGNMENT``
+normal form ``<user>/<roleDefinitionId>`` (architecture 14.12.3): the adapter resolves the user to its
+object id (VERIFIED user read) and the role definition to the assignment id (VERIFIED assignment list)
+before the delete and again in ``verify``; a bare assignment id with ``params.principal_id`` (the
+Phase 0 form) is still accepted. riskyUser get/dismiss, password reset, MFA reset
 and app-credential revocation are UNVERIFIED and raise.
 """
 from __future__ import annotations
@@ -56,6 +60,18 @@ def _parse_dt(value: Any) -> datetime | None:
 
 def _same_role(a: Mapping[str, Any], role_definition_id: str, directory_scope_id: str) -> bool:
     return a.get("roleDefinitionId") == role_definition_id and a.get("directoryScopeId") == directory_scope_id
+
+
+def _role_target(target: str) -> tuple[str, str] | None:
+    """``(user, roleDefinitionId)`` of a ``<user>/<roleDefinitionId>`` target; ``None`` for an assignment id."""
+    user, sep, role = target.partition("/")
+    return (user.strip(), role.strip()) if sep and user.strip() and role.strip() else None
+
+
+def _of_role(a: Mapping[str, Any], role_definition_id: str, directory_scope_id: Any) -> bool:
+    """The assignment grants ``role_definition_id`` (at ``directory_scope_id`` when one is given)."""
+    return a.get("roleDefinitionId") == role_definition_id and (
+        not directory_scope_id or a.get("directoryScopeId") == directory_scope_id)
 
 
 class EntraAdapter(VendorAdapter):
@@ -128,6 +144,30 @@ class EntraAdapter(VendorAdapter):
         result = self._send(builders.list_role_assignments(principal_id, kind=_V))
         return [a for a in body_list(result.body, "value") if isinstance(a, dict)], result
 
+    def _role_principal(self, request: ActionRequest, user: str) -> tuple[str, HttpResultLike]:
+        """Object id of ``user`` from a VERIFIED lookup of the approved target (never from params alone)."""
+        lookup = self._send(builders.get_user(user, ("id", "userPrincipalName", "mail"), kind=_V))
+        record = body_dict(lookup.body)
+        principal = record.get("id")
+        if not principal:
+            raise ApiError(f"entra: no object id returned for {user}", integration=self.name)
+        names = [str(principal), *(str(record[f]) for f in ("userPrincipalName", "mail") if record.get(f))]
+        # Exact (case-insensitive) match: an account name is never compared by its first label.
+        if user.strip().lower() not in {n.strip().lower() for n in names}:
+            raise InvalidTargetError(f"entra: the lookup of {user!r} returned another account ({', '.join(names)}); "
+                                     "refusing to act", integration=self.name)
+        wanted = request.params.get("principal_id")
+        if wanted and str(wanted).strip().lower() != str(principal).strip().lower():
+            raise InvalidTargetError(
+                f"entra: params.principal_id {wanted!r} is not the object id of the approved target "
+                f"{request.target!r}; refusing to act on another account", integration=self.name)
+        return str(principal), lookup
+
+    @staticmethod
+    def _role_matches(request: ActionRequest, role: str, assignments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        scope = request.params.get("directory_scope_id")
+        return [a for a in assignments if _of_role(a, role, scope)]
+
     def _role_triple(self, request: ActionRequest) -> tuple[str, str, str]:
         return (str(self._param(request, "role_definition_id")), str(self._param(request, "principal_id")),
                 str(self._param(request, "directory_scope_id")))
@@ -151,6 +191,15 @@ class EntraAdapter(VendorAdapter):
             return self._verdict(request, ok, "get_user", f"accountEnabled={enabled}", result)
         if action is ActionType.REVOKE_SESSIONS:
             return self._verify_revoke(request, outcome)
+        named = _role_target(request.target) if action is ActionType.REMOVE_PRIVILEGED_ROLE else None
+        if named is not None:
+            principal, lookup = self._role_principal(request, named[0])
+            assignments, result = self._assignments(principal)
+            ok = not self._role_matches(request, named[1], assignments)
+            status = VerificationStatus.VERIFIED if ok else VerificationStatus.NOT_VERIFIED
+            return self._verification(request, status, method="list_role_assignments",
+                                      details=f"role {named[1]} {'absent' if ok else 'present'} for {named[0]}",
+                                      results=[lookup, result])
         if action is ActionType.REMOVE_PRIVILEGED_ROLE:
             assignments, result = self._assignments(str(self._param(request, "principal_id")))
             ok = all(a.get("id") != request.target for a in assignments)
@@ -234,7 +283,17 @@ class EntraAdapter(VendorAdapter):
 
     @state_changing
     def remove_privileged_role(self, request: ActionRequest) -> ActionOutcome:
-        """Delete the role assignment ``request.target`` after capturing it for the release."""
+        """Delete the role assignment ``request.target`` after capturing it for the release.
+
+        ``<user>/<roleDefinitionId>`` (the framework's normal form) is resolved to the user's object id
+        and to the one assignment of that role (at ``params.directory_scope_id`` when given); several
+        assignments of the role at different scopes are refused (the analyst names the scope), so the
+        rollback always recreates exactly what was removed. A bare assignment id needs
+        ``params.principal_id`` (the Phase 0 form).
+        """
+        named = _role_target(request.target)
+        if named is not None:
+            return self._remove_named_role(request, *named)
         principal = str(self._param(request, "principal_id"))
         assignments, before = self._assignments(principal)
         match = next((a for a in assignments if a.get("id") == request.target), None)
@@ -248,6 +307,31 @@ class EntraAdapter(VendorAdapter):
         deleted = self._send(builders.remove_role_assignment(request.target))
         return self._outcome(ActionResultStatus.SUCCESS, results=[before, deleted], rollback=rollback,
                              external_ref=request.target, message=f"role assignment {request.target} removed")
+
+    def _remove_named_role(self, request: ActionRequest, user: str, role: str) -> ActionOutcome:
+        principal, lookup = self._role_principal(request, user)
+        assignments, before = self._assignments(principal)
+        matches = self._role_matches(request, role, assignments)
+        if not matches:
+            rollback = {"principal_id": principal, "role_definition_id": role,
+                        "directory_scope_id": request.params.get("directory_scope_id")}
+            return self._outcome(ActionResultStatus.ALREADY_CONTAINED, results=[lookup, before], rollback=rollback,
+                                 message=f"role {role} not assigned to {user}")
+        if len(matches) > 1:
+            scopes = ", ".join(sorted(str(a.get("directoryScopeId")) for a in matches))
+            raise InvalidTargetError(
+                f"entra: {user} holds role {role} at {len(matches)} scopes ({scopes}); name the scope in "
+                "params.directory_scope_id", integration=self.name)
+        match = matches[0]
+        assignment_id = str(match.get("id") or "")
+        if not assignment_id:
+            raise ApiError(f"entra: the assignment of role {role} to {user} has no id", integration=self.name)
+        rollback = {"principal_id": principal, "role_definition_id": match.get("roleDefinitionId"),
+                    "directory_scope_id": match.get("directoryScopeId")}
+        deleted = self._send(builders.remove_role_assignment(assignment_id))
+        return self._outcome(ActionResultStatus.SUCCESS, results=[lookup, before, deleted], rollback=rollback,
+                             external_ref=assignment_id,
+                             message=f"role assignment {assignment_id} ({role}) removed for {user}")
 
     @state_changing
     def restore_privileged_role(self, request: ActionRequest) -> ActionOutcome:

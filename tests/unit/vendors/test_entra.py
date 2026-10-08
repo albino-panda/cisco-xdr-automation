@@ -7,6 +7,7 @@ import pytest
 
 from tests.fixtures.factories import FIXED_NOW
 from tests.unit.vendors._helpers import Router, action_request, body_of, json_response, make_adapter, run_authorized
+from xdr_response.errors import ApiError, InvalidTargetError
 from xdr_response.integrations.entra import builders
 from xdr_response.models import (
     ActionResultStatus,
@@ -128,3 +129,76 @@ def test_investigate_authentication_reads_sign_ins():
                                subject=Observable(type=ObservableType.USER, value=USER))
     assert make_adapter("entra", router).investigate(query).findings == ({"id": "s1"},)
     assert dict(router.last().url.params)["$top"] == "10"
+
+
+# The framework's ROLE_ASSIGNMENT normal form "<user>/<roleDefinitionId>" (architecture 14.12.3).
+NAMED_ROLE = f"{USER}/rd-0001"
+USER_ID = {"id": "pr-0001", "userPrincipalName": USER}
+
+
+def test_remove_named_role_resolves_the_user_and_the_assignment_before_the_delete():
+    router = Router().add("GET", USER_PATH, json_response(200, USER_ID))
+    other = {**ROLE, "id": "ra-0009", "roleDefinitionId": "rd-0002"}
+    router.add("GET", ROLES, json_response(200, {"value": [ROLE, other]}), json_response(200, {"value": [other]}))
+    router.add("DELETE", f"{ROLES}/ra-0001", json_response(204))
+    adapter = make_adapter("entra", router)
+    request = action_request(ActionType.REMOVE_PRIVILEGED_ROLE, "entra", NAMED_ROLE)
+    outcome = run_authorized(adapter, request)
+    assert [c.method for c in router.calls] == ["GET", "GET", "DELETE"]
+    assert dict(router.calls[1].url.params) == {"$filter": "principalId eq 'pr-0001'"}
+    assert router.calls[2].url.path == f"{ROLES}/ra-0001"  # only the assignment of rd-0001
+    assert outcome.status is ActionResultStatus.SUCCESS and outcome.external_ref == "ra-0001"
+    assert outcome.rollback_params == {"integration": "entra", "principal_id": "pr-0001",
+                                       "role_definition_id": "rd-0001", "directory_scope_id": "/"}
+    assert adapter.verify(request, outcome).status is VerificationStatus.VERIFIED
+
+
+def test_verify_of_a_named_role_still_assigned_is_not_verified():
+    """The Phase 0 defect: matching '<user>/<role>' against assignment ids reported VERIFIED while assigned."""
+    router = Router().add("GET", USER_PATH, json_response(200, USER_ID))
+    router.add("GET", ROLES, json_response(200, {"value": [ROLE]}))
+    adapter = make_adapter("entra", router)
+    request = action_request(ActionType.REMOVE_PRIVILEGED_ROLE, "entra", NAMED_ROLE)
+    assert adapter.verify(request, None).status is VerificationStatus.NOT_VERIFIED
+
+
+def test_remove_named_role_not_assigned_is_already_contained():
+    router = Router().add("GET", USER_PATH, json_response(200, USER_ID))
+    router.add("GET", ROLES, json_response(200, {"value": []}))
+    adapter = make_adapter("entra", router)
+    outcome = run_authorized(adapter, action_request(ActionType.REMOVE_PRIVILEGED_ROLE, "entra", NAMED_ROLE))
+    assert outcome.status is ActionResultStatus.ALREADY_CONTAINED
+    assert [c.method for c in router.calls] == ["GET", "GET"]
+
+
+@pytest.mark.parametrize(("lookup", "params"), [
+    ({"id": "pr-0001", "userPrincipalName": "other@example.com"}, {}),  # the lookup names another account
+    ({"id": "pr-0001", "userPrincipalName": "j.doe@example.org"}, {}),  # never matched by first label
+    (USER_ID, {"principal_id": "pr-9999"}),  # params name another object
+    ({"userPrincipalName": USER}, {}),  # no object id
+])
+def test_remove_named_role_refuses_another_account(lookup, params):
+    router = Router().add("GET", USER_PATH, json_response(200, lookup))
+    router.add("GET", ROLES, json_response(200, {"value": [ROLE]}))
+    router.add("DELETE", f"{ROLES}/ra-0001", json_response(204))
+    adapter = make_adapter("entra", router)
+    request = action_request(ActionType.REMOVE_PRIVILEGED_ROLE, "entra", NAMED_ROLE, **params)
+    with pytest.raises((InvalidTargetError, ApiError)):
+        run_authorized(adapter, request)
+    assert "DELETE" not in [c.method for c in router.calls]
+
+
+def test_remove_named_role_at_several_scopes_needs_the_scope():
+    scoped = {**ROLE, "id": "ra-0002", "directoryScopeId": "/administrativeUnits/au-1"}
+    router = Router().add("GET", USER_PATH, json_response(200, USER_ID))
+    router.add("GET", ROLES, json_response(200, {"value": [ROLE, scoped]}))
+    router.add("DELETE", f"{ROLES}/ra-0002", json_response(204))
+    adapter = make_adapter("entra", router)
+    with pytest.raises(InvalidTargetError, match="2 scopes"):
+        run_authorized(adapter, action_request(ActionType.REMOVE_PRIVILEGED_ROLE, "entra", NAMED_ROLE))
+    assert "DELETE" not in [c.method for c in router.calls]
+    request = action_request(ActionType.REMOVE_PRIVILEGED_ROLE, "entra", NAMED_ROLE,
+                             directory_scope_id="/administrativeUnits/au-1")
+    outcome = run_authorized(adapter, request)
+    assert router.last().url.path == f"{ROLES}/ra-0002"
+    assert outcome.rollback_params["directory_scope_id"] == "/administrativeUnits/au-1"
