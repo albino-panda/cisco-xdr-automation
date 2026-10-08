@@ -1,0 +1,103 @@
+# Password spray workflow scenario; fake lab data only.
+schema: 1
+name: legacy-05-all-attempts-failed
+workflow: password-spray
+description: >-
+  Migrated from the legacy spec. Smart lockout held and no attempt succeeded, so only spray sources are blocked;
+  the account with Entra risk high from the spray detection itself is neither revoked nor disabled. The third address's
+  reputation lookup timed out (cisco_xdr degraded for it) and its only evidence is one failed sign-in, so it is
+  listed below threshold instead of blocked.
+tags: [legacy, true_positive, degraded_source, approve_all]
+legacy_source: workflows/password-spray/scenarios/05-all-attempts-failed.yaml
+mode: both
+suite:
+  cisco_xdr: [intel, network]
+  entra: [identity]
+  meraki: [network]
+incident:
+  incident_id: INC-TEST-PS-0005
+  title: Password spray blocked by smart lockout
+  severity: MEDIUM
+  workflow_id: password-spray
+  observables:
+  - {type: ip, value: 192.0.2.20}
+  - {type: ip, value: 192.0.2.21}
+  - {type: ip, value: 192.0.2.22}
+  - {type: user, value: h.berg@example.com}
+  - {type: user, value: c.osei@example.com}
+  trigger:
+    source: entra
+    mitre_techniques: [T1110.003]
+environment:
+  reputations:
+  - type: ip
+    value: 192.0.2.20
+    verdict: MALICIOUS
+    risk_score: 80
+    confidence: 75
+    integrations: [cisco_xdr]
+    summary: legacy enrich-ip verdict malicious
+  - type: ip
+    value: 192.0.2.21
+    verdict: SUSPICIOUS
+    risk_score: 60
+    confidence: 70
+    integrations: [cisco_xdr]
+    summary: legacy enrich-ip verdict suspicious
+  - type: ip
+    value: 192.0.2.22
+    verdict: SUSPICIOUS
+    risk_score: 60
+    confidence: 70
+    integrations: [cisco_xdr]
+    summary: 'never returned: the lookup times out'
+  records:
+  - integration: entra
+    atomic: investigate_user
+    subject: h.berg@example.com
+    record: {kind: user_profile, user: h.berg@example.com, account_enabled: true, risk_level: high}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: h.berg@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l05-1, user: h.berg@example.com, timestamp: '2026-01-15T05:00:00Z',
+      ip: 192.0.2.20, country: BR, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid username
+        or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: h.berg@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l05-2, user: h.berg@example.com, timestamp: '2026-01-15T05:01:00Z',
+      ip: 192.0.2.21, country: BR, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid username
+        or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: h.berg@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l05-3, user: h.berg@example.com, timestamp: '2026-01-15T05:02:00Z',
+      ip: 192.0.2.22, country: BR, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid username
+        or password}
+  - integration: entra
+    atomic: investigate_user
+    subject: h.berg@example.com
+    record: {kind: anomaly, anomaly_id: anom-ps-l05-1, anomaly_type: unfamiliar_location, severity: MEDIUM, user: h.berg@example.com,
+      detail: Failed attempts from BR}
+  - integration: entra
+    atomic: investigate_user
+    subject: c.osei@example.com
+    record: {kind: user_profile, user: c.osei@example.com, account_enabled: true, risk_level: low}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: c.osei@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l05-4, user: c.osei@example.com, timestamp: '2026-01-15T05:03:00Z',
+      ip: 192.0.2.21, country: BR, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid username
+        or password}
+  faults:
+  - {kind: UNAVAILABLE, integration: cisco_xdr, operation: enrich, target: 192.0.2.22, times: 10}
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  handoffs: []
+  actions: ['block_ip:192.0.2.20', 'block_ip:192.0.2.21']
+  below_threshold: ['block_ip:192.0.2.22']
+  degraded_sources: [cisco_xdr]
+  containment: CONTAINED
+  controls: 2

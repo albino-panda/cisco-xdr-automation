@@ -1,0 +1,100 @@
+# Password spray workflow scenario; fake lab data only.
+schema: 1
+name: legacy-06-success-with-follow-on
+workflow: password-spray
+description: >-
+  Migrated from the legacy spec. Two accounts signed in successfully from a spray source. s.okafor was followed
+  by MFA fatigue prompts and a new device registration with Entra risk high, so it is disabled as well as revoked;
+  t.vance shows only an unfamiliar location, so it is revoked and stays enabled. Both spray addresses are blocked.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/password-spray/scenarios/06-success-with-follow-on-activity.yaml
+mode: both
+suite:
+  cisco_xdr: [intel, network]
+  entra: [identity]
+  meraki: [network]
+incident:
+  incident_id: INC-TEST-PS-0006
+  title: Password spray with follow-on MFA fatigue
+  severity: HIGH
+  workflow_id: password-spray
+  observables:
+  - {type: ip, value: 198.51.100.60}
+  - {type: ip, value: 198.51.100.61}
+  - {type: user, value: s.okafor@example.com}
+  - {type: user, value: t.vance@example.com}
+  trigger:
+    source: entra
+    mitre_techniques: [T1110.003]
+environment:
+  reputations:
+  - type: ip
+    value: 198.51.100.60
+    verdict: MALICIOUS
+    risk_score: 80
+    confidence: 75
+    integrations: [cisco_xdr]
+    summary: legacy enrich-ip verdict malicious
+  - type: ip
+    value: 198.51.100.61
+    verdict: SUSPICIOUS
+    risk_score: 60
+    confidence: 70
+    integrations: [cisco_xdr]
+    summary: legacy enrich-ip verdict suspicious
+  records:
+  - integration: entra
+    atomic: investigate_user
+    subject: s.okafor@example.com
+    record:
+      kind: user_profile
+      user: s.okafor@example.com
+      account_enabled: true
+      department: Finance
+      groups: [Finance, AP Approvers]
+      risk_level: high
+  - integration: entra
+    atomic: investigate_authentication
+    subject: s.okafor@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l06-1, user: s.okafor@example.com, timestamp: '2026-01-15T11:00:00Z',
+      ip: 198.51.100.61, country: RO, app: Office 365 Exchange Online, result: success}
+  - integration: entra
+    atomic: investigate_user
+    subject: s.okafor@example.com
+    record: {kind: anomaly, anomaly_id: anom-ps-l06-1, anomaly_type: mfa_fatigue, severity: HIGH, user: s.okafor@example.com,
+      detail: 14 push prompts in 6 minutes}
+  - integration: entra
+    atomic: investigate_user
+    subject: s.okafor@example.com
+    record: {kind: anomaly, anomaly_id: anom-ps-l06-2, anomaly_type: new_device, severity: MEDIUM, user: s.okafor@example.com,
+      detail: Device registered after sign-in}
+  - integration: entra
+    atomic: investigate_user
+    subject: t.vance@example.com
+    record:
+      kind: user_profile
+      user: t.vance@example.com
+      account_enabled: true
+      department: Marketing
+      groups: [Marketing]
+      risk_level: low
+  - integration: entra
+    atomic: investigate_authentication
+    subject: t.vance@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l06-2, user: t.vance@example.com, timestamp: '2026-01-15T11:05:00Z',
+      ip: 198.51.100.60, country: RO, app: Microsoft Teams, result: success}
+  - integration: entra
+    atomic: investigate_user
+    subject: t.vance@example.com
+    record: {kind: anomaly, anomaly_id: anom-ps-l06-3, anomaly_type: unfamiliar_location, severity: MEDIUM, user: t.vance@example.com,
+      detail: First sign-in from RO}
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  handoffs: ["account-takeover:s.okafor@example.com", "account-takeover:t.vance@example.com"]
+  actions: ['block_ip:198.51.100.60', 'block_ip:198.51.100.61', 'revoke_sessions:s.okafor@example.com', 'revoke_sessions:t.vance@example.com',
+    'disable_user:s.okafor@example.com']
+  elevated: []
+  containment: CONTAINED
+  controls: 3

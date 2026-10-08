@@ -1,0 +1,100 @@
+# Password spray workflow scenario; fake lab data only.
+schema: 1
+name: partial-failure
+workflow: password-spray
+description: >-
+  The analyst approves the IP block and the session revocation; the Meraki block fails at the vendor. Containment
+  is partial, the failed block is reported and never retried silently, and the revocation still runs.
+tags: [partial_failure, true_positive, approve_all]
+mode: live
+suite:
+  cisco_xdr: [intel, network]
+  entra: [identity]
+  meraki: [network]
+incident:
+  incident_id: XDR-PS-0007
+  title: Password spray against Microsoft 365 accounts
+  severity: MEDIUM
+  workflow_id: password-spray
+  observables:
+  - {type: ip, value: 198.51.100.82}
+  - {type: user, value: jsmith@example.com}
+  - {type: user, value: akim@example.com}
+  - {type: user, value: rlopez@example.com}
+  trigger:
+    source: cisco_xdr
+    mitre_techniques: [T1110.003]
+environment:
+  reputations:
+  - type: ip
+    value: 198.51.100.82
+    verdict: SUSPICIOUS
+    risk_score: 70
+    confidence: 70
+    integrations: [cisco_xdr]
+    summary: anonymising proxy address
+  records:
+  - integration: entra
+    atomic: investigate_user
+    subject: jsmith@example.com
+    record:
+      kind: user_profile
+      user: jsmith@example.com
+      account_enabled: true
+      department: Sales
+      groups: [Sales]
+      risk_level: medium
+  - integration: entra
+    atomic: investigate_user
+    subject: akim@example.com
+    record:
+      kind: user_profile
+      user: akim@example.com
+      account_enabled: true
+      department: Finance
+      groups: [Finance]
+      risk_level: low
+  - integration: entra
+    atomic: investigate_user
+    subject: rlopez@example.com
+    record:
+      kind: user_profile
+      user: rlopez@example.com
+      account_enabled: true
+      department: Engineering
+      groups: [Engineering]
+      risk_level: none
+  - integration: entra
+    atomic: investigate_authentication
+    subject: jsmith@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0007-1, user: jsmith@example.com, timestamp: '2026-01-15T11:20:00Z',
+      ip: 198.51.100.82, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: akim@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0007-3, user: akim@example.com, timestamp: '2026-01-15T11:21:00Z',
+      ip: 198.51.100.82, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: rlopez@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0007-4, user: rlopez@example.com, timestamp: '2026-01-15T11:22:00Z',
+      ip: 198.51.100.82, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: jsmith@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0007-2, user: jsmith@example.com, timestamp: '2026-01-15T11:29:00Z',
+      ip: 198.51.100.82, country: NL, app: Office 365 Exchange Online, result: success, risk_level: medium}
+  faults:
+  - {kind: FAIL, integration: meraki, operation: block_ip, times: 10}
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  handoffs: ["account-takeover:jsmith@example.com"]
+  actions: ['block_ip:198.51.100.82', 'revoke_sessions:jsmith@example.com']
+  results: {'block_ip:198.51.100.82': FAILED, 'revoke_sessions:jsmith@example.com': SUCCESS}
+  containment: PARTIALLY_CONTAINED
+  controls: 0

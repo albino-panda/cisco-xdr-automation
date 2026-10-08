@@ -1,0 +1,120 @@
+# Password spray workflow scenario; fake lab data only.
+schema: 1
+name: edge-internal-source-ip
+workflow: password-spray
+description: >-
+  The spray comes from an external address and from an internal workstation address (the endpoint TH-LT-2210 owns
+  it). Only the external address is recommended for a perimeter block; the internal source is left to the lateral-movement
+  workflow. The account that signed in from the internal source still has its sessions revoked.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite:
+  cisco_xdr: [intel, network]
+  entra: [identity]
+  meraki: [network]
+incident:
+  incident_id: XDR-PS-0011
+  title: Password spray from an external and an internal address
+  severity: HIGH
+  workflow_id: password-spray
+  observables:
+  - {type: ip, value: 198.51.100.90}
+  - {type: ip, value: 192.0.2.70}
+  - {type: user, value: lnaidoo@example.com}
+  - {type: user, value: mokoye@example.com}
+  - {type: user, value: nbauer@example.com}
+  trigger:
+    source: cisco_xdr
+    mitre_techniques: [T1110.003]
+environment:
+  reputations:
+  - type: ip
+    value: 198.51.100.90
+    verdict: SUSPICIOUS
+    risk_score: 65
+    confidence: 70
+    integrations: [cisco_xdr]
+    summary: hosting provider address
+  - type: ip
+    value: 192.0.2.70
+    verdict: SUSPICIOUS
+    risk_score: 50
+    confidence: 50
+    integrations: [cisco_xdr]
+    summary: internal address seen in failed sign-ins
+  records:
+  - integration: entra
+    atomic: investigate_user
+    subject: lnaidoo@example.com
+    record:
+      kind: user_profile
+      user: lnaidoo@example.com
+      account_enabled: true
+      groups: [Finance]
+      risk_level: low
+  - integration: entra
+    atomic: investigate_user
+    subject: mokoye@example.com
+    record:
+      kind: user_profile
+      user: mokoye@example.com
+      account_enabled: true
+      groups: [Finance]
+      risk_level: low
+  - integration: entra
+    atomic: investigate_user
+    subject: nbauer@example.com
+    record:
+      kind: user_profile
+      user: nbauer@example.com
+      account_enabled: true
+      groups: [Finance]
+      risk_level: low
+  - integration: entra
+    atomic: investigate_authentication
+    subject: lnaidoo@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0011-1, user: lnaidoo@example.com, timestamp: '2026-01-15T09:01:00Z',
+      ip: 198.51.100.90, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: mokoye@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0011-2, user: mokoye@example.com, timestamp: '2026-01-15T09:02:00Z',
+      ip: 198.51.100.90, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: nbauer@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0011-3, user: nbauer@example.com, timestamp: '2026-01-15T09:03:00Z',
+      ip: 198.51.100.90, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: mokoye@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0011-4, user: mokoye@example.com, timestamp: '2026-01-15T09:20:00Z',
+      ip: 192.0.2.70, country: office, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: lnaidoo@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0011-5, user: lnaidoo@example.com, timestamp: '2026-01-15T09:22:00Z',
+      ip: 192.0.2.70, country: office, app: Office 365 Exchange Online, result: success}
+  - integration: cisco_xdr
+    atomic: search_ip_enterprise
+    subject: 192.0.2.70
+    record:
+      kind: endpoint
+      hostname: TH-LT-2210
+      ip_addresses: [192.0.2.70]
+      os: Windows 11
+      groups: [Workstations]
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  considered: ["block_ip:192.0.2.70"]
+  handoffs: ["account-takeover:lnaidoo@example.com"]
+  actions: ['block_ip:198.51.100.90', 'revoke_sessions:lnaidoo@example.com']
+  elevated: []
+  containment: CONTAINED
+  controls: 1

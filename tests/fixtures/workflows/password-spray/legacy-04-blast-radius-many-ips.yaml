@@ -1,0 +1,145 @@
+# Password spray workflow scenario; fake lab data only.
+schema: 1
+name: legacy-04-blast-radius-many-ips
+workflow: password-spray
+description: >-
+  Migrated from the legacy spec. A distributed spray from twelve residential proxy addresses. Eight carry a reputation
+  verdict and are recommended for a block; three have neither a verdict nor a sign-in record and are reported as
+  not proposed (no evidence), and one has a single failed sign-in only, so it is listed below threshold. The legacy
+  file capped indicators at 10 for twelve planned blocks; with eight evidence-backed blocks the lab cap is 6, so
+  every IP block stays proposed with ELEVATED approval (blast radius) and a lead approves. Session revocation for
+  the account that signed in from a spray source is a standard approval.
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/password-spray/scenarios/04-blast-radius-many-ips.yaml
+mode: both
+suite:
+  cisco_xdr: [intel, network]
+  entra: [identity]
+  meraki: [network]
+config:
+  thresholds:
+    blast_radius: {max_indicators: 6}
+incident:
+  incident_id: INC-TEST-PS-0004
+  title: Distributed password spray from residential proxy addresses
+  severity: MEDIUM
+  workflow_id: password-spray
+  observables:
+  - {type: ip, value: 203.0.113.101}
+  - {type: ip, value: 203.0.113.102}
+  - {type: ip, value: 203.0.113.103}
+  - {type: ip, value: 203.0.113.104}
+  - {type: ip, value: 203.0.113.105}
+  - {type: ip, value: 203.0.113.106}
+  - {type: ip, value: 203.0.113.107}
+  - {type: ip, value: 203.0.113.108}
+  - {type: ip, value: 203.0.113.109}
+  - {type: ip, value: 203.0.113.110}
+  - {type: ip, value: 203.0.113.111}
+  - {type: ip, value: 203.0.113.112}
+  - {type: user, value: k.nguyen@example.com}
+  - {type: user, value: l.martin@example.com}
+  trigger:
+    source: entra
+    mitre_techniques: [T1110.003]
+environment:
+  reputations:
+  - type: ip
+    value: 203.0.113.101
+    verdict: SUSPICIOUS
+    risk_score: 60
+    confidence: 70
+    integrations: [cisco_xdr]
+    summary: legacy enrich-ip verdict suspicious
+  - type: ip
+    value: 203.0.113.103
+    verdict: MALICIOUS
+    risk_score: 80
+    confidence: 70
+    integrations: [cisco_xdr]
+    summary: legacy enrich-ip verdict malicious
+  - type: ip
+    value: 203.0.113.104
+    verdict: SUSPICIOUS
+    risk_score: 60
+    confidence: 70
+    integrations: [cisco_xdr]
+    summary: legacy enrich-ip verdict suspicious
+  - type: ip
+    value: 203.0.113.106
+    verdict: MALICIOUS
+    risk_score: 80
+    confidence: 70
+    integrations: [cisco_xdr]
+    summary: legacy enrich-ip verdict malicious
+  - type: ip
+    value: 203.0.113.107
+    verdict: SUSPICIOUS
+    risk_score: 60
+    confidence: 70
+    integrations: [cisco_xdr]
+    summary: legacy enrich-ip verdict suspicious
+  - type: ip
+    value: 203.0.113.109
+    verdict: MALICIOUS
+    risk_score: 80
+    confidence: 70
+    integrations: [cisco_xdr]
+    summary: legacy enrich-ip verdict malicious
+  - type: ip
+    value: 203.0.113.110
+    verdict: SUSPICIOUS
+    risk_score: 60
+    confidence: 70
+    integrations: [cisco_xdr]
+    summary: legacy enrich-ip verdict suspicious
+  - type: ip
+    value: 203.0.113.112
+    verdict: MALICIOUS
+    risk_score: 80
+    confidence: 70
+    integrations: [cisco_xdr]
+    summary: legacy enrich-ip verdict malicious
+  records:
+  - integration: entra
+    atomic: investigate_user
+    subject: k.nguyen@example.com
+    record: {kind: user_profile, user: k.nguyen@example.com, account_enabled: true, risk_level: medium}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: k.nguyen@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l04-1, user: k.nguyen@example.com, timestamp: '2026-01-15T06:10:00Z',
+      ip: 203.0.113.104, country: US, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: k.nguyen@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l04-2, user: k.nguyen@example.com, timestamp: '2026-01-15T06:40:00Z',
+      ip: 203.0.113.107, country: US, app: Office 365 Exchange Online, result: success}
+  - integration: entra
+    atomic: investigate_user
+    subject: k.nguyen@example.com
+    record: {kind: anomaly, anomaly_id: anom-ps-l04-1, anomaly_type: unfamiliar_location, severity: MEDIUM, user: k.nguyen@example.com,
+      detail: First sign-in from this city}
+  - integration: entra
+    atomic: investigate_user
+    subject: l.martin@example.com
+    record: {kind: user_profile, user: l.martin@example.com, account_enabled: true, risk_level: low}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: l.martin@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l04-3, user: l.martin@example.com, timestamp: '2026-01-15T06:20:00Z',
+      ip: 203.0.113.111, country: US, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+analyst:
+  decision: APPROVE_ALL
+  approvers: [lead]
+expect:
+  handoffs: ["account-takeover:k.nguyen@example.com"]
+  actions: ['block_ip:203.0.113.101', 'block_ip:203.0.113.103', 'block_ip:203.0.113.104', 'block_ip:203.0.113.106',
+    'block_ip:203.0.113.107', 'block_ip:203.0.113.109', 'block_ip:203.0.113.110', 'block_ip:203.0.113.112', 'revoke_sessions:k.nguyen@example.com']
+  elevated: ['block_ip:203.0.113.101', 'block_ip:203.0.113.103', 'block_ip:203.0.113.104', 'block_ip:203.0.113.106',
+    'block_ip:203.0.113.107', 'block_ip:203.0.113.109', 'block_ip:203.0.113.110', 'block_ip:203.0.113.112']
+  below_threshold: ['block_ip:203.0.113.111']
+  warnings: [exceeds the blast-radius cap of 6]
+  containment: CONTAINED

@@ -1,0 +1,120 @@
+# Password spray workflow scenario; fake lab data only.
+schema: 1
+name: legacy-01-single-success
+workflow: password-spray
+description: >-
+  Migrated from the legacy spec. Two external addresses sprayed three accounts. j.doe signed in successfully from
+  a spray source with only an unfamiliar-location anomaly, so its sessions are revoked but it is not disabled; a.smith
+  only failed; m.lee signed in from its usual home address, which is not a spray source. Both spray addresses are
+  blocked behind approval. The legacy addresses 203.0.113.10/.11 are moved to 203.0.113.70/.71 (outside the lab
+  production-server range); 203.0.113.71 had no reputation and is backed by its sign-in records (the spray succeeded
+  from it).
+tags: [legacy, true_positive, approve_all]
+legacy_source: workflows/password-spray/scenarios/01-single-success.yaml
+mode: both
+suite:
+  cisco_xdr: [intel, network]
+  entra: [identity]
+  meraki: [network]
+incident:
+  incident_id: INC-TEST-PS-0001
+  title: Password spray against Microsoft 365 accounts
+  severity: MEDIUM
+  workflow_id: password-spray
+  observables:
+  - {type: ip, value: 203.0.113.70}
+  - {type: ip, value: 203.0.113.71}
+  - {type: user, value: j.doe@example.com}
+  - {type: user, value: a.smith@example.com}
+  - {type: user, value: m.lee@example.com}
+  trigger:
+    source: entra
+    mitre_techniques: [T1110.003]
+environment:
+  reputations:
+  - type: ip
+    value: 203.0.113.70
+    verdict: MALICIOUS
+    risk_score: 80
+    confidence: 75
+    integrations: [cisco_xdr]
+    summary: legacy enrich-ip verdict malicious
+  records:
+  - integration: entra
+    atomic: investigate_user
+    subject: j.doe@example.com
+    record:
+      kind: user_profile
+      user: j.doe@example.com
+      account_enabled: true
+      department: Sales
+      groups: [Sales]
+      risk_level: medium
+  - integration: entra
+    atomic: investigate_user
+    subject: a.smith@example.com
+    record:
+      kind: user_profile
+      user: a.smith@example.com
+      account_enabled: true
+      department: Finance
+      groups: [Finance]
+      risk_level: low
+  - integration: entra
+    atomic: investigate_user
+    subject: m.lee@example.com
+    record:
+      kind: user_profile
+      user: m.lee@example.com
+      account_enabled: true
+      department: Engineering
+      groups: [Engineering]
+      risk_level: none
+  - integration: entra
+    atomic: investigate_authentication
+    subject: j.doe@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l01-1, user: j.doe@example.com, timestamp: '2026-01-15T10:00:00Z',
+      ip: 203.0.113.70, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid username
+        or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: j.doe@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l01-2, user: j.doe@example.com, timestamp: '2026-01-15T10:05:00Z',
+      ip: 203.0.113.71, country: NL, app: Office 365 Exchange Online, result: success}
+  - integration: entra
+    atomic: investigate_user
+    subject: j.doe@example.com
+    record: {kind: anomaly, anomaly_id: anom-ps-l01-1, anomaly_type: unfamiliar_location, severity: MEDIUM, user: j.doe@example.com,
+      detail: First sign-in from NL}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: a.smith@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l01-3, user: a.smith@example.com, timestamp: '2026-01-15T10:01:00Z',
+      ip: 203.0.113.70, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid username
+        or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: a.smith@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l01-4, user: a.smith@example.com, timestamp: '2026-01-15T10:02:00Z',
+      ip: 203.0.113.71, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid username
+        or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: m.lee@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l01-5, user: m.lee@example.com, timestamp: '2026-01-15T10:03:00Z',
+      ip: 203.0.113.70, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid username
+        or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: m.lee@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l01-6, user: m.lee@example.com, timestamp: '2026-01-15T08:30:00Z',
+      ip: 198.51.100.25, country: home, app: Microsoft Teams, result: success}
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  handoffs: ["account-takeover:j.doe@example.com"]
+  actions: ['block_ip:203.0.113.70', 'block_ip:203.0.113.71', 'revoke_sessions:j.doe@example.com']
+  elevated: []
+  containment: CONTAINED
+  controls: 2

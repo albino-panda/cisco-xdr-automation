@@ -1,0 +1,99 @@
+# Password spray workflow scenario; fake lab data only.
+schema: 1
+name: critical-asset-elevated
+workflow: password-spray
+description: >-
+  The spray signed in to a privileged administrator account (Domain Admins, Global Administrator) with a high sign-in
+  risk. Session revocation and disable need ELEVATED approval with a visible warning; an analyst alone cannot approve,
+  the lead approves. The IP block stays a standard approval.
+tags: [critical_asset, true_positive, approve_all]
+mode: both
+suite:
+  cisco_xdr: [intel, network]
+  entra: [identity]
+  meraki: [network]
+incident:
+  incident_id: XDR-PS-0006
+  title: Password spray with a successful sign-in on an administrator
+  severity: HIGH
+  workflow_id: password-spray
+  observables:
+  - {type: ip, value: 198.51.100.81}
+  - {type: user, value: adm-tgreen@example.com}
+  - {type: user, value: bnoor@example.com}
+  - {type: user, value: cvu@example.com}
+  trigger:
+    source: cisco_xdr
+    mitre_techniques: [T1110.003]
+environment:
+  reputations:
+  - type: ip
+    value: 198.51.100.81
+    verdict: MALICIOUS
+    risk_score: 85
+    confidence: 80
+    integrations: [cisco_xdr]
+    summary: known spray infrastructure
+  records:
+  - integration: entra
+    atomic: investigate_user
+    subject: adm-tgreen@example.com
+    record:
+      kind: user_profile
+      user: adm-tgreen@example.com
+      account_enabled: true
+      department: IT
+      groups: [Domain Admins]
+      roles: [Global Administrator]
+      risk_level: medium
+  - integration: entra
+    atomic: investigate_user
+    subject: bnoor@example.com
+    record:
+      kind: user_profile
+      user: bnoor@example.com
+      account_enabled: true
+      department: HR
+      groups: [HR]
+      risk_level: low
+  - integration: entra
+    atomic: investigate_user
+    subject: cvu@example.com
+    record:
+      kind: user_profile
+      user: cvu@example.com
+      account_enabled: true
+      department: Sales
+      groups: [Sales]
+      risk_level: none
+  - integration: entra
+    atomic: investigate_authentication
+    subject: adm-tgreen@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0006-1, user: adm-tgreen@example.com, timestamp: '2026-01-15T10:40:00Z',
+      ip: 198.51.100.81, country: NL, app: Azure Portal, result: failure, failure_reason: Invalid username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: bnoor@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0006-2, user: bnoor@example.com, timestamp: '2026-01-15T10:41:00Z',
+      ip: 198.51.100.81, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: cvu@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0006-3, user: cvu@example.com, timestamp: '2026-01-15T10:42:00Z',
+      ip: 198.51.100.81, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: adm-tgreen@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0006-4, user: adm-tgreen@example.com, timestamp: '2026-01-15T10:48:00Z',
+      ip: 198.51.100.81, country: NL, app: Azure Portal, result: success, risk_level: high}
+analyst:
+  decision: APPROVE_ALL
+  approvers: [lead]
+expect:
+  handoffs: ["account-takeover:adm-tgreen@example.com"]
+  actions: ['block_ip:198.51.100.81', 'revoke_sessions:adm-tgreen@example.com', 'disable_user:adm-tgreen@example.com']
+  elevated: ['revoke_sessions:adm-tgreen@example.com', 'disable_user:adm-tgreen@example.com']
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  containment: CONTAINED

@@ -1,0 +1,103 @@
+# Password spray workflow scenario; fake lab data only.
+schema: 1
+name: legacy-03-guardrail-skips
+workflow: password-spray
+description: >-
+  Migrated from the legacy spec. The spray came from one external address and from an internal workstation (legacy
+  10.20.4.17, here 192.0.2.70 owned by endpoint TH-LT-2210; legacy 203.0.113.30 is here 203.0.113.90). The external
+  block is planned; the internal source is not blocked at the perimeter (legacy skipped_internal). The break-glass
+  account and a Domain Admins member both signed in from a spray source: every action on them stays proposed with
+  ELEVATED approval and a warning (privileged account), and the break-glass account (new device, Entra risk high)
+  is also disabled. A lead approves.
+tags: [legacy, critical_asset, true_positive, approve_all]
+legacy_source: workflows/password-spray/scenarios/03-guardrail-skips.yaml
+mode: both
+suite:
+  cisco_xdr: [intel, network]
+  entra: [identity]
+  meraki: [network]
+incident:
+  incident_id: INC-TEST-PS-0003
+  title: Password spray with successful sign-ins on privileged accounts
+  severity: HIGH
+  workflow_id: password-spray
+  observables:
+  - {type: ip, value: 203.0.113.90}
+  - {type: ip, value: 192.0.2.70}
+  - {type: user, value: breakglass-01@example.com}
+  - {type: user, value: it-admin@example.com}
+  trigger:
+    source: entra
+    mitre_techniques: [T1110.003]
+environment:
+  reputations:
+  - type: ip
+    value: 203.0.113.90
+    verdict: MALICIOUS
+    risk_score: 85
+    confidence: 80
+    integrations: [cisco_xdr]
+    summary: legacy enrich-ip verdict malicious
+  - type: ip
+    value: 192.0.2.70
+    verdict: SUSPICIOUS
+    risk_score: 50
+    confidence: 50
+    integrations: [cisco_xdr]
+    summary: legacy enrich-ip verdict suspicious
+  records:
+  - integration: entra
+    atomic: investigate_user
+    subject: breakglass-01@example.com
+    record:
+      kind: user_profile
+      user: breakglass-01@example.com
+      account_enabled: true
+      department: IT
+      groups: [Emergency Access]
+      risk_level: high
+  - integration: entra
+    atomic: investigate_authentication
+    subject: breakglass-01@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l03-1, user: breakglass-01@example.com, timestamp: '2026-01-15T09:40:00Z',
+      ip: 203.0.113.90, country: unknown, app: Azure Portal, result: success}
+  - integration: entra
+    atomic: investigate_user
+    subject: breakglass-01@example.com
+    record: {kind: anomaly, anomaly_id: anom-ps-l03-1, anomaly_type: new_device, severity: MEDIUM, user: breakglass-01@example.com,
+      detail: Unregistered device}
+  - integration: entra
+    atomic: investigate_user
+    subject: it-admin@example.com
+    record:
+      kind: user_profile
+      user: it-admin@example.com
+      account_enabled: true
+      department: IT
+      groups: [Domain Admins]
+      risk_level: low
+  - integration: entra
+    atomic: investigate_authentication
+    subject: it-admin@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-l03-2, user: it-admin@example.com, timestamp: '2026-01-15T09:45:00Z',
+      ip: 192.0.2.70, country: office, app: Azure Portal, result: success}
+  - integration: cisco_xdr
+    atomic: search_ip_enterprise
+    subject: 192.0.2.70
+    record:
+      kind: endpoint
+      hostname: TH-LT-2210
+      ip_addresses: [192.0.2.70]
+      os: Windows 11
+      groups: [Workstations]
+analyst:
+  decision: APPROVE_ALL
+  approvers: [lead]
+expect:
+  considered: ["block_ip:192.0.2.70"]
+  handoffs: ["account-takeover:breakglass-01@example.com", "account-takeover:it-admin@example.com"]
+  actions: ['block_ip:203.0.113.90', 'revoke_sessions:breakglass-01@example.com', 'revoke_sessions:it-admin@example.com',
+    'disable_user:breakglass-01@example.com']
+  elevated: ['revoke_sessions:breakglass-01@example.com', 'revoke_sessions:it-admin@example.com', 'disable_user:breakglass-01@example.com']
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  containment: CONTAINED

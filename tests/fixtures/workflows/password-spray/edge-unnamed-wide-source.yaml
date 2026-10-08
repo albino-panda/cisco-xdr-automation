@@ -1,0 +1,130 @@
+# Password spray workflow scenario; fake lab data only.
+schema: 1
+name: edge-unnamed-wide-source
+workflow: password-spray
+description: >-
+  The incident names one source address, but the sign-in logs show a second address failing against three of the
+  targeted accounts. The workflow recognises it as a spray source from the records alone, enriches it and recommends
+  blocking both.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite:
+  cisco_xdr: [intel, network]
+  entra: [identity]
+  meraki: [network]
+incident:
+  incident_id: XDR-PS-0012
+  title: Password spray against Microsoft 365 accounts
+  severity: MEDIUM
+  workflow_id: password-spray
+  observables:
+  - {type: ip, value: 198.51.100.95}
+  - {type: user, value: tbrandt@example.com}
+  - {type: user, value: ucole@example.com}
+  - {type: user, value: vmeyer@example.com}
+  - {type: user, value: wpark@example.com}
+  trigger:
+    source: cisco_xdr
+    mitre_techniques: [T1110.003]
+environment:
+  reputations:
+  - type: ip
+    value: 198.51.100.95
+    verdict: SUSPICIOUS
+    risk_score: 70
+    confidence: 70
+    integrations: [cisco_xdr]
+    summary: anonymising proxy address
+  - type: ip
+    value: 203.0.113.150
+    verdict: SUSPICIOUS
+    risk_score: 60
+    confidence: 60
+    integrations: [cisco_xdr]
+    summary: hosting provider address
+  records:
+  - integration: entra
+    atomic: investigate_user
+    subject: tbrandt@example.com
+    record:
+      kind: user_profile
+      user: tbrandt@example.com
+      account_enabled: true
+      groups: [Staff]
+      risk_level: low
+  - integration: entra
+    atomic: investigate_user
+    subject: ucole@example.com
+    record:
+      kind: user_profile
+      user: ucole@example.com
+      account_enabled: true
+      groups: [Staff]
+      risk_level: low
+  - integration: entra
+    atomic: investigate_user
+    subject: vmeyer@example.com
+    record:
+      kind: user_profile
+      user: vmeyer@example.com
+      account_enabled: true
+      groups: [Staff]
+      risk_level: low
+  - integration: entra
+    atomic: investigate_user
+    subject: wpark@example.com
+    record:
+      kind: user_profile
+      user: wpark@example.com
+      account_enabled: true
+      groups: [Staff]
+      risk_level: low
+  - integration: entra
+    atomic: investigate_authentication
+    subject: tbrandt@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0012-1, user: tbrandt@example.com, timestamp: '2026-01-15T07:11:00Z',
+      ip: 198.51.100.95, country: DE, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: ucole@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0012-2, user: ucole@example.com, timestamp: '2026-01-15T07:12:00Z',
+      ip: 198.51.100.95, country: DE, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: vmeyer@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0012-3, user: vmeyer@example.com, timestamp: '2026-01-15T07:13:00Z',
+      ip: 198.51.100.95, country: DE, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: wpark@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0012-4, user: wpark@example.com, timestamp: '2026-01-15T07:14:00Z',
+      ip: 198.51.100.95, country: DE, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: tbrandt@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0012-11, user: tbrandt@example.com, timestamp: '2026-01-15T07:31:00Z',
+      ip: 203.0.113.150, country: DE, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: ucole@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0012-12, user: ucole@example.com, timestamp: '2026-01-15T07:32:00Z',
+      ip: 203.0.113.150, country: DE, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: vmeyer@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0012-13, user: vmeyer@example.com, timestamp: '2026-01-15T07:33:00Z',
+      ip: 203.0.113.150, country: DE, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  actions: ['block_ip:198.51.100.95', 'block_ip:203.0.113.150']
+  containment: CONTAINED
+  controls: 2

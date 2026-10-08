@@ -1,0 +1,97 @@
+# Password spray workflow scenario; fake lab data only.
+schema: 1
+name: degraded-source
+workflow: password-spray
+description: >-
+  Cisco XDR enrichment is unavailable, so the spray source has no reputation. The sign-in pattern (failed sign-ins
+  against three accounts) still backs the IP block; the run lists cisco_xdr as degraded and confidence drops. Nobody
+  signed in, so no account action is proposed.
+tags: [degraded_source, true_positive, approve_all]
+mode: both
+suite:
+  cisco_xdr: [intel, network]
+  entra: [identity]
+  meraki: [network]
+incident:
+  incident_id: XDR-PS-0005
+  title: Password spray against Microsoft 365 accounts
+  severity: MEDIUM
+  workflow_id: password-spray
+  observables:
+  - {type: ip, value: 198.51.100.77}
+  - {type: user, value: jsmith@example.com}
+  - {type: user, value: akim@example.com}
+  - {type: user, value: rlopez@example.com}
+  trigger:
+    source: cisco_xdr
+    mitre_techniques: [T1110.003]
+environment:
+  reputations:
+  - type: ip
+    value: 198.51.100.77
+    verdict: SUSPICIOUS
+    risk_score: 70
+    confidence: 70
+    integrations: [cisco_xdr]
+    summary: anonymising proxy address
+  records:
+  - integration: entra
+    atomic: investigate_user
+    subject: jsmith@example.com
+    record:
+      kind: user_profile
+      user: jsmith@example.com
+      account_enabled: true
+      department: Sales
+      groups: [Sales]
+      risk_level: medium
+  - integration: entra
+    atomic: investigate_user
+    subject: akim@example.com
+    record:
+      kind: user_profile
+      user: akim@example.com
+      account_enabled: true
+      department: Finance
+      groups: [Finance]
+      risk_level: low
+  - integration: entra
+    atomic: investigate_user
+    subject: rlopez@example.com
+    record:
+      kind: user_profile
+      user: rlopez@example.com
+      account_enabled: true
+      department: Engineering
+      groups: [Engineering]
+      risk_level: none
+  - integration: entra
+    atomic: investigate_authentication
+    subject: jsmith@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0005-1, user: jsmith@example.com, timestamp: '2026-01-15T11:20:00Z',
+      ip: 198.51.100.77, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: akim@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0005-3, user: akim@example.com, timestamp: '2026-01-15T11:21:00Z',
+      ip: 198.51.100.77, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: rlopez@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0005-4, user: rlopez@example.com, timestamp: '2026-01-15T11:22:00Z',
+      ip: 198.51.100.77, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  faults:
+  - {kind: UNAVAILABLE, integration: cisco_xdr, operation: enrich, times: 10}
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  package: true
+  actions: ['block_ip:198.51.100.77']
+  degraded_sources: [cisco_xdr]
+  risk: {min: 30, max: 100}
+  containment: CONTAINED
+  controls: 1

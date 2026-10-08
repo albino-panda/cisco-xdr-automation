@@ -1,0 +1,91 @@
+# Password spray workflow scenario; fake lab data only.
+schema: 1
+name: benign-no-action
+workflow: password-spray
+description: >-
+  Benign. Mail clients with a cached old password fail sign-in through the corporate egress after a password rotation.
+  Cisco XDR rates the address clean and two internal endpoints talk to it, so it is treated as shared infrastructure;
+  nobody signed in from it. Nothing is proposed.
+tags: [benign]
+mode: both
+suite:
+  cisco_xdr: [intel, network]
+  entra: [identity]
+  meraki: [network]
+incident:
+  incident_id: XDR-PS-0004
+  title: Possible password spray from 198.51.100.40
+  severity: LOW
+  workflow_id: password-spray
+  observables:
+  - {type: ip, value: 198.51.100.40}
+  - {type: user, value: pito@example.com}
+  - {type: user, value: druiz@example.com}
+  trigger:
+    source: splunk
+    mitre_techniques: [T1110.003]
+environment:
+  reputations:
+  - type: ip
+    value: 198.51.100.40
+    verdict: CLEAN
+    risk_score: 0
+    confidence: 80
+    integrations: [cisco_xdr]
+    summary: corporate egress address
+  records:
+  - integration: entra
+    atomic: investigate_user
+    subject: pito@example.com
+    record:
+      kind: user_profile
+      user: pito@example.com
+      account_enabled: true
+      department: Legal
+      groups: [Legal]
+      risk_level: none
+  - integration: entra
+    atomic: investigate_user
+    subject: druiz@example.com
+    record:
+      kind: user_profile
+      user: druiz@example.com
+      account_enabled: true
+      department: Sales
+      groups: [Sales]
+      risk_level: none
+  - integration: entra
+    atomic: investigate_authentication
+    subject: pito@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0004-1, user: pito@example.com, timestamp: '2026-01-15T08:10:00Z',
+      ip: 198.51.100.40, country: US, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: pito@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0004-2, user: pito@example.com, timestamp: '2026-01-15T08:12:00Z',
+      ip: 198.51.100.40, country: US, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: druiz@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0004-3, user: druiz@example.com, timestamp: '2026-01-15T08:15:00Z',
+      ip: 198.51.100.40, country: US, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: cisco_xdr
+    atomic: search_ip_enterprise
+    subject: 198.51.100.40
+    record: {kind: network_connection, endpoint: TH-LT-1047, remote_ip: 198.51.100.40, remote_port: 443, protocol: tcp,
+      direction: outbound, action: allowed, first_seen: '2026-01-15T09:00:00Z'}
+  - integration: cisco_xdr
+    atomic: search_ip_enterprise
+    subject: 198.51.100.40
+    record: {kind: network_connection, endpoint: TH-LT-1052, remote_ip: 198.51.100.40, remote_port: 443, protocol: tcp,
+      direction: outbound, action: allowed, first_seen: '2026-01-15T09:00:00Z'}
+expect:
+  considered: ["block_ip:198.51.100.40"]
+  package: false
+  actions: []
+  below_threshold: []
+  unrouted: []
+  degraded_sources: []

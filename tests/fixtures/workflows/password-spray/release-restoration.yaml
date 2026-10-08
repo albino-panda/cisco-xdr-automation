@@ -1,0 +1,105 @@
+# Password spray workflow scenario; fake lab data only.
+schema: 1
+name: release-restoration
+workflow: password-spray
+description: >-
+  Approve and contain, then a separate human release decision restores the IP block and the disabled account. Session
+  revocation is not reversible and creates no control.
+tags: [release, true_positive, approve_all]
+mode: live
+suite:
+  cisco_xdr: [intel, network]
+  entra: [identity]
+  meraki: [network]
+incident:
+  incident_id: XDR-PS-0009
+  title: Password spray against Microsoft 365 accounts
+  severity: MEDIUM
+  workflow_id: password-spray
+  observables:
+  - {type: ip, value: 198.51.100.77}
+  - {type: user, value: jsmith@example.com}
+  - {type: user, value: akim@example.com}
+  - {type: user, value: rlopez@example.com}
+  trigger:
+    source: cisco_xdr
+    mitre_techniques: [T1110.003]
+environment:
+  reputations:
+  - type: ip
+    value: 198.51.100.77
+    verdict: SUSPICIOUS
+    risk_score: 70
+    confidence: 70
+    integrations: [cisco_xdr]
+    summary: anonymising proxy address
+  records:
+  - integration: entra
+    atomic: investigate_user
+    subject: jsmith@example.com
+    record:
+      kind: user_profile
+      user: jsmith@example.com
+      account_enabled: true
+      department: Sales
+      groups: [Sales]
+      risk_level: medium
+  - integration: entra
+    atomic: investigate_user
+    subject: akim@example.com
+    record:
+      kind: user_profile
+      user: akim@example.com
+      account_enabled: true
+      department: Finance
+      groups: [Finance]
+      risk_level: low
+  - integration: entra
+    atomic: investigate_user
+    subject: rlopez@example.com
+    record:
+      kind: user_profile
+      user: rlopez@example.com
+      account_enabled: true
+      department: Engineering
+      groups: [Engineering]
+      risk_level: none
+  - integration: entra
+    atomic: investigate_authentication
+    subject: jsmith@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0009-1, user: jsmith@example.com, timestamp: '2026-01-15T11:20:00Z',
+      ip: 198.51.100.77, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: akim@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0009-3, user: akim@example.com, timestamp: '2026-01-15T11:21:00Z',
+      ip: 198.51.100.77, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: rlopez@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0009-4, user: rlopez@example.com, timestamp: '2026-01-15T11:22:00Z',
+      ip: 198.51.100.77, country: NL, app: Office 365 Exchange Online, result: failure, failure_reason: Invalid
+        username or password}
+  - integration: entra
+    atomic: investigate_authentication
+    subject: jsmith@example.com
+    record: {kind: sign_in, sign_in_id: si-ps-0009-2, user: jsmith@example.com, timestamp: '2026-01-15T11:29:00Z',
+      ip: 198.51.100.77, country: NL, app: Office 365 Exchange Online, result: success, risk_level: medium}
+  - integration: entra
+    atomic: investigate_user
+    subject: jsmith@example.com
+    record: {kind: anomaly, anomaly_id: anom-ps-0009-1, anomaly_type: new_device, severity: HIGH, user: jsmith@example.com,
+      detail: Device registered right after the sign-in, ip: 198.51.100.77, first_seen: '2026-01-15T11:31:00Z'}
+analyst: &id001
+  decision: APPROVE_ALL
+  approvers: [analyst]
+release: *id001
+expect:
+  handoffs: ["account-takeover:jsmith@example.com"]
+  actions: ['block_ip:198.51.100.77', 'revoke_sessions:jsmith@example.com', 'disable_user:jsmith@example.com']
+  containment: CONTAINED
+  controls: 2
+  restoration: RESTORED
+  final_state: RESTORED
