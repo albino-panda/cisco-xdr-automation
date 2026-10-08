@@ -6,6 +6,70 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+Phase 3: five workflows migrated to the framework (malicious-powershell, credential-dumping,
+lateral-movement, persistence, unauthorized-rmm), with the same owner rule: investigation and
+recommendation are automatic, every state-changing action waits for a human approval (ELEVATED with
+a visible warning for critical assets), and a release needs its own human approval. Integration
+notes and exit criteria: architecture 14.11.
+
+### Added (Phase 3)
+- Workflows `malicious-powershell`, `credential-dumping`, `lateral-movement`, `persistence` and
+  `unauthorized-rmm` (legacy `workflow.yaml` and `scenarios/` removed, carried as `legacy-*`
+  fixtures), each with a 17-section README, hooks, unit and lifecycle tests and at least the 14.5.3
+  scenario set (94 scenarios; 241 in `tests/fixtures/workflows/`).
+- `NetworkConnectionRecord.pid` (optional): a connection is attributed to the process that owns it
+  when the source reports it. `PersistenceItemRecord.mechanism` accepts `browser_extension`.
+- Cross-workflow tests: a workflow outranks every workflow it hands off to, the hand-off graph has no
+  cycle, Phase 3 routing pairs, and endpoint workflows hand compromised accounts to account-takeover.
+
+### Changed (Phase 3)
+- Trigger priorities: malicious-powershell techniques 125 (above persistence 120), lateral-movement
+  techniques 160 (above credential-dumping and unauthorized-rmm 150), unauthorized-rmm titles 145
+  (above the lateral-movement titles 140).
+- malicious-powershell hands persistence off by endpoint (like unauthorized-rmm), naming the items
+  in the reason.
+- Atomic `used_by` lists, `workflows/README.md`, the generated MITRE mapping and workflow index, and
+  the renamed-workflow legacy test follow the migration; the IPv6 critical-asset probe expects the
+  allow-list exclusion of 14.10.7 for 192.0.2.5.
+
+Phase 2: eight workflows migrated to the framework (ransomware, phishing, account-takeover,
+mail-bombing, malware, mfa-fatigue, password-spray, bec). They investigate and recommend only:
+every action still needs a human approval (ELEVATED with a visible warning for critical assets),
+approved containment executes and verifies automatically, and a release needs its own human
+approval. Integration notes and exit criteria: architecture 14.10.
+
+### Added
+- Workflows `ransomware`, `phishing`, `account-takeover`, `mail-bombing`, `malware`, `password-spray`,
+  `bec` (migrated; their legacy `workflow.yaml` and `scenarios/` are removed and live on as
+  `legacy-*` fixtures) and the new `mfa-fatigue` (seeded from account-takeover scenario 05), each with
+  a 17-section README, hooks, unit and lifecycle tests and at least the 14.5.3 scenario set
+  (147 scenarios in `tests/fixtures/workflows/`).
+- Hooks can report `Consideration`s (an action deliberately not proposed, or a manual step with no
+  verified write) and `Handoff`s (a suggestion to run another workflow, declared in the new
+  `WorkflowDefinition.handoff_to`). The runner validates them against the run's records; they reach
+  the run notes, `WorkflowSummary` and the analyst notification, and never change a package.
+  Scenario `expect` accepts `considered`, `manual_steps` and `handoffs`.
+- `tests/unit/workflows/test_cross_workflow.py`: deterministic routing between overlapping triggers,
+  hand-off declarations and existing related workflows.
+- `docs/workflows/README.md` has a "Hands off to" column.
+
+### Changed
+- Containment builders complete route-specific mandatory params: a direct Secure Email move takes its
+  verdict from `integrations.secure_email.options.quarantine_verdict`, a Defender for Office 365
+  email action needs `params.recipient`; without them the action is reported unrouted instead of
+  failing after approval. Workflows no longer hard-code a vendor verdict.
+- Critical-asset class `executive_endpoint` is displayed as "Executive or VIP asset" (it also matches
+  executive mailboxes and accounts).
+- Atomic `used_by` lists name only the remaining legacy specs; `workflows/README.md` separates
+  migrated workflows from legacy specs; README and engine examples use `c2`; legacy replay examples
+  and CLI tests use `web-attacks` (legacy until the end of Phase 5).
+- Generated MITRE mapping and workflow index regenerated; mail bombing maps to T1667 instead of the
+  legacy forced T1499.
+- The definition-of-done test command uses `-k "<id> or <x_snake>"` so kebab-case workflows keep
+  their unit tests selected.
+
+---
+
 Phase 1: shared atomic workflows and the workflow framework. Investigation and recommendation
 are automatic; every state-changing action still goes through the Phase 0 human approval, approved
 containment executes automatically, and a release needs its own human approval. Exit criteria:
