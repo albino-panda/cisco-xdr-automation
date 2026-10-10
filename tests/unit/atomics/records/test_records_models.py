@@ -221,6 +221,19 @@ def test_id_based_natural_keys_prefer_the_vendor_id():
     assert build(RecordKind.ANOMALY, anomaly_id="a-1").natural_key() == {"id": "a-1"}
 
 
+def test_network_connection_key_adds_the_url_only_when_reported():
+    """14.13.3: two requests of one source to one server at the same time with different URLs stay two records;
+    a connection without a URL keeps the 14.1.2 key (and so its earlier id)."""
+    plain = build(RecordKind.NETWORK_CONNECTION, url=None)
+    assert "url" not in plain.natural_key()
+    first = build(RecordKind.NETWORK_CONNECTION, url="https://shop.example.com/cart/checkout")
+    second = build(RecordKind.NETWORK_CONNECTION, url="https://shop.example.com/admin/upload")
+    assert first.natural_key()["url"] == "https://shop.example.com/cart/checkout"
+    assert len({plain.record_id, first.record_id, second.record_id}) == 3
+    assert build(RecordKind.NETWORK_CONNECTION, url="https://shop.example.com/admin/upload").record_id == \
+        second.record_id
+
+
 def test_endpoint_natural_key_id_takes_the_first_present_vendor_id():
     record = build(RecordKind.ENDPOINT, connector_guid=None, mde_machine_id="mde-1", intune_device_id="int-1")
     assert record.natural_key() == {"hostname": "TH-LT-1047", "id": "mde-1"}

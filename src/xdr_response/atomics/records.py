@@ -496,6 +496,17 @@ class NetworkConnectionRecord(RecordBase):
     _EVIDENCE_FIELDS = ("endpoint", "user", "remote_ip", "remote_port", "domain", "url", "direction",
                         "action", "verdict", "bytes_out", "count")
 
+    def natural_key(self) -> dict[str, object]:
+        """The 14.1.2 key plus ``url`` when the source reports one (14.13.3).
+
+        Two requests from one source to one server at the same time with different URLs (an IPS or
+        WAF event per exploited path) stay two records. A record without a URL keeps its earlier id.
+        """
+        key = _pick(self, self._NATURAL_KEY)
+        if self.url is not None:
+            key["url"] = self.url
+        return key
+
 
 class DnsQueryRecord(RecordBase):
     kind: Literal[RecordKind.DNS_QUERY] = RecordKind.DNS_QUERY
