@@ -2,8 +2,8 @@
 
 Every fact a read atomic learns is a typed, frozen **record** with a deterministic ``record_id``.
 Evidence (14.1.6), scoring signals (14.2) and correlation links (14.1.5) refer to records by id
-only. Records are created by the investigation normalizers, the enrichment atomics and, for legacy
-replay, ``plan_bridge``; the framework never synthesizes a record from a computation.
+only. Records are created by the investigation normalizers and the enrichment atomics; the
+framework never synthesizes a record from a computation.
 
 This is a layer-0 model module: it imports only Phase 0 models, canonical helpers and the redactor.
 

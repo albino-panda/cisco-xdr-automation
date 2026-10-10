@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cisco-xdr-automation"
 version = "0.1.0"
-description = "Cisco XDR response workflow specs, a plan engine, and the approval-gated xdr_response framework."
+description = "Approval-gated Cisco XDR response automation: the xdr_response framework and its workflows."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = ["PyYAML>=6.0,<7.0", "pydantic>=2.6,<3", "httpx>=0.27,<1"]
@@ -14,9 +14,9 @@ dependencies = ["PyYAML>=6.0,<7.0", "pydantic>=2.6,<3", "httpx>=0.27,<1"]
 dev = ["pytest>=8.2"]
 
 [tool.setuptools.packages.find]
-where = ["engine", "src"]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["engine", "src", "."]
+pythonpath = ["src", "."]
 addopts = "-ra --strict-markers --import-mode=importlib"

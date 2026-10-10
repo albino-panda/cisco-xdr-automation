@@ -3,8 +3,8 @@
 Three layers are tested:
 
 1. an AST lint over every read-zone file (``xdr_response.scoring``, ``xdr_response.atomics``,
-   ``xdr_response.workflows`` including every workflow package, ``lifecycle/plan_bridge.py``,
-   ``lifecycle/workflow_adapter.py`` and the tests-only sample workflow) for the rules of 14.0.1;
+   ``xdr_response.workflows`` including every workflow package, ``lifecycle/workflow_adapter.py``
+   and the tests-only sample workflow) for the rules of 14.0.1;
 2. a runtime check: every workflow scenario detects (investigates and recommends) with zero
    state-changing operations and zero guard denials (the full per-scenario assertions run in
    ``tests/simulation/test_workflow_scenarios.py``);
@@ -35,7 +35,7 @@ SAMPLE_ROOT = REPO / "tests" / "fixtures" / "sample_workflows"
 #: The sample workflow *packages* are read zone; the lab harness next to them is test code.
 READ_ZONE_DIRS = (SRC / "scoring", SRC / "atomics", SRC / "workflows",
                   *(d for d in sorted(SAMPLE_ROOT.iterdir()) if (d / "__init__.py").is_file()))
-READ_ZONE_FILES = (SRC / "lifecycle" / "plan_bridge.py", SRC / "lifecycle" / "workflow_adapter.py")
+READ_ZONE_FILES = (SRC / "lifecycle" / "workflow_adapter.py",)
 
 FORBIDDEN_MODULES = (
     "xdr_response.guard", "xdr_response.execution", "xdr_response.restoration", "xdr_response.dryrun",

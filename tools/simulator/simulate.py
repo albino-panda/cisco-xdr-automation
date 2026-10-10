@@ -9,8 +9,9 @@ Usage:
     python tools/simulator/simulate.py tests/fixtures/incidents/account_takeover.yaml --live --check
     python tools/simulator/simulate.py --list-workflows
     python tools/simulator/simulate.py --workflow ransomware --scenario tp-approve-all --live --check
-    python tools/simulator/simulate.py --legacy web-attacks                   # every legacy scenario
-    python tools/simulator/simulate.py --legacy web-attacks 01-confirmed-web-shell --check
+    python tools/simulator/simulate.py --workflow web-attacks --scenario legacy-01-confirmed-web-shell --check
+    python tools/simulator/simulate.py --all-workflows --check            # every workflow scenario, dry run
+    python tools/simulator/simulate.py --all-workflows --live --check     # every workflow scenario, simulated live
 
 Workflow scenarios (``tests/fixtures/workflows/<workflow id>/*.yaml``, architecture 14.5.2) run
 through the workflow framework: the incident is routed to its workflow, investigated with typed
@@ -18,9 +19,9 @@ records served by the simulated adapters, and recommended; the analyst decision 
 are played from the scenario. Without ``--scenario`` every scenario of the workflow runs. With
 ``--check`` the scenario's ``expect`` block and the implicit safety assertions (14.5.3) are checked.
 
-Legacy scenarios (``workflows/<id>/scenarios/*.yaml``, architecture 14.3.8) replay in dry run only:
-the legacy plan is built, bridged to proposals (``plan_bridge``) and run through the runtime up to
-the package and its DRY RUN block; ``--check`` compares with the scenario's ``expect`` block.
+``--all-workflows`` runs every scenario of every discovered workflow in the selected mode (a scenario
+whose ``mode`` excludes it is reported as skipped). The scenarios carried over from the retired
+plan-rule specs run as ``legacy-*`` workflow scenarios (architecture 14.4.3 and 14.13.1).
 
 The execution guard allows one runtime per process (its verifier slot is sealed), so when several
 scenarios are selected each one runs in its own child process.
@@ -46,10 +47,10 @@ import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TextIO
+from typing import Any, TextIO
 
 _ROOT = Path(__file__).resolve().parents[2]
-for _path in (_ROOT / "engine", _ROOT / "src", _ROOT):  # run from a checkout without install
+for _path in (_ROOT / "src", _ROOT):  # run from a checkout without install
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
@@ -94,8 +95,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--list-workflows", action="store_true", help="list workflows and their scenarios")
     parser.add_argument("--workflow", help="run the scenarios of this workflow (tests/fixtures/workflows/<id>)")
     parser.add_argument("--scenario", dest="workflow_scenario", help="with --workflow: one scenario name")
-    parser.add_argument("--legacy", metavar="WORKFLOW",
-                        help="replay legacy scenarios of workflows/<WORKFLOW> in dry run (positional: one scenario)")
+    parser.add_argument("--all-workflows", action="store_true",
+                        help="run the scenarios of every discovered workflow (dry run unless --live)")
     parser.add_argument("--package", default=DEFAULT_PACKAGE, help=argparse.SUPPRESS)
     parser.add_argument("--scenario-root", type=Path, default=WORKFLOW_SCENARIO_DIR, help=argparse.SUPPRESS)
     return parser
@@ -103,6 +104,16 @@ def _parser() -> argparse.ArgumentParser:
 
 def _section(out: TextIO, title: str, body: str) -> None:
     out.write(f"\n=== {title} ===\n{body.rstrip()}\n")
+
+
+def _wanted(run: ScenarioRun, package: Any, selectors: Any, label: str, problems: list[str]) -> set[str] | None:
+    """Idempotency keys of the expected selectors, or None (with a problem) when one is not in the package."""
+    try:
+        return set(run.keys(package, selectors))
+    except KeyError as exc:
+        missing = exc.args[0] if exc.args else "?"
+        problems.append(f"{label}: expected {missing} is not in the package {sorted(package.keys)}")
+        return None
 
 
 def _check(run: ScenarioRun) -> list[str]:
@@ -113,13 +124,13 @@ def _check(run: ScenarioRun) -> list[str]:
     if package is None:
         return ["no containment package was proposed"]
     if "actions" in expect:
-        wanted = set(run.keys(package, expect["actions"]))
-        if wanted != set(package.keys):
+        wanted = _wanted(run, package, expect["actions"], "package actions", problems)
+        if wanted is not None and wanted != set(package.keys):
             problems.append(f"package actions {sorted(package.keys)} != expected {sorted(wanted)}")
     if "elevated" in expect:
         elevated = {a.idempotency_key for a in package.actions if a.approval_level.value == "ELEVATED"}
-        wanted = set(run.keys(package, expect["elevated"]))
-        if elevated != wanted:
+        wanted = _wanted(run, package, expect["elevated"], "elevated", problems)
+        if wanted is not None and elevated != wanted:
             problems.append(f"elevated {sorted(elevated)} != expected {sorted(wanted)}")
     if run.live and run.decision is not None and "containment" in expect:
         overall = run.decision.report.overall.value if run.decision.report and run.decision.report.overall else None
@@ -282,8 +293,8 @@ def run_workflow_cli(args: argparse.Namespace, out: TextIO) -> int:
     return EXIT_FAILED if failed else EXIT_OK
 
 
-def _workflow_argv(args: argparse.Namespace, scenario: str) -> list[str]:
-    argv = ["--workflow", args.workflow, "--scenario", scenario, "--format", args.format,
+def _workflow_argv(args: argparse.Namespace, scenario: str, *, workflow_id: str | None = None) -> list[str]:
+    argv = ["--workflow", workflow_id or args.workflow, "--scenario", scenario, "--format", args.format,
             "--package", args.package, "--scenario-root", str(args.scenario_root)]
     return argv + (["--live"] if args.live else []) + (["--check"] if args.check else [])
 
@@ -301,47 +312,20 @@ def _run_isolated(argvs: Sequence[Sequence[str]], out: TextIO) -> int:
     return worst
 
 
-def run_legacy_cli(args: argparse.Namespace, out: TextIO) -> int:
-    """Replay legacy scenarios in dry run (``--legacy <workflow> [<scenario>]``)."""
-    from tools.simulator.legacy_replay import replay_legacy_scenario
-    from xdr_plan import repo
-
-    if args.legacy not in repo.workflow_ids():
-        raise KeyError(f"unknown legacy workflow {args.legacy!r} (known: {repo.workflow_ids()})")
-    paths = repo.scenario_paths(args.legacy)
-    if args.scenario:
-        paths = [p for p in paths if args.scenario in (p.stem, p.name)]
-        if not paths:
-            raise FileNotFoundError(f"no legacy scenario {args.scenario!r} for workflow {args.legacy}")
-    if len(paths) > 1:
-        return _run_isolated([["--legacy", args.legacy, p.stem, "--format", args.format]
-                              + (["--check"] if args.check else []) for p in paths], out)
-    replay = replay_legacy_scenario(args.legacy, paths[0])
-    out.write(f"\nLegacy scenario {args.legacy}/{paths[0].stem} (DRY RUN replay): "
-              f"{replay.run.scenario.description.strip()}\n")
-    for action in replay.bridge.actions:
-        level = "elevated" if action.elevated else "standard"
-        out.write(f"legacy rule {action.rule}: {action.legacy_atomic} {action.legacy_target} {action.status} "
-                  f"({level}) -> {action.action_type.value} {action.target}"
-                  + (f" [{action.note}]" if action.note else "") + "\n")
-    for note in replay.detection.notes:
-        out.write(f"note: {note}\n")
-    package = replay.package
-    if package is None:
-        out.write("No containment package proposed.\n")
-    else:
-        _section(out, "Analyst decision card",
-                 render_decision_card(package, incident_title=replay.run.scenario.incident.title, fmt=args.format))
-        if args.format == "text":
-            _section(out, "Containment preview (dry run)", replay.dry_run_text())
-    out.write(f"Simulated vendor state changes: {len(replay.run.environment.state_changing_calls())}\n")
-    if args.check:
-        for problem in replay.mismatches:
-            out.write(f"EXPECTATION FAILED: {problem}\n")
-        if replay.mismatches:
-            return EXIT_FAILED
-        out.write("All scenario expectations met.\n")
-    return EXIT_OK
+def run_all_workflows_cli(args: argparse.Namespace, out: TextIO) -> int:
+    """Run every scenario of every discovered workflow, each in its own child process."""
+    catalog = discover_workflows(args.package)
+    scenarios = discover_workflow_scenarios(args.scenario_root, catalog=catalog)
+    argvs = [_workflow_argv(args, path.stem, workflow_id=workflow_id)
+             for workflow_id in catalog.ids() for path in scenarios.get(workflow_id, [])]
+    if not argvs:
+        out.write("No workflow scenarios discovered.\n")
+        return EXIT_OK
+    code = _run_isolated(argvs, out)
+    mode = "simulated live" if args.live else "dry run"
+    out.write(f"\n{len(argvs)} scenario run(s) over {len(catalog.ids())} workflow(s) ({mode}): "
+              f"{'OK' if code == EXIT_OK else 'FAILED'}\n")
+    return code
 
 
 def main(argv: Sequence[str] | None = None, *, out: TextIO | None = None) -> int:
@@ -354,14 +338,14 @@ def main(argv: Sequence[str] | None = None, *, out: TextIO | None = None) -> int
     if args.list:
         out.write("\n".join(list_scenarios()) + "\n")
         return EXIT_OK
-    if not args.scenario and not args.workflow and not args.list_workflows and not args.legacy:
+    if not args.scenario and not args.workflow and not args.list_workflows and not args.all_workflows:
         parser.print_usage(sys.stderr)
         return EXIT_USAGE
     try:
         if args.list_workflows:
             return _list_workflows(discover_workflows(args.package), args.scenario_root, out)
-        if args.legacy:
-            return run_legacy_cli(args, out)
+        if args.all_workflows:
+            return run_all_workflows_cli(args, out)
         if args.workflow:
             return run_workflow_cli(args, out)
         return run_cli(args, out)
@@ -377,4 +361,4 @@ if __name__ == "__main__":
     sys.exit(main())
 
 
-__all__ = ["main", "run_cli", "run_workflow_cli", "run_legacy_cli", "EXIT_OK", "EXIT_FAILED", "EXIT_USAGE"]
+__all__ = ["main", "run_cli", "run_workflow_cli", "run_all_workflows_cli", "EXIT_OK", "EXIT_FAILED", "EXIT_USAGE"]

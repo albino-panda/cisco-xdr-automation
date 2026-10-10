@@ -33,17 +33,15 @@ def definition(**overrides):
     return SimpleNamespace(**base)
 
 
-LEGACY = [
-    {"id": "ransomware", "name": "Ransomware (legacy)", "default_severity": "critical",
-     "mitre_attack": [{"id": "T1486", "name": "legacy name"}], "integrations": ["cisco-xdr"],
-     "steps": [{"phase": "contain", "atomic": "isolate-endpoint"}]},
-    {"id": "credential-dumping", "name": "Credential dumping", "default_severity": "critical",
-     "mitre_attack": [{"id": "T1003.002", "name": "Security Account Manager"},
-                      {"id": "T1003.001", "name": "OS Credential Dumping: LSASS Memory"}],
-     "integrations": ["secure-endpoint"],
-     "steps": [{"phase": "enrich", "atomic": "enrich-hash"}, {"phase": "contain", "atomic": "isolate-endpoint"},
-               {"phase": "contain", "atomic": "revoke-session"}, {"phase": "contain", "atomic": "isolate-endpoint"}]},
-]
+def credential_dumping():
+    return definition(
+        id="credential-dumping", name="Credential dumping", phase=3, legacy_id="credential-dumping",
+        mitre=(mitre("TA0006", "Credential Access", "T1003", "OS Credential Dumping", "T1003.002",
+                     "Security Account Manager"),
+               mitre("TA0006", "Credential Access", "T1003", "OS Credential Dumping", "T1003.001", "LSASS Memory")),
+        recommendations=(SimpleNamespace(action=SimpleNamespace(value="isolate_endpoint")),
+                         SimpleNamespace(action=SimpleNamespace(value="revoke_sessions"))),
+    )
 
 
 @pytest.fixture
@@ -51,29 +49,31 @@ def root(tmp_path: Path) -> Path:
     (tmp_path / "tests" / "fixtures" / "workflows" / "ransomware").mkdir(parents=True)
     for name in ("tp-approve-all.yaml", "dry-run.yaml"):
         (tmp_path / "tests" / "fixtures" / "workflows" / "ransomware" / name).write_text("schema: 1\n", encoding="utf-8")
-    (tmp_path / "workflows" / "credential-dumping" / "scenarios").mkdir(parents=True)
-    (tmp_path / "workflows" / "credential-dumping" / "scenarios" / "01.yaml").write_text("name: x\n", encoding="utf-8")
+    (tmp_path / "tests" / "fixtures" / "workflows" / "credential-dumping").mkdir(parents=True)
+    (tmp_path / "tests" / "fixtures" / "workflows" / "credential-dumping" / "01.yaml").write_text(
+        "name: x\n", encoding="utf-8")
     return tmp_path
 
 
-def test_migrated_definition_replaces_its_legacy_spec(root):
-    entries = gen.collect(root, [definition()], LEGACY)
+def test_every_definition_becomes_a_migrated_entry(root):
+    entries = gen.collect(root, [definition(), credential_dumping()])
     assert [(e.id, e.status, e.phase, e.scenarios) for e in entries] == [
-        ("credential-dumping", "legacy spec", 3, 1), ("ransomware", "migrated", 2, 2)]
+        ("credential-dumping", "migrated", 3, 1), ("ransomware", "migrated", 2, 2)]
     ransomware = entries[1]
     assert ransomware.severity == "critical"
     assert ransomware.actions == ("isolate_endpoint", "block_hash")  # de-duplicated, ordered
     assert ransomware.integrations == ("secure_endpoint",)
 
 
-def test_legacy_entry_lists_contain_atomics_once(root):
-    entry = gen.legacy_entry(LEGACY[1], root)
-    assert entry.actions == ("isolate-endpoint", "revoke-session")
-    assert all(t.tactics == () for t in entry.techniques)
+def test_the_legacy_spec_source_is_retired():
+    """14.4.3: the generator reads only workflow definitions (no ``xdr_plan``, no ``workflow.yaml``)."""
+    assert not hasattr(gen, "legacy_entry") and not hasattr(gen, "load_legacy_specs")
+    source = Path(gen.__file__).read_text(encoding="utf-8")
+    assert "from xdr_plan" not in source and "import xdr_plan" not in source and '"engine"' not in source
 
 
 def test_mitre_yaml_schema_2_sorted_with_tactics(root):
-    text = gen.render_mitre_yaml(gen.collect(root, [definition()], LEGACY))
+    text = gen.render_mitre_yaml(gen.collect(root, [definition(), credential_dumping()]))
     assert text.startswith(gen.YAML_HEADER + "\n")
     data = yaml.safe_load(text)
     assert data["schema_version"] == 2
@@ -81,11 +81,12 @@ def test_mitre_yaml_schema_2_sorted_with_tactics(root):
     t1486 = data["techniques"][2]
     assert t1486 == {"id": "T1486", "name": "Data Encrypted for Impact",
                      "tactics": [{"id": "TA0040", "name": "Impact"}], "workflows": ["ransomware"]}
-    assert data["techniques"][0]["tactics"] == []
+    assert data["techniques"][0]["name"] == "LSASS Memory"
+    assert data["techniques"][0]["tactics"] == [{"id": "TA0006", "name": "Credential Access"}]
 
 
 def test_technique_ids_sort_numerically():
-    entry = gen.WorkflowEntry("x", "X", 2, "legacy spec", "high",
+    entry = gen.WorkflowEntry("x", "X", 2, "migrated", "high",
                               tuple(gen.TechniqueRef(t, t) for t in ("T1566.002", "T1110.003", "T1566", "T1021.006")),
                               (), (), 0)
     assert [t.id for t in gen.techniques([entry])] == ["T1021.006", "T1110.003", "T1566", "T1566.002"]
@@ -96,18 +97,18 @@ def test_sub_technique_names_and_shared_techniques(root):
         mitre("TA0002", "Execution", "T1204", "User Execution", "T1204.002", "Malicious File"),
         mitre("TA0001", "Initial Access", "T1204", "User Execution", "T1204.002", "Malicious File"),
     ))
-    techs = {t.id: t for t in gen.techniques(gen.collect(root, [d], []))}
+    techs = {t.id: t for t in gen.techniques(gen.collect(root, [d]))}
     assert techs["T1204.002"].name == "Malicious File"
     assert techs["T1204.002"].tactics == {"TA0001": "Initial Access", "TA0002": "Execution"}
 
 
 def test_readmes_link_every_workflow_and_mark_generated(root):
-    files = gen.render_all(gen.collect(root, [definition()], LEGACY))
+    files = gen.render_all(gen.collect(root, [definition(), credential_dumping()]))
     mitre_md = files[gen.MITRE_README]
     index_md = files[gen.WORKFLOWS_README]
     for text in (mitre_md, index_md):
         assert text.startswith(gen.MD_HEADER + "\n")
-    assert "| [T1003.001](https://attack.mitre.org/techniques/T1003/001/) | OS Credential Dumping: LSASS Memory | - |" in mitre_md
+    assert "| [T1003.001](https://attack.mitre.org/techniques/T1003/001/) | LSASS Memory | TA0006 Credential Access |" in mitre_md
     assert "| TA0040 Impact | [`ransomware`](../../workflows/ransomware/README.md) |" in mitre_md
     assert ("| [`ransomware`](../../workflows/ransomware/README.md) | 2 | migrated | critical | T1486, T1490 | "
             "`isolate_endpoint`, `block_hash` | `secure_endpoint` | 2 | - |") in index_md
@@ -115,18 +116,18 @@ def test_readmes_link_every_workflow_and_mark_generated(root):
 
 
 def test_hand_off_targets_are_listed(root):
-    index_md = gen.render_workflows_readme(gen.collect(root, [definition(handoff_to=("account-takeover",))], []))
+    index_md = gen.render_workflows_readme(gen.collect(root, [definition(handoff_to=("account-takeover",))]))
     assert index_md.rstrip().endswith("| 2 | `account-takeover` |")
 
 
 def test_output_is_deterministic(root):
-    a = gen.render_all(gen.collect(root, [definition()], LEGACY))
-    b = gen.render_all(gen.collect(root, [definition()], list(reversed(LEGACY))))
+    a = gen.render_all(gen.collect(root, [definition(), credential_dumping()]))
+    b = gen.render_all(gen.collect(root, [credential_dumping(), definition()]))
     assert a == b
 
 
 def test_check_and_write(root):
-    files = gen.render_all(gen.collect(root, [], LEGACY))
+    files = gen.render_all(gen.collect(root, [credential_dumping()]))
     assert sorted(gen.stale_files(root, files)) == sorted(
         f"{p.as_posix()}: missing; run python {gen.GENERATOR} --write" for p in files)
     assert sorted(gen.write_files(root, files)) == sorted(files)
@@ -137,7 +138,7 @@ def test_check_and_write(root):
 
 
 def test_crlf_checkout_is_not_stale(root):
-    files = gen.render_all(gen.collect(root, [], LEGACY))
+    files = gen.render_all(gen.collect(root, [credential_dumping()]))
     gen.write_files(root, files)
     path = root / gen.WORKFLOWS_README
     path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))

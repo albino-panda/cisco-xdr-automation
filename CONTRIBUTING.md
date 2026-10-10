@@ -17,9 +17,12 @@ This project changes the state of security products: it isolates hosts, disables
 ```
 python -m pip install -r requirements-dev.txt
 python -m pytest -q -p no:cacheprovider
-PYTHONPATH=engine python -m xdr_plan check
+python tools/validation/check_workflow_readmes.py
+python tools/validation/generate_workflow_docs.py --check
 python tools/simulator/simulate.py ransomware --check
 python tools/simulator/simulate.py ransomware --live --check
+python tools/simulator/simulate.py --all-workflows --check          # every workflow scenario, dry run
+python tools/simulator/simulate.py --all-workflows --live --check   # every workflow scenario, simulated live
 ```
 
 CI runs the same on Python 3.12 (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Code must run on 3.12 and 3.13. No test may touch the network: mock HTTP with `httpx.MockTransport` (helpers in `tests/fixtures/http_mocks.py`).
@@ -34,7 +37,7 @@ Work in small, reviewed steps. For every change:
 2. **Plan.** Write down the smallest change that solves the problem and what could break.
 3. **Smallest unit.** Change one thing at a time. One logical change per commit and per pull request.
 4. **Tests.** Add or update tests with the change. A bug fix starts with a failing test.
-5. **Run.** Run the full test suite, `xdr_plan check` and the simulator checks above. All must pass.
+5. **Run.** Run the full test suite, the README validator, the MITRE generator check and the simulator checks above. All must pass.
 6. **Safety review.** Go through the checklist below and answer it in the pull request.
 7. **Docs.** Update the README, `docs/` and [CHANGELOG.md](CHANGELOG.md) (under *Unreleased*) in the same change.
 8. **Conventional commit.** `type(scope): summary`, for example:
@@ -88,7 +91,7 @@ A pull request that fails any line is not merged until it is fixed or a maintain
 
 ## Workflow specs and Claude Code agents
 
-The `wf-*` agents in [`.claude/agents/`](.claude/agents/) each edit only their own `workflows/<workflow>/` directory. Changes to shared atomics, integrations, docs or the framework go through a normal pull request. An agent never approves anything and never changes `tests/safety/`.
+The `wf-*` agents in [`.claude/agents/`](.claude/agents/) each edit only their own `workflows/<workflow>/` directory. Changes to shared atomics (`src/xdr_response/atomics/`), integrations, docs or the framework go through a normal pull request. An agent never approves anything and never changes `tests/safety/`.
 
 ## Reporting bugs
 

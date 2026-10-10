@@ -21,8 +21,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -p no:cacheprovider   # includes workflow scenarios and the read-zone lint
-      - run: PYTHONPATH=engine:src python -m xdr_plan check   # the expr shim imports xdr_response.workflows.expr
-      # Phase 1 framework checks (docs/architecture.md 14.5.4, 14.5.5, 14.7.1)
+      # Repository checks (docs/architecture.md 14.5.4, 14.5.5, 14.7.1)
       - run: python tools/validation/validate_config.py
       - run: python tools/validation/check_endpoints.py
       - run: python tools/validation/check_workflow_readmes.py
@@ -31,11 +30,6 @@ jobs:
           for scenario in ransomware phishing account_takeover ransomware_domain_controller; do
             python tools/simulator/simulate.py "$scenario" --live --check > /dev/null
             python tools/simulator/simulate.py "$scenario" --check > /dev/null
-          done
-      # Phase 1 exit criterion (14.7.1 item 3): every legacy scenario replays in dry run through plan_bridge
-      - run: |
-          for workflow in $(ls workflows/*/workflow.yaml | cut -d/ -f2); do
-            python tools/simulator/simulate.py --legacy "$workflow" --check > /dev/null
           done
       - run: >-
           python tools/simulator/simulate.py --workflow sample-malware --check

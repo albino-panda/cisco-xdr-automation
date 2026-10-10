@@ -102,7 +102,9 @@ techniques:
   - malicious-powershell
 - id: T1068
   name: Exploitation for Privilege Escalation
-  tactics: []
+  tactics:
+  - id: TA0004
+    name: Privilege Escalation
   workflows:
   - privilege-escalation
 - id: T1071
@@ -134,6 +136,7 @@ techniques:
   workflows:
   - lateral-movement
   - ransomware
+  - threat-intel-sweep
 - id: T1078.004
   name: Cloud Accounts
   tactics:
@@ -157,7 +160,9 @@ techniques:
   - suspicious-authentication
 - id: T1098
   name: Account Manipulation
-  tactics: []
+  tactics:
+  - id: TA0003
+    name: Persistence
   workflows:
   - privilege-escalation
 - id: T1098.001
@@ -175,6 +180,14 @@ techniques:
   workflows:
   - cloud-compromise
   - mfa-fatigue
+  - privilege-escalation
+- id: T1098.007
+  name: Additional Local or Domain Groups
+  tactics:
+  - id: TA0003
+    name: Persistence
+  workflows:
+  - privilege-escalation
 - id: T1105
   name: Ingress Tool Transfer
   tactics:
@@ -207,13 +220,17 @@ techniques:
   - persistence
 - id: T1190
   name: Exploit Public-Facing Application
-  tactics: []
+  tactics:
+  - id: TA0001
+    name: Initial Access
   workflows:
   - vulnerability-exploitation
   - web-attacks
 - id: T1203
   name: Exploitation for Client Execution
-  tactics: []
+  tactics:
+  - id: TA0002
+    name: Execution
   workflows:
   - vulnerability-exploitation
 - id: T1204.001
@@ -231,6 +248,7 @@ techniques:
   workflows:
   - malware
   - phishing
+  - threat-intel-sweep
 - id: T1218
   name: System Binary Proxy Execution
   tactics:
@@ -296,7 +314,9 @@ techniques:
   - ransomware
 - id: T1505.003
   name: Web Shell
-  tactics: []
+  tactics:
+  - id: TA0003
+    name: Persistence
   workflows:
   - web-attacks
 - id: T1528
@@ -343,7 +363,9 @@ techniques:
   - persistence
 - id: T1548.002
   name: Bypass User Account Control
-  tactics: []
+  tactics:
+  - id: TA0004
+    name: Privilege Escalation
   workflows:
   - privilege-escalation
 - id: T1564.008
@@ -369,6 +391,7 @@ techniques:
     name: Initial Access
   workflows:
   - phishing
+  - threat-intel-sweep
 - id: T1566.002
   name: Spearphishing Link
   tactics:
@@ -376,6 +399,7 @@ techniques:
     name: Initial Access
   workflows:
   - phishing
+  - threat-intel-sweep
 - id: T1567.002
   name: Exfiltration to Cloud Storage
   tactics:
@@ -421,7 +445,9 @@ techniques:
   - c2
 - id: T1595.002
   name: Vulnerability Scanning
-  tactics: []
+  tactics:
+  - id: TA0043
+    name: Reconnaissance
   workflows:
   - web-attacks
 - id: T1621

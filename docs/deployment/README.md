@@ -1,34 +1,34 @@
 # Deployment
 
-> **Start here: [docs/deployment.md](../deployment.md).** It covers secrets (`APPROVAL_SIGNING_KEY` and the integration keys from a secret store), the config files, enabling integrations including optional Splunk, running in dry run first, and the Cisco XDR Automation side. This page keeps the rollout notes for the workflow specs in XDR Automation.
+> **Start here: [docs/deployment.md](../deployment.md).** It covers secrets (`APPROVAL_SIGNING_KEY` and the integration keys from a secret store), the config files, enabling integrations including optional Splunk, running in dry run first, and the Cisco XDR Automation side. This page keeps the rollout notes for the XDR Automation side.
 
 ## Prerequisites
 
 - Cisco XDR with Automation enabled and an administrator who can create targets, rules and workflows.
 - One XDR Automation **target** per integration in [`integrations/`](../../integrations/README.md), with least-privilege credentials.
 - A ServiceNow assignment group and a SOC notification channel (Webex, Microsoft Teams, Slack or email).
-- The guardrails file filled in for your environment: copy [`guardrails.example.yaml`](guardrails.example.yaml). It feeds the plan engine (`engine/xdr_plan`). The `xdr_response` framework uses the files in [`config/`](../../config/) instead.
+- The policy files in [`config/`](../../config/) filled in for your environment: critical assets, allow-lists, exclusions and thresholds (blast-radius caps). They replaced the legacy guardrails file, which was retired with the plan engine after Phase 5 (architecture 14.4.3).
 
 ## Rollout order
 
 1. **Integrations.** Create targets and API clients, and verify each with a read-only call (`runtime.health.check_all()`, see [docs/deployment.md](../deployment.md) section 5).
-2. **Read-only atomics.** Enrichment and investigation atomics. Run them by hand against known observables.
-3. **Ticketing and notification.** `create-ticket` and `notify-soc`.
-4. **Containment in dry run.** Confirm the planned output, the allow-list skips, the ELEVATED actions and the `DRY RUN` block (`Would isolate: TH-LT-1047`).
-5. **Workflows in dry run.** Attach incident rules so every matching incident produces a plan without acting.
-6. **Enable containment** one workflow at a time after reviewing at least two weeks of dry-run plans. Set `DRY_RUN=false` only then.
+2. **Read-only atomics.** Enrichment and investigation atomics (`xdr_response.atomics`, mapped from the legacy names in [atomic/README.md](../../atomic/README.md)). Run the workflow scenarios in dry run first.
+3. **Ticketing and notification.** `create_ticket` and `notify_soc`.
+4. **Containment in dry run.** Confirm the recommended output, the allow-list skips, the ELEVATED actions and the `DRY RUN` block (`Would isolate: TH-LT-1047`).
+5. **Workflows in dry run.** Attach the trigger rule so every new incident reaches the orchestrator, is routed to its workflow and produces a recommendation without acting ([docs/deployment.md](../deployment.md) section 5.2).
+6. **Enable containment** after reviewing at least two weeks of dry-run recommendations. Set `DRY_RUN=false` only then. Dry run is a process setting, not a per-workflow one: to go live one workflow at a time, run a live orchestrator with a subset catalog next to a dry-run one ([docs/deployment.md](../deployment.md) section 5.2).
 
 ## Approvals
 
 - Every state-changing action (containment, remediation, release, restoration, removing blocks) needs a human approval. There is no auto-approval.
 - The approval is enforced by `xdr_response`: an HMAC approval token issued only to an authenticated HUMAN principal, checked by the execution guard on every call.
 - An XDR **Request Approval** task may notify the analyst, but it never authorizes an action by itself.
-- There is no auto-approval anywhere. The guardrails file has no `auto_approve` section, and both the legacy plan engine (`xdr_plan`) and the `xdr_response` loader refuse `auto_approve`, `skip_approval`, `bypass_approval` and `approval_required` at any depth.
-- Protected hosts and users are never skipped silently: their containment stays in the plan and needs ELEVATED approval with a visible warning. The same applies to every action of a group over a `blast_radius` cap, and the plan escalates to a lead.
+- There is no auto-approval anywhere. The `xdr_response` loader refuses `auto_approve`, `skip_approval`, `bypass_approval` and `approval_required` at any depth of a config file.
+- Critical hosts and users are never skipped silently: their containment stays in the package and needs ELEVATED approval with a visible warning. The same applies to every action of a group over a blast-radius cap in `config/thresholds.yaml`.
 
 ## Change management
 
-- Treat `workflow.yaml` and `atomic.yaml` as the reviewed source. Export XDR JSON after every change and commit it beside the spec. Check every export for secret literals first.
+- Treat the workflow definitions (`src/xdr_response/workflows/<workflow>/`) and their scenarios as the reviewed source. Export XDR-side workflows as JSON after every change and check every export for secret literals before committing it.
 - Treat `config/thresholds.yaml`, `critical-assets.yaml`, `allowlists.yaml` and `exclusions.yaml` like code: change them through reviewed pull requests.
 - Tag releases and keep a changelog of behaviour changes, especially changes to containment conditions.
 

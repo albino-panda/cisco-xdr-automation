@@ -11,9 +11,10 @@ Every test asserts the SAFE behaviour, so a failing test is a real defect. Attac
   sign a token and never mark an action as not needing approval;
 * ``revoke_sessions`` and every restoration action always need approval;
 * a critical-asset target always comes out ELEVATED with a warning, whatever path it takes
-  (builder, runner duplicate merge, IP-named endpoint, legacy plan bridge);
-* dry run stays side-effect free through the Phase 1 runtime (workflow catalog + observers);
-* the legacy ``plan_bridge`` cannot produce auto-approved, unapproved or weaker-than-legacy actions.
+  (builder, runner duplicate merge, IP-named endpoint);
+* dry run stays side-effect free through the Phase 1 runtime (workflow catalog + observers).
+
+The legacy plan-bridge section was retired with the plan engine at the end of Phase 5 (architecture 14.4.3).
 
 Fake data only: example.com / *.example / *.test, documentation IP ranges, fake hashes.
 """
@@ -31,8 +32,6 @@ from tests.fixtures.sample_workflows.sample_malware import HOOKS as SAMPLE_HOOKS
 from tests.fixtures.sample_workflows.sample_malware import WORKFLOW as SAMPLE_WORKFLOW
 from tools.simulator.scenario import SIM_NOW, Scenario, ScenarioRun
 from tools.simulator.workflow_scenario import WorkflowScenarioRun, load_workflow_scenario
-from xdr_plan.guardrails import host_protected, user_protected
-from xdr_plan.planner import Action, Plan
 from xdr_response import guard
 from xdr_response.approval import CriticalAssetPolicy, PackageBuilder
 from xdr_response.approval.critical_assets import WARNING_PREFIX
@@ -40,9 +39,9 @@ from xdr_response.approval.tokens import ApprovalTokenService
 from xdr_response.atomics import containment_builders, read_atomics
 from xdr_response.atomics.containment import CONTAINMENT_BUILDERS
 from xdr_response.atomics.containment.builders import RESERVED_PARAM_KEYS, build_containment
-from xdr_response.atomics.containment.models import BuiltRecommendation, RouteDecision
+from xdr_response.atomics.containment.models import BuiltRecommendation
 from xdr_response.atomics.context import AtomicContext, build_context
-from xdr_response.atomics.evidence import EvidenceBuilder, RecordIndex
+from xdr_response.atomics.evidence import EvidenceBuilder
 from xdr_response.atomics.investigation.normalize.typed import TYPED_INTEGRATION_KEY, TYPED_RECORD_KEY
 from xdr_response.atomics.notifications.models import (
     DeliveryStatus,
@@ -63,7 +62,6 @@ from xdr_response.config import FORBIDDEN_KEYS, Settings
 from xdr_response.config.policy import AllowlistPolicy
 from xdr_response.errors import ApprovalError, ApprovalRequiredError
 from xdr_response.integrations.simulated import SIMULATED_SUITE
-from xdr_response.lifecycle.plan_bridge import bridge_plan, guardrails_to_settings, legacy_incident
 from xdr_response.lifecycle.workflow_adapter import WorkflowInvestigationReport, WorkflowRecommender
 from xdr_response.models import (
     ActionCategory,
@@ -684,109 +682,6 @@ def test_live_notifications_show_only_a_token_id_prefix():
         assert token_id not in draft.body and token_id not in draft.title
 
 
-# ================================================================ legacy plan_bridge ====
-LEGACY_INCIDENT = {
-    "id": "INC-P1-SAFE-LEGACY", "title": "Malicious file on wks-0142", "severity": "high", "source": "legacy",
-    "observables": [{"type": "host", "value": "wks-0142"}, {"type": "sha256", "value": HASH}],
-    "targets": [{"type": "endpoint", "value": "wks-0142"}],
-}
-
-
-def _route(action_type: ActionType, target: str) -> RouteDecision:
-    integration = "entra" if action_type in (ActionType.DISABLE_USER, ActionType.REVOKE_SESSIONS) else "secure_endpoint"
-    return RouteDecision(action_type=action_type, integration=integration, product=integration,
-                         params={"integration": integration})
-
-
-def _legacy_action(atomic: str, target: str, *, source=None, elevated=False, status="planned",
-                   requires_approval=True, args=None) -> Action:
-    return Action(rule=f"rule_{atomic}", atomic=atomic, target=target, status=status,
-                  requires_approval=requires_approval, args=dict(args or {}), elevated=elevated, source=source)
-
-
-def _bridge(actions, results, guardrails) -> tuple[Incident, Settings, Any]:
-    incident = legacy_incident(LEGACY_INCIDENT, workflow_id="malware", created_at=NOW)
-    settings = guardrails_to_settings(guardrails, Settings())
-    result = bridge_plan(Plan("malware", list(actions), False, []), incident=incident, results=results,
-                         route=_route, incident_data=LEGACY_INCIDENT)
-    return incident, settings, result
-
-
-def test_bridge_ignores_legacy_approval_args_and_never_drops_approval():
-    results = {"enrich-hash": [{"sha256": HASH, "disposition": "malicious"}]}
-    action = _legacy_action("block-hash", HASH, source=("enrich-hash", 0), requires_approval=False,
-                            args={"auto_approve": True, "approval_level": "NONE", "skip_approval": True})
-    incident, settings, result = _bridge([action], results, {})
-    (proposal,) = result.proposals
-    assert type(proposal) is ProposedAction
-    assert not (_keys_anywhere(proposal.params) & APPROVAL_MARKERS)
-    EvidenceBuilder(RecordIndex(records=result.records)).verify(proposal.evidence)
-    (packaged,) = _package(settings, incident, result.proposals).actions
-    assert get_action_spec(packaged.action_type).state_changing
-
-
-@pytest.mark.parametrize("atomic", ["release-endpoint", "unblock-domain", "enable-user", "release-email",
-                                    "enrich-hash", "investigate-host"])
-def test_bridge_refuses_restoration_and_read_atomics(atomic):
-    with pytest.raises(ValueError):
-        _bridge([_legacy_action(atomic, "wks-0142")], {}, {})
-
-
-def test_bridge_never_proposes_skipped_or_unevidenced_actions():
-    results = {"enrich-domain": [{"domain": "bad-cdn.test", "verdict": "malicious"}]}
-    actions = [_legacy_action("block-domain", "example.com", status="skipped_allowlisted"),
-               _legacy_action("block-domain", "nowhere-mentioned.test")]
-    _, _, result = _bridge(actions, results, {})
-    assert result.proposals == ()
-    assert [a.target for a in result.unrouted] == ["nowhere-mentioned.test"]
-
-
-def test_bridge_control_is_protected_flag_is_elevated():
-    results = {"investigate-host": [{"host": "wks-0142", "connector_guid": GUID, "is_protected": True}]}
-    action = _legacy_action("isolate-endpoint", GUID, source=("investigate-host", 0), elevated=True)
-    incident, settings, result = _bridge([action], results, {})
-    (packaged,) = _package(settings, incident, result.proposals).actions
-    assert packaged.approval_level is ApprovalLevel.ELEVATED and packaged.warnings
-
-
-_PROTECTED_CASES = {
-    "host-protected-by-connector-guid": (
-        "isolate-endpoint", GUID, ("investigate-host", 0),
-        {"investigate-host": [{"host": "wks-0142", "connector_guid": GUID, "is_protected": False}]},
-        {"protected": {"hosts": [GUID]}}),
-    "host-protected-by-ip-glob": (
-        "isolate-endpoint", GUID, ("investigate-host", 0),
-        {"investigate-host": [{"host": "wks-0142", "connector_guid": GUID, "ip": "192.0.2.5",
-                               "is_protected": False}]},
-        {"protected": {"hosts": ["192.0.2.*"]}}),
-    "user-protected-by-email-field": (
-        "disable-user", "ops-backup", ("investigate-user", 0),
-        {"investigate-user": [{"user": "ops-backup", "email": "ops-backup@admins.example",
-                               "profile": {"groups": []}, "is_protected": False}]},
-        {"protected": {"users": ["*@admins.example"]}}),
-    "protected-item-not-the-plan-source": (
-        "isolate-endpoint", GUID, None,
-        {"investigate-host": [{"host": "wks-0142", "connector_guid": GUID, "is_protected": True}]},
-        {}),
-}
-
-
-@pytest.mark.parametrize("case", sorted(_PROTECTED_CASES))
-def test_bridge_is_never_weaker_than_the_legacy_protected_asset_verdict(case):
-    """14.9.1: "The runtime may be stricter, never weaker." A legacy C3 protected asset stays ELEVATED."""
-    atomic, target, source, results, guardrails = _PROTECTED_CASES[case]
-    item = next(iter(results.values()))[0]
-    check = host_protected if atomic == "isolate-endpoint" else user_protected
-    assert check(target, item, guardrails), "precondition: the legacy planner marks this target protected"
-    action = _legacy_action(atomic, target, source=source, elevated=True)
-    incident, settings, result = _bridge([action], results, guardrails)
-    assert result.proposals, result.notes
-    (packaged,) = _package(settings, incident, result.proposals).actions
-    assert packaged.approval_level is ApprovalLevel.ELEVATED, (
-        f"{case}: legacy elevated (protected asset) but the runtime package is {packaged.approval_level.value}")
-    assert packaged.warnings
-
-
 # ================================================================ read atomics and the facade ====
 _SAMPLE_SUBJECTS: dict[ObservableType, str] = {
     ObservableType.IP: "198.51.100.77", ObservableType.IPV6: "2001:db8::77", ObservableType.DOMAIN: "bad-cdn.test",
@@ -998,27 +893,3 @@ def test_a_constructed_workflow_cannot_recommend_restoration_through_the_runner(
     assert run.proposals == ()
     assert all(o.status is not RuleOutcomeStatus.PROPOSED for o in run.outcomes)
     assert lab.environment.state_changing_calls() == []
-
-
-def test_bridge_protected_and_capped_isolation_stays_elevated_without_the_cap():
-    """A legacy isolation elevated for a protected host *and* a blast-radius cap keeps the protected tag:
-    the runtime package is ELEVATED even when the runtime cap is not exceeded."""
-    results = {"investigate-host": [{"host": "wks-0142", "connector_guid": GUID, "is_protected": False}]}
-    action = _legacy_action("isolate-endpoint", GUID, source=("investigate-host", 0), elevated=True)
-    action.reasons.extend(["max_hosts_isolated: 2 planned > limit 1: ELEVATED approval required",
-                           "protected asset: ELEVATED approval required"])
-    incident, settings, result = _bridge([action], results, {"protected": {"hosts": [GUID]}})
-    (packaged,) = _package(settings, incident, result.proposals).actions
-    assert packaged.approval_level is ApprovalLevel.ELEVATED and packaged.warnings
-
-
-def test_bridge_never_copies_legacy_args_into_the_proposal_or_overrides_the_route():
-    """Legacy ``args`` never reach the proposal; the bridge only adds ``connector_guid`` to the route params."""
-    results = {"investigate-host": [{"host": "wks-0142", "connector_guid": GUID}]}
-    action = _legacy_action("isolate-endpoint", GUID, source=("investigate-host", 0),
-                            args={"integration": "meraki", "approved": True, "requires_approval": False})
-    _, _, result = _bridge([action], results, {})
-    (proposal,) = result.proposals
-    assert proposal.params["integration"] == "secure_endpoint"
-    assert not (_keys_anywhere(proposal.params) & APPROVAL_MARKERS)
-    assert set(proposal.params) <= {"integration", "connector_guid"}

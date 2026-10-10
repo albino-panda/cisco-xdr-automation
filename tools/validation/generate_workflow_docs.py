@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-"""Generate the MITRE mapping and the workflow index from workflow definitions and legacy specs.
+"""Generate the MITRE mapping and the workflow index from the workflow definitions.
 
 Usage:
     python tools/validation/generate_workflow_docs.py --check   # exit 1 when a generated file is stale
     python tools/validation/generate_workflow_docs.py --write   # rewrite the generated files
 
-Sources (architecture section 14.5.5):
-
-- migrated workflows: ``discover_workflows()`` from ``xdr_response.workflows.discovery`` (empty until
-  the workflow framework and the first migrated workflow exist);
-- legacy specs: every ``workflows/<id>/workflow.yaml`` still present (``xdr_plan.repo``), except the
-  ones a migrated definition replaces (``id`` or ``legacy_id``).
+Source (architecture section 14.5.5): every ``WorkflowDefinition`` that ``discover_workflows()`` from
+``xdr_response.workflows.discovery`` finds. The legacy ``workflows/<id>/workflow.yaml`` specs and the
+legacy plan engine were retired at the end of Phase 5 (14.4.3), so they are no longer a source.
 
 Outputs, all deterministic and marked "do not edit":
 
@@ -33,7 +30,7 @@ from typing import Any
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-for _extra in (REPO_ROOT / "src", REPO_ROOT / "engine"):  # run from a checkout without install
+for _extra in (REPO_ROOT / "src",):  # run from a checkout without install
     if _extra.is_dir() and str(_extra) not in sys.path:
         sys.path.insert(0, str(_extra))
 
@@ -44,7 +41,7 @@ MITRE_YAML = Path("docs/mitre-mapping/mitre-mapping.yaml")
 MITRE_README = Path("docs/mitre-mapping/README.md")
 WORKFLOWS_README = Path("docs/workflows/README.md")
 
-# Phase of every workflow (architecture 14.5.1); legacy specs carry no phase of their own.
+# Phase of every workflow (architecture 14.5.1).
 PHASES: Mapping[str, int] = {
     "ransomware": 2, "phishing": 2, "account-takeover": 2, "mail-bombing": 2, "malware": 2, "mfa-fatigue": 2,
     "password-spray": 2, "bec": 2, "malicious-powershell": 3, "credential-dumping": 3, "lateral-movement": 3,
@@ -57,8 +54,9 @@ MITRE_NOTES = (
     "Mail bombing maps to T1667 *Email Bombing* (added in ATT&CK v17). The legacy spec mapped it by effect "
     "to T1499 *Endpoint Denial of Service*; that forced mapping was dropped when the workflow migrated.",
     "T1219 was renamed *Remote Access Tools* in ATT&CK v17; the ID is unchanged.",
-    "Legacy specs carry no tactic; tactics appear when a workflow migrates to a `WorkflowDefinition` "
-    "(every mapping there names its tactic and a rationale, so no mapping is forced).",
+    "Every workflow is a migrated `WorkflowDefinition` (the legacy specs were retired after Phase 5): every "
+    "mapping names its tactic and a rationale, so no mapping is forced, and a technique has one name and one "
+    "tactic set across workflows.",
 )
 
 
@@ -86,13 +84,13 @@ class WorkflowEntry:
     id: str
     name: str
     phase: int | None
-    status: str  # "migrated" | "legacy spec"
+    status: str  # "migrated" (every workflow since the legacy specs were retired, 14.4.3)
     severity: str
     techniques: tuple[TechniqueRef, ...]
     actions: tuple[str, ...]
     integrations: tuple[str, ...]
     scenarios: int
-    handoffs: tuple[str, ...] = ()  # WorkflowDefinition.handoff_to (migrated workflows only)
+    handoffs: tuple[str, ...] = ()  # WorkflowDefinition.handoff_to
 
 
 @dataclass
@@ -151,41 +149,10 @@ def migrated_entry(definition: Any, root: Path) -> WorkflowEntry:
     )
 
 
-def legacy_entry(spec: Mapping[str, Any], root: Path) -> WorkflowEntry:
-    """Turn a legacy ``workflow.yaml`` into a ``WorkflowEntry`` (no tactics)."""
-    wid = str(spec["id"])
-    actions: list[str] = []
-    for step in spec.get("steps", []):
-        if step.get("phase") == "contain" and step.get("atomic") and step["atomic"] not in actions:
-            actions.append(step["atomic"])
-    return WorkflowEntry(
-        id=wid,
-        name=str(spec.get("name", wid)),
-        phase=PHASES.get(wid),
-        status="legacy spec",
-        severity=str(spec.get("default_severity", "")).lower(),
-        techniques=tuple(TechniqueRef(str(t["id"]), str(t["name"])) for t in spec.get("mitre_attack", [])),
-        actions=tuple(actions),
-        integrations=tuple(str(i) for i in spec.get("integrations", [])),
-        scenarios=_count(root / "workflows" / wid / "scenarios"),
-    )
-
-
-def collect(root: Path, definitions: Iterable[Any], legacy_specs: Iterable[Mapping[str, Any]]) -> list[WorkflowEntry]:
-    """Migrated workflows first claim their ids and legacy ids; remaining legacy specs fill the rest."""
+def collect(root: Path, definitions: Iterable[Any]) -> list[WorkflowEntry]:
+    """One entry per workflow definition, sorted by id."""
     entries = {d.id: migrated_entry(d, root) for d in definitions}
-    replaced = set(entries) | {d.legacy_id for d in definitions if getattr(d, "legacy_id", None)}
-    for spec in legacy_specs:
-        if spec["id"] not in replaced:
-            entries[str(spec["id"])] = legacy_entry(spec, root)
     return [entries[k] for k in sorted(entries)]
-
-
-def load_legacy_specs() -> list[dict]:
-    """Every remaining legacy spec, via ``xdr_plan.repo``."""
-    from xdr_plan import repo  # noqa: PLC0415
-
-    return [repo.load_workflow(wid) for wid in repo.workflow_ids()]
 
 
 # ----------------------------------------------------------------------------- rendering
@@ -241,7 +208,7 @@ def render_mitre_readme(entries: Sequence[WorkflowEntry]) -> str:
         "# MITRE ATT&CK mapping",
         "",
         "Which workflow handles each technique. Generated from the `mitre` field of every migrated "
-        "`WorkflowDefinition` and the `mitre_attack` field of every remaining legacy `workflow.yaml`; "
+        "`WorkflowDefinition`; "
         "the same data is in [`mitre-mapping.yaml`](mitre-mapping.yaml) for import into coverage tools "
         "such as ATT&CK Navigator. Regenerate with "
         f"`python {GENERATOR} --write`.",
@@ -258,14 +225,14 @@ def render_mitre_readme(entries: Sequence[WorkflowEntry]) -> str:
 
 
 def render_workflows_readme(entries: Sequence[WorkflowEntry]) -> str:
-    """``docs/workflows/README.md``: index of every workflow, migrated or legacy."""
+    """``docs/workflows/README.md``: index of every workflow."""
     lines = [
         MD_HEADER,
         "# Workflows",
         "",
         "Index of every workflow. `migrated` workflows are `WorkflowDefinition`s in "
-        "`src/xdr_response/workflows/`; `legacy spec` workflows are still `workflows/<id>/workflow.yaml` "
-        "specs checked by `xdr_plan`. Every action listed is only a recommendation: it needs a human "
+        "`src/xdr_response/workflows/` (the legacy plan-rule specs were retired after Phase 5). Every action "
+        "listed is only a recommendation: it needs a human "
         "approval (ELEVATED for critical assets and over blast-radius caps) before the lifecycle "
         f"executes it. \"Hands off to\" lists the workflows a run may suggest next (a note for the analyst; "
         f"nothing is started). Regenerate with `python {GENERATOR} --write`.",
@@ -330,7 +297,7 @@ def write_files(root: Path, files: Mapping[Path, str]) -> list[Path]:
 
 def build(root: Path = REPO_ROOT) -> dict[Path, str]:
     """Collect every source and render every generated file."""
-    return render_all(collect(root, load_catalog(), load_legacy_specs()))
+    return render_all(collect(root, load_catalog()))
 
 
 def check(root: Path = REPO_ROOT) -> list[str]:

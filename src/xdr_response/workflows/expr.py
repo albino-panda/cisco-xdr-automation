@@ -1,4 +1,4 @@
-"""Safe expression evaluator for workflow rules (canonical copy of ``engine/xdr_plan/expr.py``, 14.3.2).
+"""Safe expression evaluator for workflow rules (architecture 14.3.2).
 
 Rules and investigation steps are short Python-like expressions such as::
 
@@ -11,7 +11,8 @@ imports, attributes of Python objects (dict keys only) or assignment, so a defin
 execute arbitrary code. The evaluator dispatches through a fixed table (no reflection).
 
 Phase 1 additions to ``FUNCTIONS``: ``ids``, ``flatten``, ``distinct``, ``within_minutes`` and
-``in_cidr``; dict literals with string keys (for a rule's ``asset`` mapping). ``engine/xdr_plan/expr.py`` becomes a re-export shim of this module (14.4).
+``in_cidr``; dict literals with string keys (for a rule's ``asset`` mapping). It started as a copy of the
+legacy plan engine's evaluator, which was retired at the end of Phase 5 (14.4.3).
 """
 from __future__ import annotations
 
