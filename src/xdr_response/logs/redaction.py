@@ -72,7 +72,9 @@ REDACTED = "[REDACTED]"
 
 #: Matched (``fullmatch``, case-insensitive) against keys normalized by :func:`normalize_key`
 #: (camelCase -> snake_case). Exact-only terms: authorization, proxy-authorization, cookie,
-#: set-cookie, key, session, credential(s), sig (Azure SAS URL signature). Header-style credential
+#: set-cookie, key, session, credential(s), sig (Azure SAS URL signature), pass / pwd / pw (the
+#: common names of a password parameter in web forms and URL query strings: ``?pass=``, ``&pwd=``;
+#: P5 round 2). Header-style credential
 #: parameters "x-<vendor>-credential(s)" (S3 pre-signed X-Amz-Credential, GCS X-Goog-Credential).
 #: Suffix terms (also "<prefix>_<term>" or "<prefix>-<term>"): signature (X-Amz-Signature,
 #: X-Goog-Signature), password, passwd, passphrase, secret,
@@ -87,6 +89,7 @@ REDACTED = "[REDACTED]"
 #: "token_id", "params_hash" are NOT sensitive.
 SENSITIVE_KEY_PATTERN: re.Pattern[str] = re.compile(
     r"(?:authorization|proxy[-_]authorization|cookie|set[-_]cookie|key|session|credentials?|signature|sig"
+    r"|pass|pwd|pw"
     r"|x[-_][a-z0-9]+[-_]credentials?"
     r"|[a-z0-9]*(?:password|passwd)|mysql[-_]pwd"
     r"|(?:.*[-_.])?(?:password|passwd|passphrase|secret|client[-_]secret|secret[-_]key|token|signature"
