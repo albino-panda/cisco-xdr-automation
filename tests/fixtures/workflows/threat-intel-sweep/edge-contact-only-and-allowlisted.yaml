@@ -1,0 +1,75 @@
+# threat-intel-sweep workflow scenario; fake lab data only.
+schema: 1
+name: edge-contact-only-and-allowlisted
+workflow: threat-intel-sweep
+description: The feed names the owned domain example.com's download host by mistake together with a rated IP. TH-LT-3301
+  connected to the IP but shows no malicious activity of its own and ran no rated file. The owned-domain block is
+  shown as excluded (allow-list, never executed), the IP block is proposed, the endpoint is not isolated (considered,
+  handed to c2), and the analyst approves the IP block.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite:
+  cisco_xdr: [intel]
+  secure_endpoint: [endpoint]
+  secure_email: [email]
+  microsoft_cloud: [network]
+  umbrella: [network]
+  meraki: [network]
+  entra: [identity]
+  virustotal: [intel]
+incident:
+  incident_id: XDR-TIS-0013
+  title: 'IOC sweep: high-confidence indicators from the threat intelligence feed'
+  severity: HIGH
+  workflow_id: threat-intel-sweep
+  source: threat_intel
+  observables:
+  - {type: domain, value: downloads.example.com}
+  - {type: ip, value: 198.51.100.77}
+  trigger: {source: threat_intel, feed: partner-feed.example, feed_confidence: high}
+environment:
+  reputations:
+  - type: domain
+    value: downloads.example.com
+    verdict: MALICIOUS
+    risk_score: 80
+    confidence: 70
+    integrations: [cisco_xdr, virustotal]
+    summary: feed false positive
+  - type: ip
+    value: 198.51.100.77
+    verdict: MALICIOUS
+    risk_score: 85
+    confidence: 80
+    integrations: [cisco_xdr, umbrella]
+    summary: campaign infrastructure
+  records:
+  - integration: microsoft_cloud
+    atomic: search_ip_enterprise
+    subject: 198.51.100.77
+    record: {kind: network_connection, endpoint: TH-LT-3301, user: pchen@example.com, remote_ip: 198.51.100.77,
+      remote_port: 443, protocol: tcp, direction: outbound, count: 2, action: allowed, first_seen: '2026-01-15T09:00:00Z',
+      last_seen: '2026-01-15T09:05:00Z'}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-3301
+    record:
+      kind: endpoint
+      hostname: TH-LT-3301
+      connector_guid: 00000000-0000-4000-8000-000000003301
+      os: Windows 11
+      groups: [Workstations]
+      users: [pchen@example.com]
+      isolation_capable: true
+      isolation_state: not_isolated
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  actions: ['block_ip:198.51.100.77']
+  excluded: ['block_domain:downloads.example.com']
+  considered: ['isolate_endpoint:TH-LT-3301']
+  manual_steps: []
+  handoffs: ['c2:TH-LT-3301']
+  containment: CONTAINED
+  controls: 1

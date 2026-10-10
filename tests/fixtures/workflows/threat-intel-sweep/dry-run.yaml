@@ -1,0 +1,214 @@
+# threat-intel-sweep workflow scenario; fake lab data only.
+schema: 1
+name: dry-run
+workflow: threat-intel-sweep
+description: >-
+  Dry run of the tp-approve-all sweep: the package is proposed and simulated; nothing changes at any
+  vendor, no control is registered and the DRY RUN report lists every recommended action. Production
+  parity: the block_hash and quarantine_file recommendations stay UNROUTED (no enabled adapter has a
+  VERIFIED write for them; shown for manual handling, never executed).
+tags: [dry_run, true_positive]
+mode: dry_run
+suite:
+  cisco_xdr: [intel]
+  secure_endpoint: [endpoint]
+  secure_email: [email]
+  microsoft_cloud: [network]
+  umbrella: [network]
+  meraki: [network]
+  entra: [identity]
+  virustotal: [intel]
+incident:
+  incident_id: XDR-TIS-0008
+  title: 'IOC sweep: high-confidence indicators from the threat intelligence feed'
+  severity: HIGH
+  workflow_id: threat-intel-sweep
+  source: threat_intel
+  observables:
+  - {type: sha256, value: 7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5}
+  - {type: domain, value: update-relay.test}
+  - {type: ip, value: 198.51.100.77}
+  - {type: url, value: 'https://update-relay.test/dl/invoice-viewer'}
+  - {type: email_address, value: billing@invoice-notice.example}
+  trigger: {source: threat_intel, feed: partner-feed.example, feed_confidence: high}
+environment:
+  reputations:
+  - type: sha256
+    value: 7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5
+    verdict: MALICIOUS
+    risk_score: 90
+    confidence: 85
+    integrations: [cisco_xdr, virustotal]
+    summary: loader distributed by the campaign
+  - type: domain
+    value: update-relay.test
+    verdict: MALICIOUS
+    risk_score: 85
+    confidence: 80
+    integrations: [cisco_xdr, umbrella]
+    summary: malware distribution
+    categories: [Malware]
+  - type: ip
+    value: 198.51.100.77
+    verdict: MALICIOUS
+    risk_score: 85
+    confidence: 80
+    integrations: [cisco_xdr, umbrella]
+    summary: campaign infrastructure
+  - type: url
+    value: https://update-relay.test/dl/invoice-viewer
+    verdict: MALICIOUS
+    risk_score: 85
+    confidence: 80
+    integrations: [cisco_xdr, virustotal]
+    summary: payload download path
+  - type: email_address
+    value: billing@invoice-notice.example
+    verdict: MALICIOUS
+    risk_score: 80
+    confidence: 75
+    integrations: [cisco_xdr]
+    summary: campaign sender (private intelligence)
+  records:
+  - integration: secure_endpoint
+    atomic: search_hash_enterprise
+    subject: 7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5
+    record:
+      kind: hash_prevalence
+      sha256: 7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5
+      file_name: invoice-viewer.exe
+      verdict: MALICIOUS
+      prevalence: 2
+      endpoints: [TH-LT-1047, TH-LT-2210]
+      first_seen: '2026-01-14T09:12:00Z'
+      last_seen: '2026-01-15T10:40:00Z'
+  - integration: secure_endpoint
+    atomic: search_hash_enterprise
+    subject: 7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5
+    record: {kind: process_event, event_id: evt-th-lt-1047-4410, endpoint: TH-LT-1047, timestamp: '2026-01-14T09:15:00Z',
+      event_type: process_start, process_name: invoice-viewer.exe, pid: 4410, parent_process_name: explorer.exe,
+      parent_pid: 1180, sha256: 7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5, user: jsmith@example.com,
+      verdict: MALICIOUS}
+  - integration: secure_endpoint
+    atomic: search_hash_enterprise
+    subject: 7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5
+    record: {kind: process_event, event_id: evt-th-lt-2210-dl, endpoint: TH-LT-2210, timestamp: '2026-01-15T10:40:00Z',
+      event_type: file_create, process_name: browser.exe, file_path: 'C:/Users/akumar/Downloads/invoice-viewer.exe',
+      sha256: 7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5, user: akumar@example.com}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-1047
+    record:
+      kind: endpoint
+      hostname: TH-LT-1047
+      connector_guid: 00000000-0000-4000-8000-000000001047
+      os: Windows 11
+      groups: [Workstations]
+      users: [jsmith@example.com]
+      isolation_capable: true
+      isolation_state: not_isolated
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-1047
+    record: {kind: detection, detection_id: det-th-lt-1047-1, name: Sample.Loader.InvoiceViewer, verdict: MALICIOUS,
+      severity: HIGH, endpoint: TH-LT-1047, user: jsmith@example.com, status: active, sha256: 7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5,
+      process_name: invoice-viewer.exe, first_seen: '2026-01-14T09:16:00Z'}
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-2210
+    record:
+      kind: endpoint
+      hostname: TH-LT-2210
+      connector_guid: 00000000-0000-4000-8000-000000002210
+      os: Windows 11
+      groups: [Workstations]
+      users: [akumar@example.com]
+      isolation_capable: true
+      isolation_state: not_isolated
+  - integration: microsoft_cloud
+    atomic: search_domain_enterprise
+    subject: update-relay.test
+    record:
+      kind: dns_query
+      endpoint: TH-LT-1047
+      domain: update-relay.test
+      query_type: A
+      response_ips: [198.51.100.77]
+      count: 3
+      action: allowed
+      first_seen: '2026-01-14T09:14:00Z'
+      last_seen: '2026-01-14T09:20:00Z'
+  - integration: microsoft_cloud
+    atomic: search_domain_enterprise
+    subject: update-relay.test
+    record:
+      kind: email_message
+      message_id: etd-tis-0001
+      internet_message_id: <tis-0001@invoice-notice.example>
+      sender: billing@invoice-notice.example
+      sender_domain: invoice-notice.example
+      recipients: [jsmith@example.com]
+      recipient_count: 1
+      subject_line: Invoice 2026-0114 ready to view
+      received_at: '2026-01-14T09:02:00Z'
+      direction: inbound
+      urls: ['https://update-relay.test/dl/invoice-viewer']
+      domains: [update-relay.test]
+      delivery_location: inbox
+  - integration: secure_email
+    atomic: investigate_email
+    subject: etd-tis-0001
+    record:
+      kind: email_message
+      message_id: etd-tis-0001
+      internet_message_id: <tis-0001@invoice-notice.example>
+      sender: billing@invoice-notice.example
+      sender_domain: invoice-notice.example
+      recipients: [jsmith@example.com]
+      recipient_count: 1
+      subject_line: Invoice 2026-0114 ready to view
+      received_at: '2026-01-14T09:02:00Z'
+      direction: inbound
+      verdict: MALICIOUS
+      threat_types: [phish]
+      urls: ['https://update-relay.test/dl/invoice-viewer']
+      domains: [update-relay.test]
+      delivery_location: inbox
+      spf: fail
+      dkim: none
+      dmarc: fail
+  - integration: microsoft_cloud
+    atomic: search_ip_enterprise
+    subject: 198.51.100.77
+    record: {kind: sign_in, sign_in_id: si-mlopez-0115, user: mlopez@example.com, timestamp: '2026-01-15T07:42:00Z',
+      ip: 198.51.100.77, country: ZZ, app: Office 365 Exchange Online, result: success, mfa_result: satisfied}
+  - integration: entra
+    atomic: investigate_user
+    subject: mlopez@example.com
+    record: {kind: user_profile, user: mlopez@example.com, display_name: M. Lopez, department: Finance, account_enabled: true,
+      risk_level: none}
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  actions:
+    - block_domain:update-relay.test
+    - block_ip:198.51.100.77
+    - block_url:https://update-relay.test/dl/invoice-viewer
+    - isolate_endpoint:TH-LT-1047
+    - quarantine_email:etd-tis-0001
+    - revoke_sessions:mlopez@example.com
+  unrouted:
+    - block_hash:7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5
+    - quarantine_file:TH-LT-1047/7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5
+    - quarantine_file:TH-LT-2210/7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5
+  dry_run_lines:
+    - DRY RUN
+    - "Would block: update-relay.test"
+    - "Would block: 198.51.100.77"
+    - "Would block: https://update-relay.test/dl/invoice-viewer"
+    - "Would isolate: TH-LT-1047"
+    - "Would quarantine email: etd-tis-0001"
+    - "Would revoke sessions: mlopez@example.com"
+    - No containment actions executed.
+  notifications: [incident_note, soc_notification, analyst_summary]

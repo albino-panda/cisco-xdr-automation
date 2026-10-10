@@ -1,0 +1,80 @@
+# threat-intel-sweep workflow scenario; fake lab data only.
+schema: 1
+name: benign-no-action
+workflow: threat-intel-sweep
+description: 'A feed entry names a SaaS telemetry domain and its address. Every source rates both CLEAN and the
+  sweep finds the endpoints that use the service. The feed''s claim is contradicted: nothing is proposed, both indicators
+  are shown as considered with the CLEAN ratings, and nothing changes.'
+tags: [benign]
+mode: both
+suite:
+  cisco_xdr: [intel]
+  secure_endpoint: [endpoint]
+  secure_email: [email]
+  microsoft_cloud: [network]
+  umbrella: [network]
+  meraki: [network]
+  entra: [identity]
+  virustotal: [intel]
+incident:
+  incident_id: XDR-TIS-0004
+  title: 'IOC sweep: high-confidence indicators from the threat intelligence feed'
+  severity: HIGH
+  workflow_id: threat-intel-sweep
+  source: threat_intel
+  observables:
+  - {type: domain, value: telemetry.saas-vendor.test}
+  - {type: ip, value: 198.51.100.20}
+  trigger: {source: threat_intel, feed: partner-feed.example, feed_confidence: high}
+environment:
+  reputations:
+  - type: domain
+    value: telemetry.saas-vendor.test
+    verdict: CLEAN
+    risk_score: 5
+    confidence: 80
+    integrations: [cisco_xdr, umbrella]
+    summary: SaaS telemetry endpoint
+  - type: ip
+    value: 198.51.100.20
+    verdict: CLEAN
+    risk_score: 5
+    confidence: 75
+    integrations: [cisco_xdr, umbrella]
+    summary: SaaS provider address
+  records:
+  - integration: microsoft_cloud
+    atomic: search_domain_enterprise
+    subject: telemetry.saas-vendor.test
+    record:
+      kind: dns_query
+      endpoint: TH-LT-1047
+      domain: telemetry.saas-vendor.test
+      query_type: A
+      response_ips: [198.51.100.20]
+      count: 40
+      action: allowed
+      first_seen: '2026-01-14T08:00:00Z'
+      last_seen: '2026-01-15T11:00:00Z'
+  - integration: secure_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-1047
+    record:
+      kind: endpoint
+      hostname: TH-LT-1047
+      connector_guid: 00000000-0000-4000-8000-000000001047
+      os: Windows 11
+      groups: [Workstations]
+      users: [jsmith@example.com]
+      isolation_capable: true
+      isolation_state: not_isolated
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  package: false
+  considered: ['block_domain:telemetry.saas-vendor.test', 'block_ip:198.51.100.20']
+  manual_steps: []
+  handoffs: []
+  below_threshold: []
+  unrouted: []

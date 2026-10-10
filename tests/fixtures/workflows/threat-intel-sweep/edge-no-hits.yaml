@@ -1,0 +1,63 @@
+# threat-intel-sweep workflow scenario; fake lab data only.
+schema: 1
+name: edge-no-hits
+workflow: threat-intel-sweep
+description: >-
+  The feed pushes a dropper hash and its staging domain; both are rated MALICIOUS by two sources, but
+  the 30-day sweep finds no endpoint, message or account that saw them. The package holds the two
+  preventive blocks only (no asset action, no hand-off); the analyst approves and both blocks execute.
+  Production parity: the block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED
+  write for it; shown for manual handling, never executed).
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite:
+  cisco_xdr: [intel]
+  secure_endpoint: [endpoint]
+  secure_email: [email]
+  microsoft_cloud: [network]
+  umbrella: [network]
+  meraki: [network]
+  entra: [identity]
+  virustotal: [intel]
+incident:
+  incident_id: XDR-TIS-0010
+  title: 'IOC sweep: high-confidence indicators from the threat intelligence feed'
+  severity: HIGH
+  workflow_id: threat-intel-sweep
+  source: threat_intel
+  observables:
+  - {type: sha256, value: 4b1d0c3a4b1d0c3a4b1d0c3a4b1d0c3a4b1d0c3a4b1d0c3a4b1d0c3a4b1d0c3a}
+  - {type: domain, value: drop-zone.test}
+  trigger: {source: threat_intel, feed: partner-feed.example, feed_confidence: high}
+environment:
+  reputations:
+  - type: sha256
+    value: 4b1d0c3a4b1d0c3a4b1d0c3a4b1d0c3a4b1d0c3a4b1d0c3a4b1d0c3a4b1d0c3a
+    verdict: MALICIOUS
+    risk_score: 90
+    confidence: 85
+    integrations: [cisco_xdr, virustotal]
+    summary: ransomware dropper
+  - type: domain
+    value: drop-zone.test
+    verdict: MALICIOUS
+    risk_score: 85
+    confidence: 80
+    integrations: [cisco_xdr, umbrella]
+    summary: dropper staging
+    categories: [Malware]
+  records: []
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  package: true
+  actions: [block_domain:drop-zone.test]
+  elevated: []
+  unrouted: [block_hash:4b1d0c3a4b1d0c3a4b1d0c3a4b1d0c3a4b1d0c3a4b1d0c3a4b1d0c3a4b1d0c3a]
+  considered: []
+  manual_steps: []
+  handoffs: []
+  risk: {min: 30, max: 59}
+  containment: CONTAINED
+  controls: 1

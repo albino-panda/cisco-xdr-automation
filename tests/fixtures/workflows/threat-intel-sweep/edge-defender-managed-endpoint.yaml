@@ -1,0 +1,73 @@
+# threat-intel-sweep workflow scenario; fake lab data only.
+schema: 1
+name: edge-defender-managed-endpoint
+workflow: threat-intel-sweep
+description: >-
+  The loader ran on TH-LT-4402, which only Defender for Endpoint manages (no Secure Endpoint connector).
+  The isolation is built for Defender, the file is quarantined there and the hash is blocked; the
+  analyst approves everything. Production parity: the quarantine_file recommendation stays UNROUTED (no
+  enabled adapter has a VERIFIED write for it; shown for manual handling, never executed); block_hash
+  through defender_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so
+  containment is PARTIALLY_CONTAINED.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite:
+  cisco_xdr: [intel]
+  secure_endpoint: [endpoint]
+  secure_email: [email]
+  microsoft_cloud: [network]
+  umbrella: [network]
+  meraki: [network]
+  entra: [identity]
+  virustotal: [intel]
+  defender_endpoint: [endpoint]
+incident:
+  incident_id: XDR-TIS-0014
+  title: 'IOC sweep: high-confidence indicators from the threat intelligence feed'
+  severity: HIGH
+  workflow_id: threat-intel-sweep
+  source: threat_intel
+  observables:
+  - {type: sha256, value: 7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5}
+  trigger: {source: threat_intel, feed: partner-feed.example, feed_confidence: high}
+environment:
+  reputations:
+  - type: sha256
+    value: 7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5
+    verdict: MALICIOUS
+    risk_score: 90
+    confidence: 85
+    integrations: [cisco_xdr, virustotal]
+    summary: loader distributed by the campaign
+  records:
+  - integration: defender_endpoint
+    atomic: search_hash_enterprise
+    subject: 7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5
+    record: {kind: process_event, event_id: mde-evt-4402-1, endpoint: TH-LT-4402, timestamp: '2026-01-15T06:30:00Z',
+      event_type: process_start, process_name: invoice-viewer.exe, pid: 2210, sha256: 7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5,
+      user: rbanks@example.com}
+  - integration: defender_endpoint
+    atomic: investigate_endpoint
+    subject: TH-LT-4402
+    record:
+      kind: endpoint
+      hostname: TH-LT-4402
+      mde_machine_id: mde-4402-0000000000000000000000000000000000
+      os: Windows 11
+      groups: [Workstations]
+      users: [rbanks@example.com]
+      isolation_capable: true
+      isolation_state: not_isolated
+analyst:
+  decision: APPROVE_ALL
+  approvers: [analyst]
+expect:
+  actions:
+    - block_hash:7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5
+    - isolate_endpoint:TH-LT-4402
+  elevated: []
+  unrouted: [quarantine_file:TH-LT-4402/7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5]
+  considered: []
+  manual_steps: []
+  handoffs: ['malware:7e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c57e3a91c5']
+  containment: PARTIALLY_CONTAINED
