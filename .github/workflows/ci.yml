@@ -11,6 +11,9 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash   # explicit bash runs with -eo pipefail, so a failing simulator fails the piped step
     strategy:
       matrix:
         python-version: ["3.12", "3.13"]
@@ -20,17 +23,26 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -r requirements-dev.txt
-      - run: python -m pytest -p no:cacheprovider   # includes workflow scenarios and the read-zone lint
-      # Repository checks (docs/architecture.md 14.5.4, 14.5.5, 14.7.1)
+      # Full suite: unit, integration, simulation (every workflow scenario), safety, read-zone lint, repository checks.
+      - run: python -m pytest -p no:cacheprovider
+      # Repository checks (docs/architecture.md 14.5.4, 14.5.5, 14.7.1, 14.13.8)
+      - name: README validator
+        run: python tools/validation/check_workflow_readmes.py
+      - name: MITRE mapping and workflow index generator check
+        run: python tools/validation/generate_workflow_docs.py --check
       - run: python tools/validation/validate_config.py
       - run: python tools/validation/check_endpoints.py
-      - run: python tools/validation/check_workflow_readmes.py
-      - run: python tools/validation/generate_workflow_docs.py --check
-      - run: |
+      - name: Simulator, bundled incident scenarios (dry run and simulated live)
+        run: |
           for scenario in ransomware phishing account_takeover ransomware_domain_controller; do
             python tools/simulator/simulate.py "$scenario" --live --check > /dev/null
             python tools/simulator/simulate.py "$scenario" --check > /dev/null
           done
-      - run: >-
+      - name: Simulator, every workflow scenario (dry run)
+        run: python tools/simulator/simulate.py --all-workflows --check | tail -n 1
+      - name: Simulator, every workflow scenario (simulated live)
+        run: python tools/simulator/simulate.py --all-workflows --live --check | tail -n 1
+      - name: Simulator, tests-only sample workflow
+        run: >-
           python tools/simulator/simulate.py --workflow sample-malware --check
           --package tests.fixtures.sample_workflows --scenario-root tests/fixtures/sample_workflows/scenarios > /dev/null
