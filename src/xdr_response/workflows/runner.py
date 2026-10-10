@@ -129,7 +129,9 @@ class RuleOutcomeStatus(StrEnum):
     #: The file the action targets carries the signer of an approved tool (``approved_rmm`` /
     #: ``approved_dns_tools`` ``signers``) in a record of the run, or the process the action targets
     #: (``<HOST>/<pid>``) runs a binary whose SHA-256 is allow-listed (``never_block.hashes``, an
-    #: approved tool's ``hashes``): not proposed, shown as considered.
+    #: approved tool's ``hashes``): not proposed, shown as considered. Also an action that rests only
+    #: on sanctioned binaries (``RecommendationRule.binaries``) or only on indicators whose block the
+    #: allow-list excludes (``RecommendationRule.indicators``).
     ALLOWLISTED = "ALLOWLISTED"
 
 
@@ -473,6 +475,25 @@ def _record_addresses(index: RecordIndex, kind: TargetKind, target: str) -> tupl
     return tuple(out)
 
 
+def _record_endpoint_labels(index: RecordIndex, kind: TargetKind,
+                            target: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """``(groups, tags)`` every endpoint record of the run reports for the host an endpoint action acts
+    on, matched by host identity (``same_endpoint``: short name or FQDN, any case), in record order.
+    Two sources can spell one host differently (``TH-LT-1047`` with the connector, its DNS name with
+    the ``Domain Controllers`` group or the ``production`` tag): the critical context of either
+    spelling applies to the host (14.13.3). Context only, never removes."""
+    if kind not in _ENDPOINT_TARGETS:
+        return (), ()
+    host = target.partition("/")[0] if kind is not TargetKind.ENDPOINT else target
+    groups: dict[str, None] = {}
+    tags: dict[str, None] = {}
+    for record in index.records():
+        if isinstance(record, EndpointRecord) and (record.groups or record.tags)                 and same_endpoint(str(record.hostname), host):
+            groups.update(dict.fromkeys(str(g) for g in record.groups))
+            tags.update(dict.fromkeys(str(t) for t in record.tags))
+    return tuple(groups), tuple(tags)
+
+
 #: Role changes after which the account holds (or can activate at will) the role.
 _ROLE_GAINED = frozenset({"assigned", "activated", "eligible_assigned"})
 
@@ -496,6 +517,40 @@ def _record_privileged(index: RecordIndex, kind: TargetKind, target: str) -> boo
                 and str(record.user).lower() == wanted):
             return True
     return False
+
+
+def _record_directory(index: RecordIndex, kind: TargetKind, target: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """``(groups, roles)`` the run's user profile records report for the account an action acts on.
+
+    Context only, never removes: an account in a critical group (``Executives``, ``Service Accounts``,
+    ``Domain Admins`` ...) or holding a critical role is then classified by the critical-asset policy
+    whatever the rule's asset expression says (14.13.6).
+    """
+    if kind not in (TargetKind.USER, TargetKind.EMAIL_ADDRESS):
+        return (), ()
+    wanted = target.strip().lower()
+    groups: dict[str, None] = {}
+    roles: dict[str, None] = {}
+    for record in index.records():
+        if isinstance(record, UserProfileRecord) and str(record.user).lower() == wanted:
+            groups.update(dict.fromkeys(str(g) for g in record.groups if str(g).strip()))
+            roles.update(dict.fromkeys(str(r) for r in record.roles if str(r).strip()))
+    return tuple(groups), tuple(roles)
+
+
+def _indicator_entry(value: Any) -> tuple[ActionType, TargetKind, str] | None:
+    """``(block action, target kind, target)`` of one ``RecommendationRule.indicators`` entry
+    (``"<block action>:<target>"``), else None."""
+    if not isinstance(value, str):
+        return None
+    action_text, sep, target = value.partition(":")
+    if not sep or not target.strip():
+        return None
+    try:
+        action = ActionType(action_text.strip())
+    except ValueError:
+        return None
+    return action, get_action_spec(action).target_kind, target.strip()
 
 
 def _error_text(exc: BaseException) -> str:
@@ -852,6 +907,7 @@ class WorkflowRunner:
         self._approved_signer(state, rule, scored)
         self._allowlisted_binary(state, rule, scored)
         self._sanctioned_binaries(state, rule, scored, names)
+        self._allowlisted_indicators(state, rule, scored, names)
         if breakdown.risk_score < rule.min_risk or breakdown.confidence_score < rule.min_confidence:
             raise _RuleFailure(RuleOutcomeStatus.BELOW_THRESHOLD,
                                f"risk {breakdown.risk_score} (min {rule.min_risk}), confidence "
@@ -982,6 +1038,59 @@ class WorkflowRunner:
                            record_ids=tuple(dict.fromkeys([*scored.rule_ids, *record_ids])),
                            breakdown=scored.breakdown)
 
+    def _allowlisted_indicators(self, state: _Run, rule: RecommendationRule, scored: _Scored,
+                                names: Mapping[str, Any]) -> None:
+        """Withhold an action that rests only on indicators the allow-list excludes (``rule.indicators``).
+
+        A rule whose case is "the asset met an indicator" (an account revoked because it signed in
+        from a rated IP) names those indicators as ``<block action>:<target>`` entries. When the
+        allow-list excludes the block of **every** one (``never_block`` IPs, CIDRs, domains, URLs or
+        hashes, an approved tool, a non-public address or an internal domain), the action would rest
+        only on the organisation's own infrastructure and would hit every user behind it: it is not
+        proposed, shown as considered and as an ``ALLOWLISTED`` outcome, never silently dropped. One
+        indicator that is not excluded keeps the action proposed. ``[]`` (or None) when the target
+        stands on its own evidence; a target the allow-list already excludes is left to
+        ``PackageBuilder`` (14.13.6).
+        """
+        if rule.indicators is None:
+            return
+        allowlists = state.ctx.allowlists
+        if allowlists.excluded_reason(rule.action, scored.target, scored.kind):
+            return
+        value = self._expr(rule.indicators, names, "indicators")
+        if value is None:
+            return
+        if isinstance(value, (str, Mapping)) or not isinstance(value, Iterable):
+            raise _RuleFailure(RuleOutcomeStatus.ERROR, f"indicators: must give a list, got {type(value).__name__}")
+        entries = list(value)
+        if not entries:
+            return
+        reasons: dict[str, None] = {}
+        for raw in entries:
+            entry = _indicator_entry(raw)
+            if entry is None:
+                raise _RuleFailure(RuleOutcomeStatus.ERROR,
+                                   "indicators: every entry must be '<block action>:<target>'")
+            action, kind, target = entry
+            try:
+                normalized = _normalized(kind, target)
+            except ValueError:
+                return  # an indicator that cannot be normalized is never shown to be allow-listed
+            reason = allowlists.excluded_reason(action, normalized, kind)
+            if not reason:
+                return
+            reasons[f"{action.value}:{normalized}: {reason}"] = None
+        detail = (f"{rule.action.value} {scored.target} rests only on allow-listed indicators "
+                  f"({'; '.join(reasons)}): allow-listed, not proposed")
+        subject = f"{rule.action.value}:{scored.target}"
+        if not any(c.subject == subject for c in state.considered):
+            redactor = get_redactor()
+            state.considered.append(Consideration(
+                subject=redactor.redact_text(subject)[:_SUBJECT_CHARS],
+                reason=redactor.redact_text(detail)[:_NOTE_CHARS], record_ids=tuple(scored.rule_ids)))
+        raise _RuleFailure(RuleOutcomeStatus.ALLOWLISTED, detail, target=scored.target,
+                           record_ids=scored.rule_ids, breakdown=scored.breakdown)
+
     def _expr(self, expression: str, names: Mapping[str, Any], what: str) -> Any:
         try:
             return evaluate(expression, names)
@@ -1041,18 +1150,25 @@ class WorkflowRunner:
         records) and the recipients of the message an action quarantines or deletes (message
         records); every address of the endpoint (all ``ip_addresses`` of its endpoint records, not
         only the first: a production address on a second interface counts); and, for an account,
-        the identity source's ``privileged`` flag (user profile records). An executive's endpoint or
-        mailbox, a host with a critical address and an account the source marks privileged are then
-        ELEVATED with a warning whatever the rule's asset expression says. Context is only ever added.
+        the identity source's ``privileged`` flag, groups and roles (user profile records); for an
+        endpoint action, the groups and tags of every endpoint record of the same host under any
+        spelling (``same_endpoint``: short name or FQDN). An
+        executive's endpoint or mailbox, a host with a critical address, an account the source marks
+        privileged and an account in a critical group (``Executives``, ``Service Accounts``, ``Domain
+        Admins``) are then ELEVATED with a warning whatever the rule's asset expression says. Context
+        is only ever added.
         """
         users, _ids = _record_users(state.index, kind, target)
         addresses = _record_addresses(state.index, kind, target)
         privileged = _record_privileged(state.index, kind, target)
-        if not users and not addresses and not privileged:
+        groups, roles = _record_directory(state.index, kind, target)
+        host_groups, tags = _record_endpoint_labels(state.index, kind, target)
+        groups = tuple(dict.fromkeys((*groups, *host_groups)))
+        if not users and not addresses and not privileged and not groups and not roles and not tags:
             return asset
         try:
             found = Asset(name=target, kind=kind, users=users, ip=addresses[0] if addresses else None,
-                          ips=addresses[1:], privileged=privileged)
+                          ips=addresses[1:], privileged=privileged, groups=groups, roles=roles, tags=tags)
         except ValueError:
             return asset
         return _merge_assets(asset, found)

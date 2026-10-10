@@ -435,6 +435,12 @@ class RecommendationRule(FrozenModel):
     #: or approved-tool hash, approved signer on a prevalence record) the runner withholds the action as
     #: ALLOWLISTED and shows it as considered. ``[]`` (or None) when the target stands on its own.
     binaries: str | None = None
+    #: expression -> list of ``"<block action>:<target>"`` entries: the indicators whose meeting alone
+    #: the recommendation rests on (an account revoked because it signed in from a rated IP). When the
+    #: allow-list excludes the block of every one (``never_block``, approved tools, non-public
+    #: addresses, internal domains) the runner withholds the action as ALLOWLISTED and shows it as
+    #: considered. ``[]`` (or None) when the target stands on its own.
+    indicators: str | None = None
     params: Mapping[str, str] = {}  # param name -> expression; reserved keys refused; no floats
     rationale: str  # expression -> str
     min_risk: int = Field(default=0, ge=0, le=100)  # below: "considered, not proposed" note
@@ -460,7 +466,7 @@ class RecommendationRule(FrozenModel):
                              "types can be recommended (restoration is only built by RestorationPlanner)")
         return value
 
-    @field_validator("for_each", "when", "target", "evidence", "asset", "binaries", "rationale")
+    @field_validator("for_each", "when", "target", "evidence", "asset", "binaries", "indicators", "rationale")
     @classmethod
     def _expressions(cls, value: str | None, info: Any) -> str | None:
         return _check_expr(value, f"rule {info.field_name}")
