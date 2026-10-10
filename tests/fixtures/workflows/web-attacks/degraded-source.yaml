@@ -1,0 +1,72 @@
+# web-attacks workflow scenario; fake lab data only.
+schema: 1
+name: degraded-source
+workflow: web-attacks
+description: >-
+  Cisco XDR (an expected source) is unavailable for every enrichment. The run lists it as a degraded
+  source and still recommends the whole package: the web shell detection backs the isolation and the URL
+  block, and VirusTotal and the security product's MALICIOUS verdict on the upload requests rate the
+  source. Confidence drops; nothing is blocked by the outage. Production parity: isolate_endpoint
+  through secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so
+  containment is PARTIALLY_CONTAINED.
+tags: [degraded_source, true_positive, approve_all]
+mode: both
+suite: {secure_endpoint: [endpoint], cisco_xdr: [intel], umbrella: [network], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-WEB-0005
+  title: Web shell detected on WEB-SHOP-01 after upload exploitation
+  severity: HIGH
+  workflow_id: web-attacks
+  observables:
+    - {type: hostname, value: WEB-SHOP-01}
+    - {type: ip, value: 203.0.113.145}
+    - {type: url, value: "https://shop.example.net/upload"}
+  trigger: {source: secure_endpoint, mitre_techniques: [T1505.003, T1190]}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.145, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [cisco_xdr, virustotal], summary: "web exploitation source"}
+    - {type: sha256, value: 5be11a7e5be11a7e5be11a7e5be11a7e5be11a7e5be11a7e5be11a7e5be11a7e, verdict: MALICIOUS, risk_score: 90, confidence: 85,
+       integrations: [cisco_xdr, virustotal], summary: "web shell"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WEB-SHOP-01
+      record: {kind: endpoint, hostname: WEB-SHOP-01, connector_guid: 00000000-0000-4000-8000-000000000101,
+               os: Windows Server 2022, groups: [Web Servers], ip_addresses: [198.51.100.10],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WEB-SHOP-01
+      record: {kind: network_connection, endpoint: WEB-SHOP-01, remote_ip: 203.0.113.145, local_ip: 198.51.100.10,
+               protocol: tcp, direction: inbound, url: "https://shop.example.net/upload", process_name: w3wp.exe,
+               count: 3, action: allowed, verdict: MALICIOUS, first_seen: "2026-01-15T09:40:00Z",
+               last_seen: "2026-01-15T09:42:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WEB-SHOP-01
+      record: {kind: process_event, event_id: evt-web-0101-1, endpoint: WEB-SHOP-01, timestamp: "2026-01-15T09:42:30Z",
+               event_type: file_create, process_name: w3wp.exe, pid: 4410,
+               sha256: 5be11a7e5be11a7e5be11a7e5be11a7e5be11a7e5be11a7e5be11a7e5be11a7e,
+               file_path: "C:\\inetpub\\shop\\uploads\\img_cache.aspx", verdict: MALICIOUS}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WEB-SHOP-01
+      record: {kind: detection, detection_id: det-web-0101, name: Web shell file written to web root, verdict: MALICIOUS,
+               severity: HIGH, category: Web Shell, endpoint: WEB-SHOP-01, process_name: w3wp.exe,
+               sha256: 5be11a7e5be11a7e5be11a7e5be11a7e5be11a7e5be11a7e5be11a7e5be11a7e,
+               file_path: "C:\\inetpub\\shop\\uploads\\img_cache.aspx", mitre_techniques: [T1505.003],
+               status: active, first_seen: "2026-01-15T09:43:00Z"}
+  faults:
+    - {kind: UNAVAILABLE, integration: cisco_xdr, operation: enrich, times: 20}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: true
+  actions:
+    - block_ip:203.0.113.145
+    - "block_url:https://shop.example.net/upload"
+    - isolate_endpoint:WEB-SHOP-01
+  degraded_sources: [cisco_xdr]
+  manual_steps: ["waf-virtual-patch:https://shop.example.net/upload", "review-web-root:WEB-SHOP-01"]
+  containment: PARTIALLY_CONTAINED
+  controls: 3

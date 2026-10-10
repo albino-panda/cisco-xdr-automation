@@ -1,128 +1,300 @@
-# Workflow: Web application attacks
+# Web application attacks
 
-Respond to injection, scanning or web shell activity against internet-facing applications.
+Phase 5 add-on workflow `web-attacks` (definition version 2.0.0). Code:
+`src/xdr_response/workflows/web_attacks/` (`definition.py`, `hooks.py`). It replaces the legacy
+plan-rule spec (`workflow.yaml` and its five scenarios), which were migrated to typed simulation
+scenarios and deleted. The binding design is [docs/architecture.md](../../docs/architecture.md)
+sections 12 to 14.
 
-|  |  |
-|---|---|
-| Default severity | medium |
-| Status | Specification. Not yet built in XDR Automation. |
-| Machine-readable spec | [`workflow.yaml`](workflow.yaml) |
-| Integrations | [Cisco XDR](../../integrations/cisco-xdr/README.md), [Cisco Umbrella / Secure Access](../../integrations/umbrella/README.md), [Splunk](../../integrations/splunk/README.md), [Cisco Secure Endpoint](../../integrations/secure-endpoint/README.md), [Cisco Meraki](../../integrations/meraki/README.md), [Cloudflare](../../integrations/cloudflare/README.md), [ServiceNow](../../integrations/servicenow/README.md) |
+## Purpose
 
-## Triggers
+Handle injection, exploit, scanning or web shell activity against an internet-facing application.
+The workflow automatically investigates the web servers (detections, inbound requests, the web
+worker's process and file activity), rates every external source that attacked them, finds the
+other servers the same sources reached, and then **recommends** a containment package with
+numbered evidence and separate risk and confidence scores:
 
-- **Incident rule** in XDR Automation matching the techniques below or the detection titles your sources produce.
-- **Pivot menu** on an incident or observable for manual runs.
-- **Playbook task** in the matching XDR incident response playbook.
+- block an attacking source IP that is rated (enrichment MALICIOUS or SUSPICIOUS, or a request the
+  security product flagged MALICIOUS);
+- block the targeted application URL that was exploited (a flagged or attacker request to it
+  reached a server that shows a web shell or a successful exploit); the virtual patch at the WAF
+  or CDN is a manual step;
+- isolate a web server with a confirmed web shell.
 
-## Detection signals
+Scanning or exploit attempts alone never isolate a server: isolation needs a confirmed web shell.
+The workflow never executes, approves or chooses an approval level. A human approves the package;
+only then does the lifecycle orchestrator execute, verify and (after a separate human release
+approval) restore.
 
-Typical alerts that should route to this workflow:
+Default severity: MEDIUM. Related workflows: [malware](../malware/README.md) (hand-off target),
+[vulnerability-exploitation](../vulnerability-exploitation/README.md),
+[persistence](../persistence/README.md).
 
-- Cloudflare WAF rule hits above baseline
-- Web shell detection on a web server
+## Trigger
 
-## MITRE ATT&CK
-
-| Technique | Name |
-|---|---|
-| [T1190](https://attack.mitre.org/techniques/T1190/) | Exploit Public-Facing Application |
-| [T1595.002](https://attack.mitre.org/techniques/T1595/002/) | Vulnerability Scanning |
-| [T1505.003](https://attack.mitre.org/techniques/T1505/003/) | Web Shell |
-
-## Response flow
-
-1. **Intake.** Load the incident summary, observables and the guardrails file.
-2. **Enrich.** [`enrich-ip`](../../atomic/enrich-ip/README.md), [`enrich-domain`](../../atomic/enrich-domain/README.md).
-3. **Investigate.** [`investigate-host`](../../atomic/investigate-host/README.md).
-4. **Decide.** Build a containment plan from the [containment rules](#containment-rules) and skip allow-listed and internal targets; protected and over-limit targets stay planned with ELEVATED approval and a visible warning. Send the plan to an approver unless `dry_run` is true.
-5. **Contain.** Run the approved actions below. Each action records its result, even when skipped.
-6. **Record.** Add an incident note (plan, approvals, results and the rollback for every action) and [`create-ticket`](../../atomic/create-ticket/README.md).
-7. **Notify.** [`notify-soc`](../../atomic/notify-soc/README.md).
-
-### Containment actions
-
-| Action | When | Approval |
+| Type | Matches | Priority |
 |---|---|---|
-| [`block-ip`](../../atomic/block-ip/README.md) | External source IP from the incident whose `enrich-ip` verdict is malicious or suspicious and that is not in `incident.context.authorized_scanners`. Internal, allow-listed or private addresses are skipped by the guardrails. Expires after `expiry_hours.block-ip`. | yes |
-| [`block-url`](../../atomic/block-url/README.md) | Endpoint listed in `incident.context.targeted_endpoints` that is known vulnerable while its fix is still pending (virtual patch at the edge). URLs on allow-listed domains are skipped by the guardrails. | yes |
-| [`isolate-endpoint`](../../atomic/isolate-endpoint/README.md) | Investigated web server with a detection of disposition malicious and technique T1505.003 (confirmed web shell) whose connector allows isolation. Scanning or exploit attempts alone never isolate. Runs only after the approver and the server owner accept the plan. | yes |
+| XDR incident rule | the incident reports a web shell (T1505.003) | 145 |
+| XDR incident rule | the incident reports vulnerability scanning (T1595.002) **and** carries an IP, URL or hostname | 125 |
+| XDR incident rule | the title names a web shell, an injection (`*sql injection*`, `*command injection*`, `*code injection*`, `*cross-site scripting*`, `*path traversal*`, `*directory traversal*`, `*file inclusion*`), a web or vulnerability scan, a web application attack or a WAF alert (`*waf rule*`, `*waf alert*`, `*web application firewall*`) **and** the incident carries an IP, URL or hostname | 120 |
+| Manual | an analyst starts the workflow for an incident, a web server, a source IP or a URL (never matches automatically) | n/a |
 
-### Error handling
+An incident whose `workflow_id` is `web-attacks` always runs this workflow. When several workflows
+match, the highest priority wins, then the workflow id. Every automatic trigger outranks malware
+(100), which this workflow hands off to. Exploitation of a public-facing application (T1190) is
+not a trigger here: an incident that reports it goes to the vulnerability-exploitation workflow
+(priority 135, exposed services in general), unless it also reports a web shell, which this
+workflow takes (145). Run this workflow manually, or set the incident's `workflow_id`, for an
+exploitation incident that is a web application attack.
 
-Every step sets `on_error` in [`workflow.yaml`](workflow.yaml):
+## Required integrations
 
-| Steps | `on_error` | Why |
-|---|---|---|
-| `load_incident`, `load_guardrails` | `stop` | Without the incident or the guardrails nothing can be planned safely. |
-| `enrich_ip`, `enrich_domain`, `investigate_host` | `continue` | A missing record only means fewer rules match; the gap is shown in the note. |
-| `build_plan`, `approval` | `escalate` | No plan or no approval means a human decides; containment never runs without an approved plan. |
-| `block_ip`, `block_url`, `isolate_endpoint` | `escalate` | A failed containment action leaves the attack path open and needs a human. |
-| `incident_note` | `escalate` | The rollback record for every containment action is mandatory. |
-| `create_ticket`, `notify_soc` | `continue` | The incident note already holds the record. |
+These are the expected sources: when one is disabled or failing, the run notes it and confidence
+drops, but a recommendation backed by other evidence is still made.
 
-## Containment rules
+- `secure_endpoint`: web server detections (web shell, exploit), device trajectory (the web
+  worker's process and file activity, inbound requests) and the isolation of a web server with a
+  confirmed web shell (`investigate_endpoint`). With the real adapter the computer, trajectory and
+  isolation calls are VERIFIED; trajectory events stay generic records until their field schema is
+  documented.
+- `cisco_xdr`: platform verdicts of the attacking sources and of the web shell hash (`enrich_ip`,
+  `enrich_hash`), enterprise sightings of the sources (`search_ip_enterprise`), endpoint context
+  (`investigate_endpoint`) and the native response actions. WAF and IPS alerts arrive here as
+  incidents.
 
-The `plan` list in [`workflow.yaml`](workflow.yaml) turns the conditions above into rule expressions
-(language in [`engine/README.md`](../../engine/README.md)). The guardrails run after each rule matches.
+## Optional integrations
 
-| Rule id | Atomic | Condition in plain English |
-|---|---|---|
-| `block_attacking_sources` | `block-ip` | For each enriched IP: the verdict is malicious or suspicious and the IP is not listed as an authorised scanner in the incident context. Target is the IP; expiry comes from the guardrails (default 168 hours). |
-| `block_vulnerable_endpoint` | `block-url` | For each endpoint in `incident.context.targeted_endpoints`: it is marked vulnerable and its fix is pending. Target is the endpoint URL. |
-| `isolate_web_shell_host` | `isolate-endpoint` | For each investigated host: the connector allows isolation and at least one detection is malicious with technique T1505.003 (web shell). Target is the connector GUID; the reason names the host and incident. |
+- `defender_endpoint`: second web server source (machine, alerts, timeline, enterprise search) and
+  isolation or indicator blocks for the servers it manages.
+- `virustotal`: public reputation of the attacking sources and of the web shell hash (public
+  indicators only, disclosure policy).
+- `alienvault_otx`: independent reputation (OTX pulses) of the sources and the web shell hash.
+- `microsoft_cloud`: Defender XDR alerts and hunting rows: other servers that received requests
+  from the sources.
+- `splunk`: WAF, load balancer and web server logs of other servers the sources reached (optional,
+  disabled by default; rows stay citable generic records).
+- `meraki`: landing product for approved blocks of an attacking source IP at the MX firewall.
+- `umbrella`: landing product for an approved block of the exploited URL (destination lists).
 
-Incident context fields the rules read (set by the triggering source or the analyst):
+The legacy Cloudflare edge is not an integration: there is no WAF, CDN or load balancer adapter
+with a VERIFIED write, so the edge virtual patch is a manual step.
 
-- `authorized_scanners`: list of IPs of sanctioned external scanners. Optional.
-- `targeted_endpoints`: list of `{url, vulnerable, fix_pending}` for application endpoints the attack targeted. Optional.
+## Input data
 
-`investigate-host` detections are read as `{name, disposition, technique}`; `technique` is optional.
+Incident observables of type `ip` (attacking sources), `url` (targeted application paths),
+`hostname` (web servers) and `sha256`, `trigger.mitre_techniques` / `trigger.source` for routing
+and, optionally, `trigger.authorized_scanners` (addresses the detection source marks as sanctioned
+external scanners). The legacy context fields `targeted_endpoints`, `vulnerable` and `fix_pending`
+are not read: vulnerability state from incident context is data, never evidence. Values found by
+earlier steps feed later steps (the servers the enterprise search finds are investigated next).
+All test data is fake.
 
-## Inputs
+## Investigation steps
 
-| Variable | Type | Required | Description |
+All steps are read-only atomics; a failing step or source is noted and the run continues.
+
+| # | Step | Atomic | Subjects | Sources |
+|---|---|---|---|---|
+| 1 | `web_server_triage` | `investigate_endpoint` | incident hostnames | Secure Endpoint, Defender, Cisco XDR |
+| 2 | `source_reputation` | `enrich_ip` | incident IPv4 addresses and the sources of inbound requests to the servers (at most 25) | every enricher, disclosure policy applies |
+| 3 | `source_sightings` | `search_ip_enterprise` | incident IPv4 addresses and every source rated MALICIOUS or SUSPICIOUS (at most 10) | Cisco XDR, Defender, Defender XDR, Splunk |
+| 4 | `related_servers` | `investigate_endpoint` | the other servers the searches saw receiving requests from those sources (at most 10) | Secure Endpoint, Defender, Cisco XDR |
+| 5 | `web_shell_reputation` | `enrich_hash` | hashes of flagged detections and of flagged file or process events on the servers (at most 10) | every enricher |
+
+The hooks (`hooks.py`) then derive facts from the run's own records, each with the record ids it
+was computed from:
+
+- **sources**: every external IPv4 source the incident names or that sent an inbound request to an
+  investigated server. A source is *rated* when the aggregate enrichment is MALICIOUS or
+  SUSPICIOUS, or when the security product flagged one of its requests MALICIOUS. A source listed
+  in `trigger.authorized_scanners` is *authorized*.
+- **servers**: every web server seen. A *confirmed web shell* is an active (not resolved) MALICIOUS
+  detection that reports the web shell technique or a web-shell name or category. A *successful
+  exploit* is an active MALICIOUS detection that reports exploitation of a public-facing
+  application or an exploit category. Only a confirmed web shell makes the server a candidate for
+  isolation.
+- **urls**: every targeted application URL (inbound requests and incident URLs). A URL is
+  *exploited* when a flagged request, or a request from a rated source, that was not blocked
+  reached a server with a confirmed web shell or a successful exploit, or when the incident names
+  both the URL and such a server and a request record to that server mentions the URL (a blocked
+  request included). A URL that only the incident names (no request, WAF or IPS record mentions it) is never exploited, even when the
+  incident also names such a server: the observable list is not evidence, so the URL is shown as
+  considered (`block_url:<url>`, citing the server's compromise records) and never blocked.
+
+## Correlation logic
+
+- Framework links: the same IP, URL or hash on two or more servers (one source attacking a pool),
+  the same server across sources, and process lineage on the server. Window 24 hours, because
+  scans and exploitation are often hours apart.
+- Workflow links (hooks, kind `workflow`): an attack request (the source IP, the server it reached
+  and the targeted URL) and a web shell (the server and the hash of the web shell file).
+- Links shape the clusters, the blast radius and the decision card. They are never evidence on
+  their own and never change an approval level.
+
+## Risk calculation
+
+Each target is scored by the scoring engine (docs/threat-scoring.md) from the records its rule
+cites plus the target's enrichment:
+
+- web server detections (web shell, exploit) and malicious process or file events:
+  `endpoint_detection` (weight 1.0);
+- inbound request records that carry the security product's verdict: `network_behaviour`;
+- Cisco XDR, VirusTotal and OTX answers: vendor reputation, capped by the engine; one vendor alone
+  is never an aggregate MALICIOUS verdict;
+- a critical asset adds the engine's critical-asset bonus (only with malicious evidence).
+
+Risk and confidence are separate integers. Expected sources are Secure Endpoint and Cisco XDR: a
+failed one costs confidence once and is listed as degraded. Rule thresholds (below them the action
+is "considered, not proposed" and listed in the notes, never hidden): isolation risk 60, URL block
+risk 30, source block risk 30 (the MEDIUM band: a scanning source rated SUSPICIOUS by vendor
+reputation alone still reaches it).
+
+## Containment recommendations
+
+| Rule | Action (builder) | Proposed when | Evidence cited |
 |---|---|---|---|
-| `incident_id` | string | no | Cisco XDR incident ID, used for notes and audit. |
-| `dry_run` | boolean | no | When true, report the planned change without making it. Default true for containment. |
-| `observables` | list | no | Overrides the incident observables. |
+| `block_attacking_source` | `block_ip` | the source is rated and not listed as an authorised scanner | the source's inbound requests plus the rating records (flagging enrichment, MALICIOUS requests) |
+| `block_exploited_url` | `block_url` | the URL is exploited | the flagged or attacker requests to the URL plus the compromise records (web shell or exploit detections) of the server they reached |
+| `isolate_web_shell_server_secure_endpoint` | `isolate_endpoint` (`isolate_secure_endpoint`, `connector_guid` param) | the server has a Secure Endpoint connector, isolation is not known to be impossible, and it has a confirmed web shell | the web shell detections, the server's flagged process and file events and the attack requests that reached it |
+| `isolate_web_shell_server_defender_endpoint` | `isolate_endpoint` (`isolate_defender_endpoint`) | the same, for a server with a Defender machine id (a duplicate of the Secure Endpoint proposal is merged) | the same |
 
-## Guardrails
+Allow-listed and non-public targets (a sanctioned scanner in `allowlists.never_block.ips`, an
+internal load-balancer address, a URL on an own domain) are still built and shown as excluded with
+the reason, never dropped. A critical server (for example a production web server) stays proposed
+with ELEVATED approval and a warning.
 
-- `dry_run` defaults to `true`. Switch it off per workflow only after a successful review of dry-run output.
-- Nothing is actioned without a human approval. Allow-listed indicators are never actioned; protected hosts and users, and every action over a blast-radius cap, need ELEVATED approval with a visible warning.
-- Blast-radius limits cap how many hosts, users or indicators a single run may touch.
-- Every containment action is reversible except session revocation, and the rollback is written into the incident note.
+### Hand-offs, manual steps and items not proposed
 
-## Notes
+- Not proposed, and listed as considered: a rated source the detection source lists as an
+  authorised scanner; a source whose requests are flagged SUSPICIOUS only and that no source
+  rates; a server with a successful exploit but no confirmed web shell, or with a web-shell
+  detection that is only SUSPICIOUS or already resolved (not isolated); a URL probed by flagged
+  requests without any sign that the exploitation succeeded (not blocked); a URL that only the
+  incident names next to a compromised server, with no record that mentions it (not blocked: the
+  observable list is not evidence).
+- Manual steps: the virtual patch of every exploited URL at the WAF, CDN or load balancer
+  (`waf-virtual-patch:<url>`); the review of the web root of every server with a confirmed web
+  shell (`review-web-root:<HOST>`: remove the web shell after evidence capture, rotate the
+  application's credentials); the isolation of a web-shell server whose agent policy forbids
+  isolation or that no EDR manages (take it out of the load-balancer pool by hand).
+- Hand-offs: `malware`, for the hashes of confirmed web shell files (scope the file across the
+  estate, quarantine it and block its hash).
 
-- Scanning alone is usually low severity; escalate only when combined with success indicators. Scanning
-  sources may be blocked, but isolation needs a confirmed web shell.
-- Isolating a protected web server with a confirmed web shell needs ELEVATED approval, and one that is not isolation-capable is not isolated; the ticket asks the owner to take it out of the pool and review its web root.
-- `block-url` targets on an allow-listed domain (for example `example.com`) are skipped by the guardrails,
-  so virtual patches for applications on your own allow-listed domains need a manual edge rule.
+They appear in the run notes and in the analyst summary ("Considered, deliberately not proposed",
+"Manual steps", "Suggested hand-offs"), each with the record ids that show it. A hand-off is a
+suggestion only: it starts nothing and never changes the package (architecture 14.10.1).
 
-## Scenarios
+## Approval requirements
 
-Scenario files in [`scenarios/`](scenarios/) pin the expected plan. Run them with
-`PYTHONPATH=engine python -m xdr_plan check web-attacks` from the repository root. They use
-`shop.example.net` as an internet-facing application domain that is not on the allow-list.
+- Every action in the package needs human approval before it runs: source and URL blocks,
+  isolation, and later every release. AI and automation principals can never approve, and nothing
+  in the workflow can switch approval off.
+- ELEVATED approval (a human holding the elevated approver role, for example the SOC lead) applies,
+  with a visible warning on the decision card, when a target is a critical asset (for example a
+  production web server, by host name pattern, tag, group or address) or when a blast-radius cap is
+  exceeded (for example more than 50 indicators to block in one package). ELEVATED is decided by
+  `PackageBuilder` from the investigated asset context; the workflow never sets it and a critical
+  asset is never skipped silently.
+- Isolating a web server takes the application offline: the decision card shows the server, the
+  web shell evidence and the attack sources, so the approver can coordinate with the server owner
+  before approving.
+- The analyst may approve all, approve a selection, reject, or ask for more investigation.
 
-| File | What it proves |
+## Containment execution
+
+After approval the orchestrator executes the approved actions automatically, through the guard and
+the approval token, native first (Cisco XDR `respond/trigger` when `native_actions` is configured),
+then directly:
+
+| Action | Route with the real adapters |
 |---|---|
-| [`01-confirmed-web-shell.yaml`](scenarios/01-confirmed-web-shell.yaml) | A confirmed web shell plans all three actions: block the source, block the vulnerable endpoint and isolate the infected server, while a clean server in the same pool is left alone. |
-| [`02-authorised-scanner.yaml`](scenarios/02-authorised-scanner.yaml) | An authorised external scanner with a suspicious reputation, no vulnerable endpoint and a clean server produces no actions. |
-| [`03-scanning-only.yaml`](scenarios/03-scanning-only.yaml) | Unauthorised scanning blocks the source only; a suspicious non-web-shell detection does not isolate the server. |
-| [`04-guardrail-skips.yaml`](scenarios/04-guardrail-skips.yaml) | Isolation of a protected server is planned with `elevated: true`; an internal source (`skipped_internal`) and an endpoint on the allow-listed domain (`skipped_allowlisted`) are skipped, and the external source block is planned. |
-| [`05-distributed-sources-escalate.yaml`](scenarios/05-distributed-sources-escalate.yaml) | More attacking sources than `max_indicators_blocked` keeps every block planned with `elevated: true` and escalates to a lead. |
+| block IP | Meraki MX L3 rules or Defender indicators (VERIFIED), or the native action; direct Umbrella IP blocking is UNVERIFIED and never called |
+| block URL | Umbrella destination lists (VERIFIED), Defender indicators (VERIFIED), or the native action |
+| isolate endpoint | Secure Endpoint `PUT /v1/computers/{connector_guid}/isolation` (VERIFIED) or Defender `POST /api/machines/{id}/isolate` (VERIFIED), or the native action |
 
-## Related workflows
+A URL block lands on the DNS and web security layer: it stops the organisation's own users and
+managed endpoints from reaching the path. Filtering internet traffic in front of the application
+(the virtual patch) stays a manual step at the edge. An UNROUTED action is listed on the decision
+card and in the notes for manual handling; it is never dropped. Unlock codes for isolated servers
+stay in the Secure Endpoint console and are never copied into notes, notifications or reports.
 
-[`vulnerability-exploitation`](../vulnerability-exploitation/README.md), [`persistence`](../persistence/README.md)
+## Verification
 
-## Building it in XDR Automation
+Verification is automatic after execution and reads the target state back: Umbrella destination
+lists and Meraki rules are read back; Defender machine actions are VERIFIED or NOT_VERIFIED;
+Secure Endpoint isolation and Defender indicators are UNABLE_TO_VERIFY until their read endpoints
+are VERIFIED (docs/integrations.md section 3). The result table shows every action with its
+execution and verification status (SUCCESS, ALREADY_CONTAINED, FAILED, SKIPPED,
+REJECTED_BY_ANALYST).
 
-1. Import the Cisco-managed atomics this workflow needs from the Exchange, plus the custom atomics in [`atomic/`](../../atomic/README.md).
-2. Create the workflow from [`workflow.yaml`](workflow.yaml): variables from `inputs`, one group per `phase`, conditions from `when`.
-3. Test with `dry_run = true` against a test incident (see [docs/testing](../../docs/testing/README.md)).
-4. Export the workflow JSON and commit it here as `workflow.export.json`.
+## Rollback
+
+Every action of the package is reversible and registers a temporary control: isolation (release
+endpoint), IP and URL blocks (unblock). Restoration needs its own human release approval of a
+release package built from the registry; closing the incident never removes a control by itself.
+Release a web server only after the web root is clean and the fix is deployed; remove an edge block
+once the fix ships. The legacy block expiry is a release-review reminder only: removing a block
+always needs that separate approval.
+
+## Failure handling
+
+- A failed or degraded source (for example Cisco XDR unavailable or VirusTotal over quota) is
+  listed as degraded, lowers confidence once, and never blocks a recommendation that other
+  evidence supports (the security product's verdict on the requests still rates a source when
+  enrichment fails, and the web shell detection still backs the isolation).
+- A step, rule or hook that fails is noted and skipped; the rest of the run still recommends.
+- A rule with no citable record proposes nothing (no invented evidence).
+- An approved action that fails at the vendor is reported FAILED and never retried silently; the
+  overall result is PARTIALLY_CONTAINED or CONTAINMENT_FAILED.
+
+## MITRE mapping
+
+| Tactic | Technique | Sub-technique | Why this workflow responds |
+|---|---|---|---|
+| TA0001 Initial Access | T1190 Exploit Public-Facing Application | none | blocks the rated attacking sources and the exploited URL, and puts the edge virtual patch in front of the analyst as a manual step |
+| TA0043 Reconnaissance | T1595 Active Scanning | T1595.002 Vulnerability Scanning | blocks a rated scanning source; scanning alone never isolates a server or blocks a URL |
+| TA0003 Persistence | T1505 Server Software Component | T1505.003 Web Shell | isolates a server with a confirmed web shell, hands the web shell file to the malware workflow and lists the web root review as a manual step |
+
+No other technique is mapped: what an attacker does through a web shell afterwards (commands,
+credential access, lateral movement) is handled by the workflows for those techniques when their
+detections fire.
+
+## Testing instructions
+
+- Simulation scenarios: `tests/fixtures/workflows/web-attacks/` (the minimum set of 14.5.3, five
+  edge cases and the five migrated legacy scenarios `legacy-01` to `legacy-05`). They run
+  automatically, in dry run and simulated live, in `tests/simulation/test_workflow_scenarios.py`.
+- Unit and lifecycle tests: `tests/workflows/web_attacks/`.
+- Commands (from the repository root):
+  - `python -m pytest -q -p no:cacheprovider tests/workflows/web_attacks tests/simulation/test_workflow_scenarios.py -k "web-attacks or web_attacks"`
+  - `python tools/validation/check_workflow_readmes.py --workflow web-attacks`
+  - `python tools/simulator/simulate.py --workflow web-attacks --scenario tp-approve-all --check` (add `--live` for the simulated live run)
+
+## Known limitations
+
+- There is no WAF, CDN or load balancer integration with a VERIFIED write (the legacy Cloudflare
+  edge is not a Phase 0 integration): the edge virtual patch of an exploited URL is a manual step,
+  and WAF alerts arrive only as Cisco XDR incidents.
+- An approved URL block lands on the DNS and web security layer (Umbrella, Defender indicators or
+  the native action) and an IP block on the Meraki MX, Defender indicators or the native action:
+  they do not filter internet traffic in front of the application, which stays with the edge team
+  by hand.
+- Real Secure Endpoint trajectory events, Defender timeline and hunting rows, Cisco XDR sightings
+  and Splunk WAF rows have no documented field schema, so they stay generic records (citable,
+  never scored). Inbound requests and their verdicts come only from typed sources; until a schema
+  is VERIFIED, a source block rests on enrichment and an exploited URL on the incident naming both
+  the URL and the compromised server.
+- Vulnerability state (a known-vulnerable endpoint with a pending fix) has no VERIFIED source: a
+  URL is blocked only on records that show it was exploited.
+- Sanctioned external scanners are recognised from `allowlists.never_block.ips` (excluded
+  visibly) or `trigger.authorized_scanners` (considered); an unlisted scanner rated SUSPICIOUS is
+  proposed and the analyst can deselect it.
+- Isolation needs an active MALICIOUS web-shell detection; a resolved or SUSPICIOUS one, or an
+  exploit without a web shell, is shown as considered and the analyst can isolate by hand.
+- A web server whose agent policy forbids isolation, or that no EDR manages, is a manual step.
+- Removing the web shell, reviewing the web root and rotating the application's credentials are
+  manual steps; the web shell hash is handed off to the malware workflow.
+- Secure Endpoint's isolation-state read is UNVERIFIED: a Secure Endpoint isolation verifies as
+  UNABLE_TO_VERIFY.
+- IPv6 sources are not enriched or blocked (IPv4 only).
+- Third-party reputation is limited by the disclosure policy and the VirusTotal public quota.

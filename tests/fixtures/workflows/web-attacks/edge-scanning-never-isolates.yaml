@@ -1,0 +1,66 @@
+# web-attacks workflow scenario; fake lab data only.
+schema: 1
+name: edge-scanning-never-isolates
+workflow: web-attacks
+description: >-
+  Unauthorised scanning from 192.0.2.140 (rated SUSPICIOUS by Cisco XDR) probes the admin and login
+  paths of WEB-SHOP-01, and a heuristic web-shell detection on the server is only SUSPICIOUS. The
+  source is blocked; the server is not isolated (isolation needs an active MALICIOUS web-shell
+  detection) and the probed paths are not blocked because nothing shows the exploitation succeeded.
+  Both are listed as considered with their records.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {secure_endpoint: [endpoint], cisco_xdr: [intel], umbrella: [network], meraki: [network], virustotal: [intel]}
+incident:
+  incident_id: XDR-WEB-0011
+  title: Vulnerability scanning against the shop application
+  severity: MEDIUM
+  workflow_id: web-attacks
+  observables:
+    - {type: hostname, value: WEB-SHOP-01}
+    - {type: ip, value: 192.0.2.140}
+  trigger: {source: cisco_xdr, mitre_techniques: [T1595.002]}
+environment:
+  reputations:
+    - {type: ip, value: 192.0.2.140, verdict: SUSPICIOUS, risk_score: 55, confidence: 80,
+       integrations: [cisco_xdr], summary: "scanning source"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WEB-SHOP-01
+      record: {kind: endpoint, hostname: WEB-SHOP-01, connector_guid: 00000000-0000-4000-8000-000000000101,
+               os: Windows Server 2022, groups: [Web Servers], ip_addresses: [198.51.100.10],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WEB-SHOP-01
+      record: {kind: network_connection, endpoint: WEB-SHOP-01, remote_ip: 192.0.2.140, local_ip: 198.51.100.10,
+               protocol: tcp, direction: inbound, url: "https://shop.example.net/admin", process_name: w3wp.exe,
+               count: 60, action: allowed, verdict: SUSPICIOUS, first_seen: "2026-01-15T09:40:00Z",
+               last_seen: "2026-01-15T09:42:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WEB-SHOP-01
+      record: {kind: network_connection, endpoint: WEB-SHOP-01, remote_ip: 192.0.2.140, local_ip: 198.51.100.10,
+               protocol: tcp, direction: inbound, url: "https://shop.example.net/login", process_name: w3wp.exe,
+               count: 25, action: allowed, verdict: SUSPICIOUS, first_seen: "2026-01-15T09:44:00Z",
+               last_seen: "2026-01-15T09:46:00Z"}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WEB-SHOP-01
+      record: {kind: detection, detection_id: det-web-heur-0101, name: Web shell file written to web root, verdict: SUSPICIOUS,
+               severity: HIGH, category: Web Shell, endpoint: WEB-SHOP-01, process_name: w3wp.exe,
+               sha256: 5be11a7e5be11a7e5be11a7e5be11a7e5be11a7e5be11a7e5be11a7e5be11a7e,
+               file_path: "C:\\inetpub\\shop\\uploads\\img_cache.aspx", mitre_techniques: [T1505.003],
+               status: active, first_seen: "2026-01-15T09:43:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions: [block_ip:192.0.2.140]
+  considered:
+    - isolate_endpoint:WEB-SHOP-01
+    - "block_url:https://shop.example.net/admin"
+    - "block_url:https://shop.example.net/login"
+  manual_steps: []
+  handoffs: []
+  containment: CONTAINED
+  controls: 1

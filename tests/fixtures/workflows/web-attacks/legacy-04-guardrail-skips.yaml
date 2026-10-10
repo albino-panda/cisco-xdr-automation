@@ -1,0 +1,70 @@
+# web-attacks workflow scenario; fake lab data only.
+schema: 1
+name: legacy-04-guardrail-skips
+workflow: web-attacks
+description: >-
+  Migrated from legacy scenario 04. A web shell is confirmed on the payments web server web-pay-01,
+  which is a production server (tag production), so its isolation stays proposed with ELEVATED approval
+  and a visible Production server warning; the SOC lead approves. The external source block is proposed.
+  The internal load-balancer source is excluded as internal: it was renumbered from 10.20.30.40 to
+  198.51.100.250 and the scenario lists 198.51.100.240/28 as an internal range
+  (exclusions.third_party_lookup.cidrs). The upload URL on the organisation's own domain example.com is
+  named only by the incident (no request, WAF or IPS record mentions it), so it is shown as considered
+  and never built as a block: the observable list is not evidence that the path was exploited (P5 safety
+  round 1). The scenario keeps the legacy guardrails (no url_block_allowed_domains). Production parity:
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
+tags: [legacy, true_positive, critical_asset, approve_all]
+legacy_source: workflows/web-attacks/scenarios/04-guardrail-skips.yaml
+mode: both
+suite: {secure_endpoint: [endpoint], cisco_xdr: [intel], umbrella: [network], meraki: [network], virustotal: [intel]}
+config:
+  allowlists:
+    url_block_allowed_domains: []
+  exclusions:
+    third_party_lookup:
+      cidrs: [100.64.0.0/10, 198.51.100.240/28]
+incident:
+  incident_id: INC-TEST-WEB-0004
+  title: Web shell detected on protected payments web server
+  severity: HIGH
+  workflow_id: web-attacks
+  observables:
+    - {type: ip, value: 203.0.113.80}
+    - {type: ip, value: 198.51.100.250}
+    - {type: url, value: "https://pay.example.com/upload"}
+    - {type: hostname, value: web-pay-01}
+  trigger: {source: "Cisco Secure Endpoint"}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.80, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [cisco_xdr], summary: "Talos: malicious"}
+    - {type: ip, value: 198.51.100.250, verdict: SUSPICIOUS, risk_score: 55, confidence: 80,
+       integrations: [cisco_xdr], summary: "internal sightings"}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WEB-PAY-01
+      record: {kind: endpoint, hostname: WEB-PAY-01, connector_guid: 00000000-0000-4000-8000-000000000201,
+               os: Windows Server 2022, groups: [Payments], ip_addresses: [198.51.100.13], tags: [production],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: WEB-PAY-01
+      record: {kind: detection, detection_id: det-legacy-web-04, name: Web shell file written to web root,
+               verdict: MALICIOUS, severity: HIGH, endpoint: WEB-PAY-01, mitre_techniques: [T1505.003], status: active,
+               first_seen: "2026-01-15T09:43:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - block_ip:203.0.113.80
+    - isolate_endpoint:WEB-PAY-01
+  elevated:
+    - isolate_endpoint:WEB-PAY-01
+  excluded:
+    - block_ip:198.51.100.250
+  considered: ["block_url:https://pay.example.com/upload"]
+  warnings: [ELEVATED APPROVAL REQUIRED, Production server]
+  manual_steps: ["review-web-root:WEB-PAY-01"]
+  containment: PARTIALLY_CONTAINED
+  controls: 2
