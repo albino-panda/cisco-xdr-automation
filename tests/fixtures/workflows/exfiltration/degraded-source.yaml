@@ -73,7 +73,7 @@ expect:
     - block_domain:files-drop.test
     - block_ip:203.0.113.145
   degraded_sources: [entra]
-  considered: [isolate_endpoint:TH-LT-1047, revoke_sessions:jsmith@example.com]
+  considered: [isolate_endpoint:TH-LT-1047, revoke_sessions:jsmith@example.com, disable_user:jsmith@example.com]
   manual_steps: [assess data exposure from TH-LT-1047]
   handoffs: []
   containment: CONTAINED

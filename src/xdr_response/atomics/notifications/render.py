@@ -420,7 +420,8 @@ def _result_line(result: ActionResult) -> str:
 
 
 def _investigation(event: LifecycleEvent) -> list[str]:
-    """Degraded sources, unrouted, below-threshold and considered items, manual steps and hand-offs."""
+    """Degraded sources, unrouted, below-threshold, needs-investigation and considered items, manual steps and
+    hand-offs."""
     summary = event.summary
     if summary is None:
         return []
@@ -428,6 +429,8 @@ def _investigation(event: LifecycleEvent) -> list[str]:
     lines.extend(_bullets("Degraded or failed sources (other evidence was used)", summary.degraded_sources))
     lines.extend(_bullets("Not routable (no capable adapter)", summary.unrouted))
     lines.extend(_bullets("Below threshold (not proposed)", summary.below_threshold))
+    lines.extend(_bullets("Needs investigation (a failed source held the only evidence; not proposed)",
+                          summary.needs_investigation))
     lines.extend(_bullets("Considered, deliberately not proposed", summary.considered))
     lines.extend(_bullets("Manual steps (no verified automated action; not in the package)", summary.manual_steps))
     lines.extend(_bullets("Suggested hand-offs to other workflows (nothing is started)", summary.handoffs))

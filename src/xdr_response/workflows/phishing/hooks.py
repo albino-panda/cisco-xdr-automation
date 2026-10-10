@@ -55,7 +55,7 @@ from xdr_response.atomics.records import (
 )
 from xdr_response.models import Observable, ObservableType, Severity, Verdict
 from xdr_response.models.scoring import ScoringSignal, SignalCategory
-from xdr_response.workflows.hooks import Handoff, RunView, WorkflowHooks
+from xdr_response.workflows.hooks import Handoff, RunView, WorkflowHooks, failed_reads
 
 __all__ = ["PhishingHooks", "HOOKS", "WORKFLOW_ID", "SUPPORTING", "DELIVERED_LOCATIONS"]
 
@@ -69,6 +69,12 @@ DELIVERED_LOCATIONS = frozenset({"inbox", "junk", "unknown"})
 _HIGH_SEVERITIES = frozenset({Severity.HIGH, Severity.CRITICAL})
 _RISKY_STATES = frozenset({"at_risk", "confirmed_compromised"})
 _PRODUCTS = ("secure_endpoint", "defender_endpoint")
+
+#: Reads whose failure can hide a click or its recipient (the message, the click search, the endpoint's
+#: users): when one FAILED, an account the incident names is assessed on its identity records instead of
+#: being dropped (owner rule: a failed source never blocks what other evidence backs; 14.14.2).
+CLICK_TIE_ATOMICS = ("investigate_email", "search_email_campaign", "search_domain_enterprise",
+                     "investigate_endpoint", "enrich_domain", "enrich_url")
 
 #: Derived signal: successful sign-in after a phishing click (a pattern, never a vendor verdict).
 CLICK_SIGNIN_SEVERITY = 70
@@ -163,7 +169,8 @@ class _Facts:
         self.urls = self._phishing_urls()
         self.hashes = self._malicious_hashes()
         self.clicks = self._clicks()
-        self.users = self._compromised_users()
+        self.tie_failed = failed_reads(view, CLICK_TIE_ATOMICS)
+        self.users = self._compromised_users() + self._unverified_click_users()
         self.endpoints = self._compromised_endpoints()
 
     # ------------------------------------------------------------ inputs --
@@ -345,6 +352,18 @@ class _Facts:
             return True
         return isinstance(record, NetworkConnectionRecord) and _url_key(record.url) in self.urls
 
+    def _click_rating_ids(self, record: NetworkConnectionRecord | DnsQueryRecord) -> list[str]:
+        """The rating records of the listed domain or URL a click reached (why it is a phishing click)."""
+        domain = self.click_domain(record)
+        ids: list[str] = []
+        listed = _under(domain, self.domains) if domain else None
+        if listed:
+            ids += self.supporting_ids("domain", listed)
+        for key, url in self.urls.items():
+            if (isinstance(record, NetworkConnectionRecord) and _url_key(record.url) == key) or url["domain"] == domain:
+                ids += self.supporting_ids("url", key)
+        return _ids(ids)
+
     def _endpoint_users(self, hostname: str, recipients: set[str]) -> list[tuple[str, str]]:
         """``(user, endpoint record id)`` for recipients an endpoint record names on ``hostname``."""
         pairs: list[tuple[str, str]] = []
@@ -381,13 +400,15 @@ class _Facts:
                 if endpoint:
                     actors += [(user, [endpoint_record]) for user, endpoint_record in
                                self._endpoint_users(endpoint, recipients)]
+                rating = self._click_rating_ids(record)
                 for user, extra in actors:
                     key = (user, endpoint, record.record_id)
                     entry = clicks.setdefault(key, {
                         "user": user, "endpoint": endpoint or None, "domain": self.click_domain(record),
                         "message_id": message.message_id, "at": _iso(_record_time(record)),
                         "record_ids": _ids([message.record_id, record.record_id])})
-                    entry["record_ids"] = _ids(entry["record_ids"], extra)
+                    # the click counts because the indicator it reached is rated: cite that rating too
+                    entry["record_ids"] = _ids(entry["record_ids"], extra, rating)
         return [clicks[k] for k in sorted(clicks)]
 
     def click_time(self, *, user: str | None = None, endpoint: str | None = None) -> datetime | None:
@@ -429,6 +450,58 @@ class _Facts:
                 "disable_reason": (f"{user}: compromise confirmed by the identity provider" if confirmed else
                                    f"{user}: successful sign-in after the click with high user risk or a HIGH "
                                    "risk detection") + "; hand-off: run account-takeover for this account",
+            })
+        return out
+
+    def _unverified_click_users(self) -> list[dict[str, Any]]:
+        """Accounts the incident names whose click could not be checked because a read FAILED.
+
+        The message, the click search or the endpoint's users came back from a failed source, so no
+        ``email_to_click`` link ties the account to a click. An account the incident itself names (and
+        that is not already a clicking recipient) is then assessed on what survives: its sign-ins, risk
+        detections and identity risk, the messages that name it as a recipient and any click record on
+        a listed indicator. The reason says the click is unverified and which read failed.
+        """
+        if not self.tie_failed:
+            return []
+        known = {c["user"] for c in self.clicks}
+        named = [*self.view.incident.users, *self.incident.get(ObservableType.USER, []),
+                 *self.incident.get(ObservableType.EMAIL_ADDRESS, [])]
+        failed = "; ".join(f"{', '.join(names)} failed for {subject}" for subject, names in self.tie_failed.items())
+        out: list[dict[str, Any]] = []
+        for user in dict.fromkeys(_user(u) for u in named):
+            if not user or "@" not in user or user in known:
+                continue
+            profiles = [r for r in self.records if isinstance(r, UserProfileRecord) and _user(r.user) == user]
+            signins = [r for r in self.records if isinstance(r, SignInRecord) and _user(r.user) == user
+                       and r.result == "success"]
+            anomalies = [r for r in self.records if isinstance(r, AnomalyRecord) and _user(r.user) == user]
+            risky = [p for p in profiles if p.risk_level in ("medium", "high") or p.risk_state in _RISKY_STATES]
+            if not (anomalies or risky):
+                continue  # a sign-in alone, without a click, is not a compromise indicator
+            messages = [m.record_id for m in self.messages if user in {_user(r) for r in m.recipients}]
+            clicks = [r.record_id for r in self._click_records() if self._phishing_click(r)]
+            confirmed = [p for p in profiles if p.risk_state == "confirmed_compromised"]
+            high_profile = [p for p in profiles if p.risk_level == "high"]
+            high_anomalies = [a for a in anomalies if a.severity in _HIGH_SEVERITIES]
+            justified = bool(confirmed) or (bool(signins) and bool(high_profile or high_anomalies))
+            revoke_ids = _ids([r.record_id for r in (*anomalies, *risky, *signins)], messages, clicks)
+            disable_ids = _ids(revoke_ids, [r.record_id for r in (*confirmed, *high_profile)])
+            tie = (f"the incident names {user}, but its click could not be checked ({failed}); "
+                   f"{len(messages)} message record(s) name it as a recipient, {len(clicks)} click record(s) reach a "
+                   "listed indicator")
+            out.append({
+                "user": user, "clicked_at": None, "groups": sorted({g for p in profiles for g in p.groups}),
+                "roles": sorted({r for p in profiles for r in p.roles}),
+                "privileged": any(p.privileged for p in profiles),
+                "signins_after_click": len(signins), "risk_detections": len(anomalies),
+                "record_ids": revoke_ids, "disable_justified": justified, "disable_record_ids": disable_ids,
+                "click_unverified": True,
+                "reason": f"{tie}; {len(signins)} successful sign-in(s), {len(anomalies)} risk detection(s) and "
+                          f"{len(risky)} at-risk identity record(s); hand-off: run account-takeover for this account",
+                "disable_reason": (f"{user}: compromise confirmed by the identity provider" if confirmed else
+                                   f"{user}: successful sign-in with high user risk or a HIGH risk detection")
+                                  + f" ({tie}); hand-off: run account-takeover for this account",
             })
         return out
 

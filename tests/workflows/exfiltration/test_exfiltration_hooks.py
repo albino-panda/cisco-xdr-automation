@@ -505,7 +505,7 @@ def test_an_unassessed_account_is_shown_and_never_guessed():
     run = _run(lab)
     assert run.degraded_sources() == ("entra",)
     assert _selectors(run) == {f"block_domain:{DROP}", f"block_ip:{DROP_IP}"}
-    assert _considered(run) == {f"isolate_endpoint:{HOST}", f"revoke_sessions:{USER}"}
+    assert _considered(run) == {f"isolate_endpoint:{HOST}", f"revoke_sessions:{USER}", f"disable_user:{USER}"}
     isolation = next(c for c in run.considered if c.subject == f"isolate_endpoint:{HOST}")
     assert "entra failed" in isolation.reason
 

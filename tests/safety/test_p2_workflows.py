@@ -24,6 +24,7 @@ import pytest
 import yaml
 
 from tools.simulator.scenario import REPO_ROOT
+from tests.fixtures.degraded import degradation_findings
 from tools.simulator.workflow_scenario import WorkflowScenario, WorkflowScenarioRun
 from xdr_response import guard
 from xdr_response.errors import ApprovalError
@@ -592,27 +593,15 @@ def _degradation_cases() -> list[Any]:
 
 @pytest.mark.parametrize("workflow, failed", _degradation_cases())
 def test_a_failed_source_does_not_block_actions_backed_by_other_sources(workflow: str, failed: str):
-    """Fail every read of one integration. Each baseline action whose cited evidence came only from
-    other integrations is still recommended (confidence may drop; the action may not disappear)."""
-    run = _detect(_raw(workflow, "tp-approve-all"), workflow, "tp-approve-all", live=False)
-    wf = run.workflow_run
-    independent = []
-    for action in run.detection.package.actions:
-        sources = {wf.index.get(e.data["record_id"]).integration for e in action.evidence}
-        if failed not in sources:
-            independent.append((action.action_type, action.target))
-    guard._reset_for_test_harness()
-    if not independent:
-        pytest.skip(f"every action of {workflow} cites {failed}")
-    data = copy.deepcopy(_raw(workflow, "tp-approve-all"))
-    data.setdefault("environment", {}).setdefault("faults", [])
-    data["environment"]["faults"] = list(data["environment"]["faults"]) + [
-        {"kind": "UNAVAILABLE", "integration": failed, "times": None}]
-    degraded = _detect(data, workflow, "tp-approve-all", live=False)
-    package = degraded.detection.package
-    proposed = {(a.action_type, a.target) for a in package.actions} if package else set()
-    lost = sorted(f"{a.value}:{t}" for a, t in independent if (a, t) not in proposed)
-    assert lost == [], f"{workflow}: failing {failed} blocked actions backed by other sources: {lost}"
+    """Fail every read of one integration (owner rule, architecture 14.14.1). An action whose evidence
+    never came from it is still proposed; an action that also cites other sources whose records survive
+    and name its target is proposed, or shown below threshold / considered with the failed source named;
+    an action whose only evidence came from the failed source may be dropped, but never silently (a
+    needs-investigation entry naming it when the run still knows the target, else the degraded-source
+    note). No case is skipped: actions that cite the failed source alongside others are checked too."""
+    findings = degradation_findings(_raw(workflow, "tp-approve-all"), failed,
+                                    lambda data: _detect(data, workflow, "tp-approve-all", live=False))
+    assert findings == [], f"{workflow}: failing {failed}: {findings}"
 
 
 _IDENTITY_KINDS = frozenset({"sign_in", "mfa_event", "anomaly", "user_profile", "role_change"})

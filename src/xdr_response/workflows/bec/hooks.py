@@ -25,7 +25,7 @@ from xdr_response.atomics.correlation.models import CorrelationLink, EntityRef, 
 from xdr_response.atomics.enrichment.models import ObservableReport
 from xdr_response.models import Observable, ObservableType, Severity, TargetKind, Verdict
 from xdr_response.models.scoring import ScoringSignal, SignalCategory
-from xdr_response.workflows.hooks import Consideration, Handoff, RunView, WorkflowHooks
+from xdr_response.workflows.hooks import Consideration, Handoff, RunView, WorkflowHooks, failed_reads
 
 __all__ = ["BecHooks", "HOOKS", "is_lookalike", "registrable_label", "skeleton"]
 
@@ -132,6 +132,9 @@ class _Mailbox:
     persistence: bool = False  # malicious rule or risky OAuth consent
     unrated_apps: list[Any] = field(default_factory=list)  # risky consents without a vendor verdict (hook signal)
     fraud_reports: list[Any] = field(default_factory=list)  # MFA prompts the user reported as fraud (hook signal)
+    #: Successful sign-ins / approved prompts whose source IP could not be rated because its enrichment
+    #: failed (degraded source): ``(record id, ip, failed integrations)``.
+    unrated_access: list[tuple[str, str, tuple[str, ...]]] = field(default_factory=list)
     manual: list[str] = field(default_factory=list)
     manual_steps: list[tuple[str, str, str]] = field(default_factory=list)  # (subject, step, record id)
 
@@ -181,6 +184,7 @@ class _Analysis:
                 self.ip_reports.setdefault(_lower(result.subject.value), result)
             for record in result.records:
                 self.records.setdefault(record.record_id, record)
+        self.failed_ip_reads = {_lower(k): v for k, v in failed_reads(view, ("enrich_ip",)).items()}
         self.messages = self._messages()
         self.mailboxes = self._mailboxes()
         self.org_domains = self._org_domains(view)
@@ -236,6 +240,9 @@ class _Analysis:
     def _risky_access(self, box: _Mailbox, record: Any, what: str) -> None:
         risky = self._risky_ip(record.ip)
         if risky is None:
+            failed = self.failed_ip_reads.get(_lower(record.ip))
+            if failed:
+                box.unrated_access.append((record.record_id, _lower(record.ip), failed))
             return
         verdict, enrichment_ids = risky
         box.identity_reasons.append(f"{what} from {record.ip} rated {verdict.value}")
@@ -452,9 +459,35 @@ class BecHooks(WorkflowHooks):
         }
 
     def considered(self, view: RunView) -> Sequence[Consideration]:
-        """Manual steps: mailbox rule removal and OAuth consent revocation have no VERIFIED write."""
-        return [Consideration(subject=subject, reason=step, record_ids=(record_id,), manual=True)
-                for box in _Analysis(view).mailboxes.values() for subject, step, record_id in box.manual_steps]
+        """Manual steps (mailbox rule removal and OAuth consent revocation have no VERIFIED write), and
+        abused mailboxes whose identity compromise could not be assessed because a sign-in source IP
+        could not be rated (its enrichment failed): the disable is withheld visibly, never dropped."""
+        analysis = _Analysis(view)
+        out = [Consideration(subject=subject, reason=step, record_ids=(record_id,), manual=True)
+               for box in analysis.mailboxes.values() for subject, step, record_id in box.manual_steps]
+        for box in analysis.mailboxes.values():
+            if box.identity_reasons or not box.unrated_access:
+                continue
+            ips = _unique(ip for _, ip, _ in box.unrated_access)
+            names = _unique(n for _, _, failed in box.unrated_access for n in failed)
+            unassessed = (f"the identity compromise could not be assessed: {', '.join(names)} failed for enrich_ip "
+                          f"{', '.join(ips)} (the sign-in source)")
+            ids = tuple(_unique([*box.abuse_ids, *(rid for rid, _, _ in box.unrated_access)]))
+            if box.abuse_reasons:
+                out.append(Consideration(
+                    subject=f"disable_user:{box.user}",
+                    reason=_clip(f"ongoing abuse ({'; '.join(_unique(box.abuse_reasons))}), but {unassessed}, so the "
+                                 "disable is not proposed; the session revocation still is: re-run when the source "
+                                 "recovers, or decide by hand"),
+                    record_ids=ids))
+                continue
+            for action in ("revoke_sessions", "disable_user"):
+                out.append(Consideration(
+                    subject=f"{action}:{box.user}",
+                    reason=_clip(f"no compromise or abuse record of its own, and {unassessed}: not proposed; re-run "
+                                 "when the source recovers, or decide by hand"),
+                    record_ids=ids))
+        return out
 
     def handoffs(self, view: RunView) -> Sequence[Handoff]:
         """Identity compromise behind the mailbox abuse: account-takeover reviews the account."""

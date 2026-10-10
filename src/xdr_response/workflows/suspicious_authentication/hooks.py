@@ -56,7 +56,7 @@ from xdr_response.config.policy import non_public_network
 from xdr_response.models import Observable, ObservableType, Severity, TargetKind, Verdict
 from xdr_response.models.canonical import normalize_target
 from xdr_response.models.scoring import ScoringSignal, SignalCategory
-from xdr_response.workflows.hooks import Consideration, Handoff, RunView, WorkflowHooks
+from xdr_response.workflows.hooks import Consideration, Handoff, RunView, WorkflowHooks, failed_reads
 
 __all__ = [
     "SuspiciousAuthenticationHooks",
@@ -787,6 +787,8 @@ class SuspiciousAuthenticationHooks(WorkflowHooks):
 
     def considered(self, view: RunView) -> Sequence[Consideration]:
         facts = self.facts(view)
+        identity_failed = failed_reads(view, ("investigate_user", "investigate_authentication",
+                                              "search_user_activity"))
         items: list[Consideration] = []
         for user in facts["users"]:
             if user["compromised"]:
@@ -808,6 +810,16 @@ class SuspiciousAuthenticationHooks(WorkflowHooks):
                 items.append(Consideration(subject=f"revoke_sessions:{user['user']}",
                                            reason="; ".join(reasons) + ": not proposed, the analyst reviews",
                                            record_ids=tuple(record_ids)))
+                failed = identity_failed.get(user["user"]) or identity_failed.get(user["user"].lower())
+                if failed:
+                    # The identity source failed: the account could not be assessed for a disable either,
+                    # and the analyst sees that instead of the action silently disappearing.
+                    items.append(Consideration(
+                        subject=f"disable_user:{user['user']}",
+                        reason=("; ".join(reasons) + f": {', '.join(failed)} failed for the identity reads of the "
+                                "account, so the compromise could not be assessed: not disabled, the analyst "
+                                "reviews"),
+                        record_ids=tuple(record_ids)))
             if user["exposure_record_ids"]:
                 items.append(Consideration(
                     subject=f"password-reset:{user['user']}", manual=True,

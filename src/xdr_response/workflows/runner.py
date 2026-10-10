@@ -25,6 +25,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
+from urllib.parse import urlsplit
 
 from xdr_response.approval.critical_assets import CriticalAssetPolicy
 from xdr_response.atomics import containment_builders, read_atomics
@@ -84,7 +85,7 @@ from xdr_response.workflows.definition import InvestigationStep, RecommendationR
 from xdr_response.workflows.expr import ExprError, evaluate
 from xdr_response.workflows.hooks import Consideration, Handoff, RunView, WorkflowHooks
 
-__all__ = ["RuleOutcomeStatus", "RuleOutcome", "WorkflowRun", "WorkflowRunner"]
+__all__ = ["NeedsInvestigation", "RuleOutcomeStatus", "RuleOutcome", "WorkflowRun", "WorkflowRunner"]
 
 _O = ObservableType
 _T = TargetKind
@@ -146,11 +147,31 @@ class RuleOutcome(FrozenModel):
     confidence_score: int = 0
     record_ids: tuple[str, ...] = ()
     detail: str = ""
+    #: Sources that FAILED for the target or its cited records (``"<integration> (<health>)"``): the
+    #: outcome was decided without their evidence (owner rule: a degraded source is shown, never hidden).
+    degraded: tuple[str, ...] = ()
 
     @property
     def selector(self) -> str:
         """``"<action_type>:<target>"`` (the scenario expectation format)."""
         return f"{self.action_type.value}:{self.target or ''}"
+
+
+@dataclass(frozen=True)
+class NeedsInvestigation:
+    """An action a failed read left unassessed for a target the run knows (owner rule, 14.14.1).
+
+    The target is named by the incident or was the subject of a read of this run, a read FAILED, and no
+    source that answered holds a record that lets a rule assess it (so it cannot be a proposal or a
+    cited :class:`Consideration`). It is shown to the analyst ("needs investigation"), never proposed:
+    re-run when the source recovers, or decide by hand. ``failed`` names the failed integrations;
+    ``record_ids`` cite the records of answering sources that mention the target (may be empty).
+    """
+
+    subject: str  # "<action_type>:<target>" (host only for a file, process or persistence item)
+    reason: str
+    failed: tuple[str, ...]
+    record_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -177,6 +198,8 @@ class WorkflowRun:
     notes: tuple[str, ...]
     considered: tuple[Consideration, ...] = ()  # hook items not recommended, and manual steps (14.10.1)
     handoffs: tuple[Handoff, ...] = ()  # hook hand-off suggestions, never started (14.10.1)
+    #: Actions a failed read left unassessed for a known target with no other record (14.14.1).
+    needs_investigation: tuple[NeedsInvestigation, ...] = ()
 
     def outcomes_with(self, status: RuleOutcomeStatus) -> tuple[RuleOutcome, ...]:
         """Outcomes of one status, in rule order."""
@@ -197,11 +220,13 @@ class WorkflowRun:
                            for o in self.outcomes_with(RuleOutcomeStatus.UNROUTED)),
             below_threshold=tuple(f"{o.action_type.value} {o.target}: risk {o.risk_score}, confidence "
                                   f"{o.confidence_score} (rule {o.rule_id})"
+                                  + (f"; degraded: {', '.join(o.degraded)}" if o.degraded else "")
                                   for o in self.outcomes_with(RuleOutcomeStatus.BELOW_THRESHOLD)),
             blast_radius=self.blast_radius.to_blast_radius(),
             considered=tuple(_consideration_line(c) for c in self.considered if not c.manual),
             manual_steps=tuple(_consideration_line(c) for c in self.considered if c.manual),
             handoffs=tuple(_handoff_line(h) for h in self.handoffs),
+            needs_investigation=tuple(_needs_line(n) for n in self.needs_investigation),
         )
 
     def raw_enrichments(self) -> tuple[EnrichmentResult, ...]:
@@ -245,6 +270,7 @@ class _Run:
     facts: Mapping[str, Any] = field(default_factory=dict)
     considered: list[Consideration] = field(default_factory=list)
     handoffs: list[Handoff] = field(default_factory=list)
+    needs_investigation: list[NeedsInvestigation] = field(default_factory=list)
     built: list[BuiltRecommendation] = field(default_factory=list)
     outcomes: list[RuleOutcome] = field(default_factory=list)
     breakdowns: dict[tuple[ActionType, str], ScoreBreakdown] = field(default_factory=dict)
@@ -585,6 +611,7 @@ class WorkflowRunner:
         self._hook_signals_and_facts(state)
         for rule in workflow.recommendations:
             self._run_rule(state, rule)
+        self._degraded_accounting(state)
         return self._finish(state, started, dry_run)
 
     # ------------------------------------------------------- investigation --
@@ -800,10 +827,42 @@ class WorkflowRunner:
             if first is not None:  # the same subject twice: one entry, the first reason, both records
                 clean = replace(first, record_ids=tuple(dict.fromkeys((*first.record_ids, *clean.record_ids))))
             kept[key] = clean
-        for item in kept.values():
+        for key, item in list(kept.items()):
+            kept[key] = item = self._degraded_consideration(state, item)
             label = "manual step" if item.manual else "considered, not proposed"
             state.note(f"{label}: {item.subject}: {item.reason}")
         return list(kept.values())
+
+    @staticmethod
+    def _degraded_consideration(state: _Run, item: Consideration) -> Consideration:
+        """Name the sources that failed for a withheld action's target or its cited records.
+
+        Owner rule (14.14.1): a failed source never blocks a recommendation other evidence backs, and
+        when an action is withheld the analyst must see that the assessment ran without that source. A
+        ``"<action>:<target>"`` consideration therefore gets ``"; degraded: <integration> failed for
+        <atomic> <subject>"`` for every failed read about the target (or the host or user part of a
+        composite target) or behind a cited record, unless the hook already names the integration.
+        """
+        if item.manual or ":" not in item.subject:
+            return item
+        failures = _failures_for(state, item.subject, item.record_ids)
+        if failures:
+            missing = [(name, where) for name, where in failures if name not in item.reason]
+            reason = item.reason
+            if missing:
+                text = "; ".join(f"{name} failed for {where}" for name, where in missing)
+                reason = f"{reason}; degraded: {text}: assessed without its evidence"
+            run = _run_degraded_text(state, reason)
+            if run:
+                reason = f"{reason}; also failed in this run: {run}"
+            if reason == item.reason:
+                return item
+        else:
+            run = _run_degraded_text(state, item.reason)
+            if not run:
+                return item
+            reason = f"{item.reason}; decided in a degraded run ({run})"
+        return replace(item, reason=get_redactor().redact_text(reason)[:_NOTE_CHARS])
 
     def _valid_handoffs(self, state: _Run, view: RunView) -> list[Handoff]:
         redactor = get_redactor()
@@ -1302,11 +1361,20 @@ class WorkflowRunner:
 
     def _outcome(self, state: _Run, rule: RecommendationRule, failure: _RuleFailure) -> None:
         breakdown = failure.breakdown
+        degraded = tuple(breakdown.failed_sources) if breakdown else ()
+        detail = failure.detail
+        if degraded and failure.status is not RuleOutcomeStatus.DUPLICATE:
+            detail = f"{detail}; degraded: {', '.join(degraded)} failed: assessed without its evidence"
+        elif failure.status in (RuleOutcomeStatus.BELOW_THRESHOLD, RuleOutcomeStatus.NO_EVIDENCE) and (
+                _run_failures(state)):
+            detail = f"{detail}; decided in a degraded run ({_run_degraded_text(state, '')})"
         state.outcomes.append(RuleOutcome(
             rule_id=rule.id, status=failure.status, action_type=rule.action, target=failure.target,
             risk_score=breakdown.risk_score if breakdown else 0,
             confidence_score=breakdown.confidence_score if breakdown else 0,
-            record_ids=failure.record_ids, detail=failure.detail[:_NOTE_CHARS]))
+            record_ids=failure.record_ids, detail=detail[:_NOTE_CHARS], degraded=degraded))
+        failure = _RuleFailure(failure.status, detail, target=failure.target, record_ids=failure.record_ids,
+                               breakdown=breakdown)
         label = f"{rule.action.value} {failure.target}" if failure.target else rule.action.value
         if failure.status is RuleOutcomeStatus.ERROR:
             state.note(f"rule {rule.id} error ({label}): {failure.detail}")
@@ -1318,6 +1386,188 @@ class WorkflowRunner:
             state.note(f"considered, not proposed: {label}: {failure.detail}")
         elif failure.status is RuleOutcomeStatus.NO_EVIDENCE:
             state.note(f"rule {rule.id} not proposed ({label}): no evidence: {failure.detail}")
+
+    # ----------------------------------------------------- degraded sources --
+    def _degraded_accounting(self, state: _Run) -> None:
+        """Show every action a failed read leaves unassessed; never propose anything (14.14.1).
+
+        Owner rule: a failed or degraded source never blocks a recommendation backed by other
+        evidence, and nothing is dropped silently. When a read about subject ``S`` FAILED at an
+        integration, every rule whose target kind fits ``S`` and that produced nothing for ``S`` (no
+        outcome, no built recommendation, no consideration) gets a :class:`Consideration`
+        ``"<action>:<S>"`` that names the failed read and cites the records **of other sources** that
+        mention ``S``. When no such record exists, but ``S`` is known to the run (the failed read was
+        about it, or the incident names it), the action gets a :class:`NeedsInvestigation` entry naming
+        the failed read instead: the only evidence was held by the failed source, so nothing can be
+        assessed, and the analyst is told so. An entity the incident names that no step read because the
+        step's subjects came from the failed source gets the same treatment. These entries are visible in
+        the notes, the summary and the analyst notification; they are never proposals, so a workflow's
+        own policy (allow-list, shared infrastructure, sanctioned tools) is never bypassed.
+        """
+        failures = _run_failures(state)
+        if not failures:
+            return
+        # A NO_EVIDENCE outcome in a degraded run is not an assessment: the failed source may hold the
+        # evidence, so it gets an entry too.
+        known = {(o.action_type, o.target) for o in state.outcomes if o.status is not RuleOutcomeStatus.NO_EVIDENCE}
+        known |= {(b.action_type, b.target) for b in state.built}
+        subjects = {c.subject for c in state.considered}
+        budget = [0]
+        # Reads that FAILED while investigating (not enriching): the records that would tie a rated
+        # indicator to the incident (a sign-in, a connection, a message) may be the missing ones.
+        investigation = list(dict.fromkeys(
+            f"{s.integration} failed for {r.atomic} {r.subject.value}" for r in state.results
+            if not r.atomic.startswith("enrich_") for s in r.sources if s.outcome is SourceOutcome.FAILED))
+        everything = [f"{name} failed for {where}" for name, where in failures]
+        all_failed = tuple(dict.fromkeys(name for name, _ in failures))
+        for result in state.results:
+            failed = sorted({s.integration for s in result.sources if s.outcome is SourceOutcome.FAILED})
+            kind = _SUBJECT_KINDS.get(result.subject.type)
+            if kind is None:
+                continue
+            target = _normalized(kind, result.subject.value)
+            if _covered(state, kind, target):
+                continue  # a proposed domain block already covers the URL
+            rules = self._open_rules(state, kind, target, known, subjects, host_parts=bool(failed))
+            if not rules:
+                continue
+            named = _named_by_incident(state.incident, result.subject)
+            enrichment = bool(investigation) and result.atomic.startswith("enrich_")
+            reason, cited, unassessed, names = "", [], "", tuple(failed)
+            if failed:
+                cited = _other_source_records(state, result.subject, failed)
+                if cited:
+                    reason = (f"not recommended: {', '.join(failed)} failed for {result.atomic} "
+                              f"{result.subject.value}, so the workflow assessed it without that source; {len(cited)} "
+                              "record(s) of other sources mention it (cited): re-run when the source recovers, or "
+                              "decide by hand")
+                else:
+                    unassessed = (f"{', '.join(failed)} failed for {result.atomic} {result.subject.value} and no "
+                                  "source that answered holds a record about it")
+            else:
+                if enrichment:
+                    flagged = [r for r in result.records
+                               if isinstance(r, EnrichmentRecord) and r.verdict in _SUPPORTING]
+                    cited = [r.record_id for r in flagged]
+                    rating = ", ".join(sorted({f"{r.integration} {r.verdict.value}" for r in flagged}))
+                    if cited:
+                        reason = (f"rated ({rating}) but not recommended: {_listed(investigation)}, so the records "
+                                  "that would tie it to the incident may be missing: re-run when the source "
+                                  "recovers, or decide by hand")
+                elif named:
+                    # An entity the incident itself names, investigated with records of surviving sources, that no
+                    # rule acted on while another read failed: the failed read may hold what ties it to the
+                    # incident or shows its compromise (a host's users, an account's endpoint, a click).
+                    cited = _other_source_records(state, result.subject, ())
+                    if cited:
+                        reason = (f"named by the incident but not recommended: {_listed(everything)}, so the "
+                                  "records that would tie it to the incident or rate what it touched may be "
+                                  f"missing; {len(cited)} record(s) about it from the sources that answered (cited): "
+                                  "re-run when the source recovers, or decide by hand")
+                if not cited and named:
+                    names = all_failed
+                    unassessed = (f"named by the incident, but {_listed(everything)}, and no record of a source "
+                                  "that answered lets a rule assess it")
+            if reason:
+                others = _run_degraded_text(state, reason)
+                if others:
+                    reason = f"{reason}; also failed in this run: {others}"
+                if not self._consider(state, rules, kind, target, reason, cited, subjects, budget):
+                    return
+            elif unassessed:
+                mentioned = _other_source_records(state, result.subject, names)
+                if not self._needs(state, rules, kind, target, unassessed, names, mentioned, subjects, budget):
+                    return
+        # Entities the incident names that no step read (their step's subjects came from the failed source).
+        read = [r.subject for r in state.results]
+        for subject in _incident_subjects(state.incident):
+            kind = _SUBJECT_KINDS.get(subject.type)
+            if kind is None or any(_same_subject(subject, other) for other in read):
+                continue
+            target = _normalized(kind, subject.value)
+            if _covered(state, kind, target):
+                continue
+            rules = self._open_rules(state, kind, target, known, subjects, host_parts=False)
+            if not rules:
+                continue
+            unassessed = (f"named by the incident but not investigated: {_listed(everything)}, and the step that "
+                          "would read it takes its subjects from records that read did not return")
+            mentioned = _other_source_records(state, subject, all_failed)
+            if not self._needs(state, rules, kind, target, unassessed, all_failed, mentioned, subjects, budget):
+                return
+
+    @staticmethod
+    def _open_rules(state: _Run, kind: TargetKind, target: str, known: set[tuple[ActionType, str]],
+                    subjects: set[str], *, host_parts: bool) -> list[ActionType]:
+        """Actions of the workflow's rules about ``target`` that nothing has accounted for yet."""
+        rules = [r.action for r in state.workflow.recommendations if get_action_spec(r.action).target_kind is kind
+                 and (r.action, target) not in known and f"{r.action.value}:{target}" not in subjects]
+        if host_parts and kind is _T.ENDPOINT:
+            # A file, process or persistence item on the host is named by the failed read itself (its
+            # path, pid or hash): only the host is known, so the entry names the action and the host.
+            rules += [r.action for r in state.workflow.recommendations
+                      if get_action_spec(r.action).target_kind in _HOST_PARTS
+                      and not any(a is r.action and same_endpoint(t.split("/", 1)[0], target) for a, t in known)
+                      and f"{r.action.value}:{target}" not in subjects]
+        return list(dict.fromkeys(rules))
+
+    @staticmethod
+    def _entry_text(state: _Run, action: ActionType, kind: TargetKind, target: str, reason: str) -> str | None:
+        """The entry text for ``action`` on ``target``; ``None`` when the allow-list excludes the target."""
+        spec_kind = get_action_spec(action).target_kind
+        if spec_kind in _HOST_PARTS:
+            return f"the {spec_kind.value.replace('_', ' ')} on {target} could not be identified: {reason}"
+        try:
+            if state.ctx.allowlists.excluded_reason(action, target, kind):
+                return None  # never blocked anyway: nothing for the analyst to decide
+        except ValueError:
+            return None
+        return reason
+
+    def _consider(self, state: _Run, rules: Sequence[ActionType], kind: TargetKind, target: str, reason: str,
+                  cited: Sequence[str], subjects: set[str], budget: list[int]) -> bool:
+        """Add a cited degraded-source consideration per action; False when the limit is reached."""
+        for action in rules:
+            text = self._entry_text(state, action, kind, target, reason)
+            if text is None:
+                continue
+            if budget[0] >= _MAX_HOOK_ITEMS:
+                state.note("degraded-source considerations omitted: limit reached")
+                return False
+            item = Consideration(subject=f"{action.value}:{target}"[:_SUBJECT_CHARS],
+                                 reason=get_redactor().redact_text(text)[:_NOTE_CHARS], record_ids=tuple(cited))
+            state.considered.append(item)
+            subjects.add(item.subject)
+            budget[0] += 1
+            state.note(f"considered, not proposed: {item.subject}: {item.reason}")
+        return True
+
+    def _needs(self, state: _Run, rules: Sequence[ActionType], kind: TargetKind, target: str, reason: str,
+               failed: Sequence[str], cited: Sequence[str], subjects: set[str], budget: list[int]) -> bool:
+        """Add a needs-investigation entry per action; False when the limit is reached.
+
+        No answering source holds a record that lets a rule assess the target, so any source that failed in
+        the run may have held its evidence: every failed source is named (the read's own first)."""
+        others = _run_degraded_text(state, reason)
+        failed = tuple(dict.fromkeys((*failed, *(name for name, _ in _run_failures(state)))))
+        reason = (f"not assessed: {reason}" + (f"; also failed in this run: {others}" if others else "")
+                  + "; the evidence for it would come from a failed source: re-run when the source recovers, or "
+                  "decide by hand")
+        for action in rules:
+            text = self._entry_text(state, action, kind, target, reason)
+            if text is None:
+                continue
+            if budget[0] >= _MAX_HOOK_ITEMS:
+                state.note("degraded-source considerations omitted: limit reached")
+                return False
+            item = NeedsInvestigation(subject=f"{action.value}:{target}"[:_SUBJECT_CHARS],
+                                      reason=get_redactor().redact_text(text)[:_NOTE_CHARS],
+                                      failed=tuple(failed), record_ids=tuple(cited))
+            state.needs_investigation.append(item)
+            subjects.add(item.subject)
+            budget[0] += 1
+            state.note(f"needs investigation, not proposed: {item.subject}: {item.reason}")
+        return True
 
     # ---------------------------------------------------------------- finish --
     def _finish(self, state: _Run, started: datetime, dry_run: bool) -> WorkflowRun:
@@ -1337,10 +1587,144 @@ class WorkflowRunner:
             blast_radius=state.blast or BlastRadiusReport(), signals=state.signals, built=tuple(state.built),
             outcomes=tuple(state.outcomes), proposals=proposals, breakdowns=dict(state.breakdowns),
             risk_score=risk, confidence_score=confidence, health=health, notes=tuple(state.notes),
-            considered=tuple(state.considered), handoffs=tuple(state.handoffs))
+            considered=tuple(state.considered), handoffs=tuple(state.handoffs),
+            needs_investigation=tuple(state.needs_investigation))
 
 
 # ------------------------------------------------------------ pure helpers --
+#: Composite target kinds whose first part is a host (``<HOST>/<path, pid, hash or item>``).
+_HOST_PARTS = frozenset({_T.FILE, _T.PROCESS, _T.PERSISTENCE_ITEM})
+#: Target kind of the actions about a read subject of this type (degraded-source accounting).
+_SUBJECT_KINDS: Mapping[ObservableType, TargetKind] = {
+    _O.HOSTNAME: _T.ENDPOINT, _O.USER: _T.USER, _O.EMAIL_ADDRESS: _T.EMAIL_ADDRESS, _O.SHA256: _T.HASH,
+    _O.IP: _T.IP, _O.IPV6: _T.IP, _O.DOMAIN: _T.DOMAIN, _O.URL: _T.URL, _O.EMAIL_MESSAGE_ID: _T.EMAIL_MESSAGE,
+}
+
+
+def _run_failures(state: _Run) -> list[tuple[str, str]]:
+    """``(integration, "<atomic> <subject>")`` for every FAILED read of the run, in result order."""
+    return list(dict.fromkeys((s.integration, f"{r.atomic} {r.subject.value}") for r in state.results
+                              for s in r.sources if s.outcome is SourceOutcome.FAILED))
+
+
+def _run_degraded_text(state: _Run, already: str) -> str:
+    """``"<a>, <b> failed: <atomic> <subject>; ..."`` for the run's failed sources not named in ``already``."""
+    failures = [(name, where) for name, where in _run_failures(state) if name not in already]
+    if not failures:
+        return ""
+    names = ", ".join(dict.fromkeys(name for name, _ in failures))
+    return f"{names} failed: {_listed([where for _, where in failures])}"
+
+
+def _listed(items: Sequence[str], limit: int = 3) -> str:
+    return "; ".join(items[:limit]) + (f" (+{len(items) - limit} more)" if len(items) > limit else "")
+
+
+def _named_by_incident(incident: Incident, subject: Observable) -> bool:
+    """True when the incident's observables or users name ``subject`` (hosts by host identity)."""
+    key = _observable_key(subject)
+    if any(_observable_key(o) == key or (o.type is _O.HOSTNAME and subject.type is _O.HOSTNAME
+                                         and same_endpoint(o.value, subject.value)) for o in incident.observables):
+        return True
+    return subject.type in (_O.USER, _O.EMAIL_ADDRESS) and key[1] in {u.strip().lower() for u in incident.users}
+
+
+def _incident_subjects(incident: Incident) -> list[Observable]:
+    """The incident's observables and users (as USER observables), first spelling of each kept."""
+    out: dict[tuple[ObservableType, str], Observable] = {}
+    for observable in incident.observables:
+        out.setdefault(_observable_key(observable), observable)
+    for user in incident.users:
+        try:
+            observable = Observable(type=_O.USER, value=user.strip())
+        except ValueError:
+            continue
+        out.setdefault(_observable_key(observable), observable)
+    return list(out.values())
+
+
+def _same_subject(first: Observable, second: Observable) -> bool:
+    """True when two read subjects are the same entity (hosts by host identity, accounts by name)."""
+    if first.type is _O.HOSTNAME and second.type is _O.HOSTNAME:
+        return same_endpoint(first.value, second.value)
+    identity = (_O.USER, _O.EMAIL_ADDRESS)
+    if first.type in identity and second.type in identity:
+        return first.value.strip().lower() == second.value.strip().lower()
+    return _observable_key(first) == _observable_key(second)
+
+
+def _covered(state: _Run, kind: TargetKind, target: str) -> bool:
+    """True when a built domain block already covers a URL target (its host or a parent domain)."""
+    if kind is not _T.URL:
+        return False
+    host = (urlsplit(target).hostname or "").rstrip(".").lower()
+    domains = {b.target.rstrip(".").lower() for b in state.built if b.action_type is ActionType.BLOCK_DOMAIN}
+    return bool(host) and any(host == d or host.endswith("." + d) for d in domains)
+
+
+def _other_source_records(state: _Run, subject: Observable, failed: Sequence[str]) -> list[str]:
+    """Ids of records of integrations other than ``failed`` that are about or mention ``subject``."""
+    identity = (_O.USER, _O.EMAIL_ADDRESS)
+    types = frozenset(identity) if subject.type in identity else frozenset({subject.type})
+    value = subject.value.strip().lower()
+    host = subject.value if subject.type is _O.HOSTNAME else None
+    out: dict[str, None] = {}
+    for result in state.results:
+        same = (result.subject.type in types and result.subject.value.strip().lower() == value) or (
+            host is not None and result.subject.type is _O.HOSTNAME and same_endpoint(result.subject.value, host))
+        for record in result.records:
+            if record.integration in failed:
+                continue
+            if same or any(o.value.strip().lower() == value or (host is not None and o.type is _O.HOSTNAME
+                                                                and same_endpoint(o.value, host))
+                           for o in _mentions(record, types)):
+                out.setdefault(record.record_id, None)
+    return list(out)
+
+
+def _subject_observables(subject: str) -> list[Observable]:
+    """The observables a ``"<action>:<target>"`` subject stands for (target, host or user part)."""
+    action, sep, target = subject.partition(":")
+    if not sep:
+        return []
+    try:
+        kind = get_action_spec(ActionType(action.strip())).target_kind
+    except (ValueError, KeyError):
+        return []
+    target = _normalized(kind, target.strip())
+    out = [o for o in (_target_observable(kind, target),) if o is not None]
+    head = target.split("/", 1)[0]
+    if "/" in target and kind is not _T.URL and head:
+        for otype in (_O.HOSTNAME, _O.USER):
+            try:
+                out.append(Observable(type=otype, value=head))
+            except ValueError:
+                continue
+    return out
+
+
+def _failures_for(state: _Run, subject: str, record_ids: Sequence[str]) -> list[tuple[str, str]]:
+    """``(integration, "<atomic> <subject>")`` for every FAILED read about ``subject`` or a cited record."""
+    observables = _subject_observables(subject)
+    keys = {(o.type, o.value.strip().lower()) for o in observables}
+    raw = subject.partition(":")[2].strip().lower()  # e.g. "block_sender:<address>" (no action type)
+    hosts = [o.value for o in observables if o.type is _O.HOSTNAME]
+    cited = set(record_ids)
+    out: dict[tuple[str, str], None] = {}
+    for result in state.results:
+        failed = [s.integration for s in result.sources if s.outcome is SourceOutcome.FAILED]
+        if not failed:
+            continue
+        value = result.subject.value.strip().lower()
+        about = (result.subject.type, value) in keys or (bool(raw) and value == raw) or any(
+            result.subject.type is _O.HOSTNAME and same_endpoint(result.subject.value, h) for h in hosts)
+        if not about and not cited.intersection(result.record_ids()):
+            continue
+        for name in failed:
+            out.setdefault((name, f"{result.atomic} {result.subject.value}"), None)
+    return list(out)
+
+
 def _one_line(text: object) -> str:
     return " ".join(text.split()) if isinstance(text, str) else ""
 
@@ -1354,6 +1738,12 @@ def _cited(record_ids: Sequence[str]) -> str:
 def _consideration_line(item: Consideration) -> str:
     """``"<subject>: <reason> [rec_...]"`` (workflow summary)."""
     return f"{item.subject}: {item.reason} {_cited(item.record_ids)}"
+
+
+def _needs_line(item: NeedsInvestigation) -> str:
+    """``"<subject>: <reason> [rec_...]"`` (workflow summary; no brackets without a record)."""
+    cited = f" {_cited(item.record_ids)}" if item.record_ids else ""
+    return f"{item.subject}: {item.reason}{cited}"
 
 
 def _handoff_line(item: Handoff) -> str:

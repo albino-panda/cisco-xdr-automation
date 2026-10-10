@@ -481,13 +481,32 @@ class AccountTakeoverHooks(WorkflowHooks):
         }
 
     def considered(self, view: RunView) -> Sequence[Consideration]:
-        """Attacker-rated sign-in IPs not blocked because they are shared infrastructure."""
+        """Attacker-rated sign-in IPs not blocked because they are shared infrastructure, and rated IPs
+        that no sign-in ties to an account because the identity reads failed (degraded source)."""
         ips = self.facts(view)["ips"]
-        return [Consideration(subject=f"block_ip:{i['ip']}",
-                              reason=f"rated {i['verdict']} but shared (seen from internal endpoints or used by "
-                                     "other accounts): not blocked",
-                              record_ids=tuple(dict.fromkeys([*i["record_ids"], *i["shared_record_ids"]])))
-                for i in ips if i["shared"] and i["block_worthy"]]
+        out = [Consideration(subject=f"block_ip:{i['ip']}",
+                             reason=f"rated {i['verdict']} but shared (seen from internal endpoints or used by "
+                                    "other accounts): not blocked",
+                             record_ids=tuple(dict.fromkeys([*i["record_ids"], *i["shared_record_ids"]])))
+               for i in ips if i["shared"] and i["block_worthy"]]
+        failed = failed_reads(view, _USER_ATOMICS)
+        if not failed:
+            return out
+        data = _collect(view)
+        listed = {i["ip"] for i in ips}
+        names = sorted({n for v in failed.values() for n in v})
+        for key in sorted(data.ips):
+            ip = data.ips[key]
+            cited = _ids([*ip.flagged_enrichment(), *ip.anomalies.values()])
+            if key in listed or not ip.block_worthy() or not cited:
+                continue
+            out.append(Consideration(
+                subject=f"block_ip:{key}",
+                reason=(f"rated {ip.verdict.value}, but no sign-in record of an investigated account ties it to the "
+                        f"takeover: {', '.join(names)} failed for the identity reads of {', '.join(failed)}; not "
+                        "blocked (re-run when the source recovers, or decide by hand)"),
+                record_ids=tuple(cited)))
+        return out
 
     def derive_signals(self, view: RunView) -> Sequence[ScoringSignal]:
         data = _collect(view)

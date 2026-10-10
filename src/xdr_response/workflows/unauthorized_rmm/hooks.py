@@ -53,7 +53,7 @@ from xdr_response.atomics.records import (
     UserProfileRecord,
 )
 from xdr_response.models import ObservableType, Severity, TargetKind, Verdict
-from xdr_response.workflows.hooks import Consideration, Handoff, RunView, WorkflowHooks
+from xdr_response.workflows.hooks import Consideration, Handoff, RunView, WorkflowHooks, failed_reads
 from xdr_response.workflows.unauthorized_rmm.definition import (
     MAX_FLEET_BLOCK_PREVALENCE,
     REMOTE_ACCESS_CATEGORIES,
@@ -202,6 +202,7 @@ class _Facts:
     """One computation of the facts over a run view (private helper of :class:`UnauthorizedRmmHooks`)."""
 
     def __init__(self, view: RunView) -> None:
+        self.view = view
         records = view.index.records()
         self.detections = [r for r in records if isinstance(r, DetectionRecord)]
         self.events = sorted((r for r in records if isinstance(r, ProcessEventRecord)),
@@ -617,15 +618,19 @@ class _Facts:
                             "block is proposed; a human decides"),
                     record_ids=tuple(fact["record_ids"] or fact["all_ids"])))
         flagged_names = {fact["name"] for fact in self._tool_facts.values() if fact["flagged"]}
+        rating_failed = {k.lower(): v for k, v in failed_reads(self.view, ("enrich_ip", "enrich_domain")).items()}
         for session in sessions:
             # an unflagged tool's session is covered by its rmm_tool item; a flagged one's withheld isolation is shown
             if not session["untrusted"] and flagged_names.intersection(session["tools"]):
+                unrated = [f"{', '.join(rating_failed[p.lower()])} failed for the rating of {p}"
+                           for p in session["peers"] if p.lower() in rating_failed]
                 out.append(Consideration(
                     subject=f"isolate_endpoint:{session['hostname']}",
                     reason=(f"active session of {session['tool_list']} to {session['peer_list']}, but no peer is "
                             "rated malicious or suspicious and no detection rates the tool malicious: not isolated "
                             "(terminating a flagged tool ends the session); verify the operator with the service "
-                            "desk"),
+                            "desk" + (f"; degraded: {'; '.join(unrated)}, so a peer rating may be missing"
+                                      if unrated else "")),
                     record_ids=tuple(session["record_ids"])))
         for dest in self.destinations():
             if dest["rated"]:

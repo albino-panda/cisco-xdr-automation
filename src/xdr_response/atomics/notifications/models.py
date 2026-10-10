@@ -84,6 +84,9 @@ class WorkflowSummary(FrozenModel):
     considered: tuple[str, ...] = ()  # "<subject>: <reason> [<record ids>]": examined, deliberately not proposed
     manual_steps: tuple[str, ...] = ()  # "<subject>: <what to do> [<record ids>]": no VERIFIED write exists
     handoffs: tuple[str, ...] = ()  # "<workflow> for <subjects>: <reason> [<record ids>]": suggestions only
+    #: "<action>:<target>: <reason>": a failed source held the only evidence about a target the run knows;
+    #: never proposed, re-run when the source recovers or decide by hand (owner rule, 14.14.1).
+    needs_investigation: tuple[str, ...] = ()
 
 
 class LifecycleEvent(FrozenModel):

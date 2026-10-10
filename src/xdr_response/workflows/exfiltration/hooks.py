@@ -256,6 +256,7 @@ class _Analysis:
         self.created = view.incident.created_at
         self.cutoff = self.created - timedelta(minutes=ONGOING_MINUTES)
         self.identity_failed = failed_reads(view, ("investigate_user",))
+        self.endpoint_failed = failed_reads(view, ("investigate_endpoint",))
         self.rating_failed = failed_reads(view, ("enrich_domain", "enrich_ip"))
         self.internal: dict[str, list[NetworkConnectionRecord]] = {}
         self.destinations = self._collect()
@@ -493,7 +494,9 @@ class _Analysis:
         candidates: set[str] = {c.user for c in transfers if c.user}
         for host in sources:
             candidates |= self._host_users(host)
-        if transfers or any(d.abnormal_dns for d in self.destinations.values()):
+        if transfers or any(d.abnormal_dns for d in self.destinations.values()) or self.endpoint_failed:
+            # A failed endpoint read hides the transfer records: the incident's accounts are still assessed
+            # on the identity evidence (owner rule: a failed source never blocks what other evidence backs).
             candidates |= {u.lower() for u in self.view.incident.users}
             candidates |= {o.value.lower() for o in self.view.incident.observables
                            if o.type is ObservableType.USER}
@@ -536,8 +539,12 @@ class _Analysis:
         transfers = self._transfers_of(user)
         destinations = sorted({v for c in transfers for v in (c.domain, public_ipv4(c.remote_ip)) if v})
         volume = sum(c.bytes_out or 0 for c in transfers)
+        unverified = [] if transfers else [f"{name} for investigate_endpoint {host}"
+                                           for host, names in sorted(self.endpoint_failed.items()) for name in names]
         transfer_text = (f"{format_bytes(volume)} to {', '.join(destinations)}" if transfers
-                         else "no transfer record names the account")
+                         else ("no transfer record: the endpoint read failed (" + "; ".join(unverified)
+                               + "), so whether the account drives the transfer could not be checked")
+                         if unverified else "no transfer record names the account")
         groups = sorted({g for p in profiles for g in p.groups})
         roles = sorted({r for p in profiles for r in p.roles})
         failed = self.identity_failed.get(user, ())
@@ -556,6 +563,7 @@ class _Analysis:
             "insider_ids": _ids(insider),
             "transfer_ids": _ids(transfers),
             "drives": bool(transfers),
+            "transfer_unverified": unverified,
         }
 
     def actor_facts(self) -> list[dict[str, Any]]:
@@ -803,6 +811,15 @@ class _Analysis:
                     reason += "; account(s) not assessed: " + ", ".join(fact["unassessed"])
                 out.append(Consideration(subject=subject, reason=reason, record_ids=ids))
         for user, actor in self.actors.items():
+            if actor["compromised"] and not actor["drives"] and actor["transfer_unverified"] and actor["compromise_ids"]:
+                out.append(Consideration(
+                    subject=f"disable_user:{user}",
+                    reason=(f"the account is compromised ({actor['basis']}) and named by the incident, but "
+                            f"{actor['transfer_text']}: its sessions revocation is proposed on the identity evidence, "
+                            "the disable is not (this workflow disables an account that drives a transfer); re-run "
+                            "when the source recovers, or decide by hand"),
+                    record_ids=tuple(actor["compromise_ids"])))
+                continue
             if actor["compromised"] and not actor["drives"] and not actor["insider"] and actor["compromise_ids"]:
                 hosts = sorted(h for h, f in self._source_facts.items() if user in f["users"])
                 tie = (f"uses the source endpoint {', '.join(hosts)}" if hosts else "is named by the incident")
@@ -816,12 +833,13 @@ class _Analysis:
                 continue
             if actor["assessed"] or actor["compromised"] or actor["insider"] or not actor["transfer_ids"]:
                 continue
-            out.append(Consideration(
-                subject=f"revoke_sessions:{user}",
-                reason=(f"the account drives {actor['transfer_text']} but could not be assessed because "
-                        f"{', '.join(actor['identity_failed'])} failed: sessions are not revoked and the account is "
-                        "not disabled; check the identity console and decide by hand"),
-                record_ids=tuple(actor["transfer_ids"])))
+            for action in ("revoke_sessions", "disable_user"):
+                out.append(Consideration(
+                    subject=f"{action}:{user}",
+                    reason=(f"the account drives {actor['transfer_text']} but could not be assessed because "
+                            f"{', '.join(actor['identity_failed'])} failed: sessions are not revoked and the account "
+                            "is not disabled; check the identity console and decide by hand"),
+                    record_ids=tuple(actor["transfer_ids"])))
         out.extend(self._manual_steps())
         return out
 

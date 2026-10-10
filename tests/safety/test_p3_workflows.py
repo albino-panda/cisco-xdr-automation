@@ -24,6 +24,7 @@ import pytest
 import yaml
 
 from tools.simulator.scenario import REPO_ROOT
+from tests.fixtures.degraded import degradation_findings
 from tools.simulator.workflow_scenario import WorkflowScenario, WorkflowScenarioRun
 from xdr_response import guard
 from xdr_response.errors import ApprovalError
@@ -957,26 +958,15 @@ def _degradation_cases() -> list[Any]:
 
 @pytest.mark.parametrize("workflow, failed", _degradation_cases())
 def test_a_failed_source_does_not_block_actions_backed_by_other_sources(workflow: str, failed: str):
-    """Fail every read of one integration. Each baseline action whose cited evidence came only from
-    other integrations is still recommended (confidence may drop; the action may not disappear)."""
-    run = _detect(_raw(workflow, "tp-approve-all"), workflow, "tp-approve-all", live=False)
-    wf = run.workflow_run
-    independent = []
-    for action in run.detection.package.actions:
-        sources = {wf.index.get(e.data["record_id"]).integration for e in action.evidence}
-        if failed not in sources:
-            independent.append((action.action_type, action.target))
-    guard._reset_for_test_harness()
-    if not independent:
-        pytest.skip(f"every action of {workflow} cites {failed}")
-    data = copy.deepcopy(_raw(workflow, "tp-approve-all"))
-    data["environment"]["faults"] = list(data["environment"].get("faults") or []) + [
-        {"kind": "UNAVAILABLE", "integration": failed, "times": None}]
-    degraded = _detect(data, workflow, "tp-approve-all", live=False)
-    package = degraded.detection.package
-    proposed = {(a.action_type, a.target) for a in package.actions} if package else set()
-    lost = sorted(f"{a.value}:{t}" for a, t in independent if (a, t) not in proposed)
-    assert lost == [], f"{workflow}: failing {failed} blocked actions backed by other sources: {lost}"
+    """Fail every read of one integration (owner rule, architecture 14.14.1). An action whose evidence
+    never came from it is still proposed; an action that also cites other sources whose records survive
+    and name its target is proposed, or shown below threshold / considered with the failed source named;
+    an action whose only evidence came from the failed source may be dropped, but never silently (a
+    needs-investigation entry naming it when the run still knows the target, else the degraded-source
+    note). No case is skipped: actions that cite the failed source alongside others are checked too."""
+    findings = degradation_findings(_raw(workflow, "tp-approve-all"), failed,
+                                    lambda data: _detect(data, workflow, "tp-approve-all", live=False))
+    assert findings == [], f"{workflow}: failing {failed}: {findings}"
 
 
 @pytest.mark.parametrize("workflow", P3_WORKFLOWS)
@@ -1347,23 +1337,10 @@ def _defender_degradation_cases() -> list[Any]:
 
 @pytest.mark.parametrize("workflow, name, failed", _defender_degradation_cases())
 def test_failed_source_does_not_block_defender_backed_actions(workflow: str, name: str, failed: str):
-    run = _detect(_raw(workflow, name), workflow, name, live=False)
-    package = run.detection.package
-    assert package is not None
-    wf = run.workflow_run
-    independent = [(a.action_type, a.target) for a in package.actions
-                   if failed not in {wf.index.get(e.data["record_id"]).integration for e in a.evidence}]
-    guard._reset_for_test_harness()
-    if not independent:
-        pytest.skip(f"every action cites {failed}")
-    data = copy.deepcopy(_raw(workflow, name))
-    data["environment"]["faults"] = list(data["environment"].get("faults") or []) + [
-        {"kind": "UNAVAILABLE", "integration": failed, "times": None}]
-    degraded = _detect(data, workflow, name, live=False)
-    proposed = {(a.action_type, a.target) for a in (degraded.detection.package.actions
-                                                     if degraded.detection.package else ())}
-    lost = sorted(f"{a.value}:{t}" for a, t in independent if (a, t) not in proposed)
-    assert lost == [], f"{workflow}/{name}: failing {failed} blocked actions backed by other sources: {lost}"
+    """Same accounting as the tp-approve-all degradation test (14.14.1), on the Defender-managed edge cases."""
+    findings = degradation_findings(_raw(workflow, name), failed,
+                                    lambda data: _detect(data, workflow, name, live=False))
+    assert findings == [], f"{workflow}/{name}: failing {failed}: {findings}"
 
 
 # =====================================================================================================
