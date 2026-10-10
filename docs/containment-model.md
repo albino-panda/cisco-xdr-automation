@@ -246,11 +246,14 @@ environment. No network calls.
 === Containment result (dry run) ===
 DRY RUN
 Would isolate: TH-LT-1047
-Would block: 5c1d7e0b9a8f6e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d
 Would block: c2.ransom-ops.example
 Would block: 198.51.100.23
 No containment actions executed.
 ```
+
+The encryptor hash is not in the package: no adapter in the default lab has a VERIFIED hash-block write
+(Secure Endpoint has none, and Defender for Endpoint is not in the default suite), so the run notes it as
+not proposed, for manual handling (production parity, architecture 14.14.3 and 15.2).
 
 `python tools/simulator/simulate.py phishing` (the scenario's `APPROVE_SELECTED` rejects
 `disable_user`):
@@ -309,28 +312,30 @@ Overall: PARTIALLY_CONTAINED
 Package 00000000000000000000000000000001  approval token 00000000000000000000000000000003
 Started 2026-01-15T12:00:00Z  finished 2026-01-15T12:00:00Z
 Results:
-  [SUCCESS]  isolate_endpoint TH-LT-1047                                                  via secure_endpoint  verification VERIFIED  control registered
-  [SUCCESS]  block_hash 5c1d7e0b9a8f6e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d  via secure_endpoint  verification VERIFIED  control registered
-  [FAILED]   block_domain c2.ransom-ops.example                                           via umbrella         verification -         ATTENTION
+  [SUCCESS]  isolate_endpoint TH-LT-1047         via secure_endpoint  verification UNABLE_TO_VERIFY  control registered  ATTENTION
+  [FAILED]   block_domain c2.ransom-ops.example  via umbrella         verification -                 ATTENTION
       error UNAVAILABLE: umbrella.block_domain: simulated outage
       escalation simulated environment: no vendor console
-  [FAILED]   block_ip 198.51.100.23                                                       via meraki           verification -         ATTENTION
+  [FAILED]   block_ip 198.51.100.23              via meraki           verification -                 ATTENTION
       error AUTH_FAILED: meraki.block_ip: simulated authentication failure
       escalation simulated environment: no vendor console
 Attention:
+  - Requires attention: isolate_endpoint TH-LT-1047 - verify manually (UNABLE_TO_VERIFY)
   - Requires attention: block_domain c2.ransom-ops.example - HTTP 503 (UNAVAILABLE)
   - Requires attention: block_ip 198.51.100.23 - HTTP 401 (AUTH_FAILED)
   - Recommended escalation: simulated environment: no vendor console
-Temporary controls registered: 2 (release needs a separate release approval)
+Temporary controls registered: 1 (release needs a separate release approval)
 ```
 
 What to read from it:
 
-- The two Secure Endpoint actions still ran and were verified. The failures did not stop them.
+- The Secure Endpoint isolation still ran; the failures did not stop it. Secure Endpoint has no
+  verified read-back for isolation, so it is `UNABLE_TO_VERIFY` and flagged for manual verification
+  (architecture 15.1).
 - The overall result is `PARTIALLY_CONTAINED`. The `AUTH_FAILED` error is not transient, so the
   incident moved on to `REMEDIATION_REQUIRED`. With only the Umbrella outage (transient) the incident
   stays `PARTIALLY_CONTAINED` and the recommendation is a retry package for a new approval.
-- Only the two successful controls are registered, so only they can be released later.
+- Only the successful isolation is registered, so only it can be released later.
 - The escalation text comes from the simulated adapters. Real adapters use their manifest's
   escalation hint.
 

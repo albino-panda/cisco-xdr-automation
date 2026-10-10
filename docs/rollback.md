@@ -223,24 +223,34 @@ Controls not listed here stay ACTIVE. Closing the incident never removes control
 Package 00000000000000000000000000000005  workflow ransomware-containment 1.0.0  evidence sha256 0c85e87a399f  approve before 2026-01-15T16:00:00Z
 [APPROVE RELEASE] [REJECT]
 
-Release APPROVE_ALL; incident now RESTORED
+Release APPROVE_ALL; incident now AWAITING_RELEASE_APPROVAL
 
 === Restoration result ===
 RESTORATION RESULT  XDR-RW-2002
-Overall: RESTORED
+Overall: RESTORATION_FAILED
 Package 00000000000000000000000000000005  approval token 00000000000000000000000000000007
 Started 2026-01-15T12:00:00Z  finished 2026-01-15T12:00:00Z
 Results:
-  [SUCCESS]  release_endpoint TH-DC-02    via secure_endpoint  verification VERIFIED
-  [SUCCESS]  release_endpoint TH-LT-1047  via secure_endpoint  verification VERIFIED
+  [SUCCESS]  release_endpoint TH-DC-02    via secure_endpoint  verification UNABLE_TO_VERIFY  ATTENTION
+  [SUCCESS]  release_endpoint TH-LT-1047  via secure_endpoint  verification UNABLE_TO_VERIFY  ATTENTION
+Attention:
+  - release_endpoint TH-DC-02: verify manually; control kept RELEASE_FAILED
+  - release_endpoint TH-LT-1047: verify manually; control kept RELEASE_FAILED
 ```
 
 Notes:
 
+- Both releases ran, but Secure Endpoint has no verified read-back for isolation state (architecture
+  15.1), so neither release can be confirmed automatically. The controls stay `RELEASE_FAILED`, the
+  overall result is `RESTORATION_FAILED` and the incident waits in `AWAITING_RELEASE_APPROVAL` until an
+  analyst verifies the endpoints by hand. A restoration is never reported `RESTORED` without a
+  verified read-back. With an endpoint product that can be read back (Defender for Endpoint) the same
+  release reports `RESTORED`.
+
 - The release token (`...0007`) is a different token from the containment token (`...0003`).
 - After a partial containment only the successful controls appear. In the partial-failure example of
   [containment-model.md](containment-model.md#live-partial-failure) the release package lists the
-  hash block and the isolation only. The failed Umbrella and Meraki blocks were never registered.
+  isolation only. The failed Umbrella and Meraki blocks were never registered.
 - In `account_takeover` the attacker IP was `ALREADY_CONTAINED`, so the release package holds only
   `Re-enable Entra account: jsmith@example.com`. The pre-existing IP block is left alone.
 - A dry run creates no controls. The simulator prints

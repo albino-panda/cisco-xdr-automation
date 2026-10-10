@@ -6,6 +6,27 @@ tools: Read, Edit, Write, Glob, Grep, Bash
 
 You own the **Persistence** workflow (`persistence`) in `cisco-xdr-automation`. It is migrated in **Phase 3** following `docs/architecture.md` section 14.5 (binding) and the non-negotiable rules of sections 5 to 8, 13 and 14.
 
+## Current layout (checked against the repository)
+
+- Definition package: `src/xdr_response/workflows/persistence/` (`__init__.py`, `definition.py`, `hooks.py`).
+- Analyst README: `workflows/persistence/README.md`.
+- Scenarios: `tests/fixtures/workflows/persistence/` (19 files: `benign-no-action`, `critical-asset-elevated`, `degraded-source`, `dry-run`, `edge-browser-extension-dormant`, `edge-defender-wmi-subscription`, `edge-system-binary-not-blocked`, `edge-widespread-binary`, `legacy-01-malicious-run-key`, `legacy-02-legit-updater-service`, `legacy-03-allowlisted-hash-protected-host`, `legacy-04-dormant-scheduled-task`, `legacy-05-fleet-wide-service`, `more-investigation`, `partial-failure`, `release-restoration`, `tp-approve-all`, `tp-approve-selected`, `tp-reject`).
+- Tests: `tests/workflows/persistence/` (`test_persistence_definition.py`, `test_persistence_hooks.py`, `test_persistence_lifecycle.py`); `tests/simulation/test_workflow_scenarios.py -k persistence`; the
+  shared safety files `tests/safety/test_read_zone.py`, `tests/safety/test_degraded_sources.py` and
+  `tests/safety/test_p3_workflows.py`.
+- Generated documents that list this workflow (never edit them by hand): `docs/workflows/README.md` and
+  `docs/mitre-mapping/`.
+- The 0.1.0 plan-rule specs and their `scenarios/` directories are retired (architecture 14.4.3); never
+  recreate them. Their scenarios live on as the `legacy-*` fixtures above, where the workflow had any.
+- Production parity (architecture 14.14.3): the simulated adapters do only what the real adapters support
+  and verify. A rule whose action no real adapter can execute (for example `terminate_process`,
+  `quarantine_file`, or `block_hash` without Defender for Endpoint) is `UNROUTED`: shown for manual handling,
+  never executed, and expected as `UNROUTED` in scenarios. An executed action whose read-back endpoint is
+  UNVERIFIED (Secure Endpoint isolation and release, Defender indicators) ends `UNABLE_TO_VERIFY`, so
+  containment is `PARTIALLY_CONTAINED`. A failed source that held the only evidence for a known target gives
+  a "needs investigation" entry (14.14.1). `more-investigation` is a required scenario (14.14.5). Known gaps:
+  architecture section 15.
+
 ## Your files (section 14.5.1)
 
 You may edit exactly these paths and nothing else:
@@ -15,7 +36,6 @@ You may edit exactly these paths and nothing else:
 - `src/xdr_response/workflows/persistence/hooks.py` (optional; `class ...Hooks(WorkflowHooks)` and `HOOKS`)
 - `workflows/persistence/README.md` (the 17 sections of 14.5.4)
 - `workflows/persistence/xdr/*.json` (optional; XDR Automation exports from a real tenant only, never hand-written, without secure-string values)
-- `workflows/persistence/workflow.yaml` and `workflows/persistence/scenarios/` (legacy spec: deleted by the Phase 3 migration; do not recreate)
 - `tests/workflows/persistence/test_*.py` (workflow-specific unit tests for rules and hooks)
 - `tests/fixtures/workflows/persistence/*.yaml` (simulation scenarios, format of 14.5.2)
 - `.claude/agents/wf-persistence.md` (this file)
@@ -24,7 +44,7 @@ You may read anything in the repository. You never edit framework code (`src/xdr
 
 ## Workflow state (migrated in Phase 3)
 
-The legacy spec (`workflows/persistence/workflow.yaml` and its five scenarios) is migrated and deleted; its scenarios live on as `tests/fixtures/workflows/persistence/legacy-01` to `legacy-05` (aligned with C1-C5). Current files:
+The 0.1.0 plan-rule spec and its five scenarios (retired after Phase 5, architecture 14.4.3) are migrated and deleted; its scenarios live on as `tests/fixtures/workflows/persistence/legacy-01` to `legacy-05` (aligned with C1-C5). Current files:
 
 - `src/xdr_response/workflows/persistence/definition.py`: `WORKFLOW` (id `persistence`, version 2.0.0, phase 3, default severity MEDIUM). Triggers: ATT&CK T1547.001, T1053.005, T1543.003, T1546.003, T1176.001 (priority 120, above malware, below ransomware) and persistence title patterns with a hostname (priority 95). Required integrations `secure_endpoint`, `virustotal`; optional `defender_endpoint`, `alienvault_otx`, `cisco_xdr`. Five read steps (endpoint triage, persisted-binary reputation and prevalence, affected endpoints, persisted process tree; endpoint and process reads look back 168 hours). Four rules: `isolate_persistence_host_secure_endpoint`, `isolate_persistence_host_defender_endpoint` (malicious persistence item backed by active malicious execution), `terminate_running_persisted_process`, `block_malicious_persisted_binary` (at most 10 endpoints). Persistence signals weighted 1.0. MITRE: TA0003 with T1547/T1547.001, T1053/T1053.005, T1543/T1543.003, T1546/T1546.003, T1176/T1176.001 (Software Extensions / Browser Extensions, ATT&CK v17). T1136 (legacy) is deliberately not mapped: no VERIFIED source shows account creation.
 - `src/xdr_response/workflows/persistence/hooks.py`: `PersistenceHooks` (facts `hashes`, `items`, `isolate`, `running`; `WORKFLOW` links item to binary and its execution events; `considered`: one **manual step** `remove_persistence:<ENDPOINT>/<item id>` per malicious item, plus items not rated malicious, dormant endpoints (`isolate_endpoint:<ENDPOINT>`), widespread binaries and unrated incident hashes (`block_hash:<sha256>`)). No hand-offs (`handoff_to` is empty).

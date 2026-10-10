@@ -28,16 +28,28 @@ tokens only to authenticated HUMAN principals (`analyst`, `lead`). The `automati
 exist so you can watch them being refused. Every simulated write still goes through the execution
 guard.
 
+**Production parity** (`docs/architecture.md` 14.14.3). Each simulated adapter does exactly what the
+real adapter of the same integration supports and verifies: its actions and read-backs are derived
+from the real manifest (`xdr_response.integrations.<name>.manifest.MANIFEST`, VERIFIED endpoints only),
+so the lab cannot drift from production and there is no lab-only mode. Consequences you will see:
+the Secure Endpoint isolation and release run but cannot be read back (`UNABLE_TO_VERIFY`, so the
+run is `PARTIALLY_CONTAINED` and a release keeps the control `RELEASE_FAILED` until a human checks
+it); a hash block runs only where Defender for Endpoint is in the suite (Secure Endpoint cannot block
+hashes) and is otherwise reported UNROUTED; `terminate_process`, `quarantine_file`,
+`remove_persistence`, `reset_password`, `reset_mfa`, `revoke_app_credentials` and
+`remove_application` have no VERIFIED write anywhere and are always reported UNROUTED (shown for
+manual handling, never executed). `--production-parity` is still accepted and changes nothing.
+
 ## Scenarios
 
 Scenario files live in `tests/fixtures/incidents/` and are shared with `tests/simulation/`:
 
 | Scenario | What it shows |
 |---|---|
-| `ransomware` | TH-LT-1047 isolation, hash, C2 domain and IP blocks; approve all; release and restore |
+| `ransomware` | TH-LT-1047 isolation, C2 domain and IP blocks (the hash block is not proposed: no adapter in the default suite has a hash-block write); approve all; `PARTIALLY_CONTAINED` and `PARTIALLY_RESTORED` because the Secure Endpoint isolation and release are `UNABLE_TO_VERIFY` |
 | `phishing` | email quarantine, URL and domain blocks, session revocation; APPROVE_SELECTED rejects disabling the account |
 | `account_takeover` | disable user and revoke sessions; the attacker IP is already blocked (ALREADY_CONTAINED, no control) |
-| `ransomware_domain_controller` | TH-DC-02 needs ELEVATED approval (lead); TH-DC-01 is allow-listed and excluded |
+| `ransomware_domain_controller` | TH-DC-02 needs ELEVATED approval (lead); TH-DC-01 is allow-listed and excluded; isolation and release are `UNABLE_TO_VERIFY` (`PARTIALLY_CONTAINED`, `RESTORATION_FAILED` until checked by hand) |
 
 A scenario has `incident`, `environment` (`reputations` with optional `integrations`, `categories`
 and `first_seen` (ISO 8601 with offset; both reported in the enrichment evidence), `findings`,
@@ -58,14 +70,24 @@ and recommended; the analyst decision and the release are played from the scenar
 python tools/simulator/simulate.py --list-workflows
 python tools/simulator/simulate.py --workflow ransomware                      # every scenario, dry run
 python tools/simulator/simulate.py --workflow ransomware --scenario tp-approve-all --live --check
+python tools/simulator/simulate.py --all-workflows --check                     # every workflow, dry run
+python tools/simulator/simulate.py --all-workflows --live --check              # every workflow, simulated live
 ```
 
 `--check` asserts the scenario's `expect` block plus the implicit assertions every scenario gets:
 zero state-changing calls and zero guard denials before the analyst decision, evidence that cites
 the run's records, separate risk and confidence, ELEVATED with a warning for every critical asset
 (and an analyst alone refused on a `critical_asset` scenario), AI and automation principals refused,
-an intact audit chain and no rule or hook error. A scenario whose `mode` excludes the chosen mode is
-skipped.
+an intact audit chain and no rule or hook error; after a REJECT or REQUEST_MORE_INVESTIGATION
+decision no token, no state change and no control, the decided package can no longer be approved,
+and REQUEST_MORE_INVESTIGATION leaves the incident NOT_STARTED. A scenario whose `mode` excludes the
+chosen mode is skipped.
+
+The minimum set (`check_coverage`) requires every scenario of 14.5.3 plus `more-investigation.yaml`,
+every tag of the vocabulary (`more_investigation` included; only `legacy` is optional) and every rule
+expected in some scenario. A rule whose action no real adapter can execute counts as covered when a
+scenario expects it UNROUTED; an executable action must be proposed somewhere (for example through a
+suite with Defender for Endpoint for hash blocks).
 
 Modules: `workflow_scenario.py` (`WorkflowScenario`, `load_workflow_scenario`,
 `discover_workflow_scenarios`, `WorkflowScenarioRun`, `check_coverage`). `ScenarioRun` accepts
@@ -75,20 +97,19 @@ tests-only sample workflow and its scenarios are in `tests/fixtures/sample_workf
 When several scenarios are selected (no `--scenario`), each one runs in its own child process: the
 execution guard allows one runtime per process because its approval verifier slot is sealed.
 
-## Legacy replay (Phase 1)
+`--all-workflows` runs every scenario of every discovered workflow in the selected mode and prints a
+summary line (`<n> scenario run(s) over <m> workflow(s) (dry run): OK`); CI runs it in both modes.
 
-The legacy specs (`workflows/<id>/scenarios/*.yaml`) replay through the runtime in **dry run only**
-(`docs/architecture.md` 14.3.8 and 14.9.1). The legacy plan is built by `engine/xdr_plan`, bridged to
-proposals by `xdr_response.lifecycle.plan_bridge` (evidence cites the legacy results), packaged by
-`PackageBuilder` (allow-lists, ELEVATED for protected assets, blast-radius caps from the scenario's
-guardrails) and simulated. Nothing is approved and nothing is executed.
+In workflow-scenario mode the analyst decision, the approvers and the release come from the scenario
+file; `--decision`, `--approver`, `--no-release` and `--audit-out` apply only to the bundled incident
+scenarios. Sample output for three workflows, regenerated from these commands, is in
+[docs/samples](../../docs/samples/README.md).
+
+## Scenarios from the retired spec layer
+
+The 0.1.0 plan-rule specs and their dry-run replay were retired after Phase 5 (`docs/architecture.md`
+14.4.3). Each of their scenarios lives on as a `legacy-*` workflow scenario, for example:
 
 ```
-python tools/simulator/simulate.py --legacy web-attacks                     # every scenario of the workflow
-python tools/simulator/simulate.py --legacy web-attacks 01-confirmed-web-shell --check
+python tools/simulator/simulate.py --workflow web-attacks --scenario legacy-01-confirmed-web-shell --check
 ```
-
-`--check` compares the package with the scenario's `expect` block (planned actions in the package,
-`elevated: true` as ELEVATED with a warning, skipped actions absent, `escalate` as a blast-radius
-warning) and fails on any state-changing call or guard denial. `tests/simulation/test_legacy_replay.py`
-replays all of them.

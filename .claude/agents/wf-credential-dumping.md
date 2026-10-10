@@ -6,6 +6,27 @@ tools: Read, Edit, Write, Glob, Grep, Bash
 
 You own the **Credential dumping** workflow (`credential-dumping`) in `cisco-xdr-automation`. It is migrated in **Phase 3** following `docs/architecture.md` section 14.5 (binding) and the non-negotiable rules of sections 5 to 8, 13 and 14.
 
+## Current layout (checked against the repository)
+
+- Definition package: `src/xdr_response/workflows/credential_dumping/` (`__init__.py`, `definition.py`, `hooks.py`).
+- Analyst README: `workflows/credential-dumping/README.md`.
+- Scenarios: `tests/fixtures/workflows/credential-dumping/` (21 files: `benign-no-action`, `critical-asset-elevated`, `degraded-source`, `dry-run`, `edge-builtin-tool-misuse`, `edge-compromised-account-disabled`, `edge-defender-hash-block`, `edge-defender-managed-endpoint`, `edge-domain-controller-ntds`, `edge-suspected-not-confirmed`, `legacy-01-workstation-lsass-access`, `legacy-02-security-agent-memory-read`, `legacy-03-domain-controller-ntds`, `legacy-04-domain-admin-exposed`, `legacy-05-shared-admin-server`, `more-investigation`, `partial-failure`, `release-restoration`, `tp-approve-all`, `tp-approve-selected`, `tp-reject`).
+- Tests: `tests/workflows/credential_dumping/` (`test_cd_definition.py`, `test_cd_hooks.py`, `test_cd_lifecycle.py`); `tests/simulation/test_workflow_scenarios.py -k credential-dumping`; the
+  shared safety files `tests/safety/test_read_zone.py`, `tests/safety/test_degraded_sources.py` and
+  `tests/safety/test_p3_workflows.py`.
+- Generated documents that list this workflow (never edit them by hand): `docs/workflows/README.md` and
+  `docs/mitre-mapping/`.
+- The 0.1.0 plan-rule specs and their `scenarios/` directories are retired (architecture 14.4.3); never
+  recreate them. Their scenarios live on as the `legacy-*` fixtures above, where the workflow had any.
+- Production parity (architecture 14.14.3): the simulated adapters do only what the real adapters support
+  and verify. A rule whose action no real adapter can execute (for example `terminate_process`,
+  `quarantine_file`, or `block_hash` without Defender for Endpoint) is `UNROUTED`: shown for manual handling,
+  never executed, and expected as `UNROUTED` in scenarios. An executed action whose read-back endpoint is
+  UNVERIFIED (Secure Endpoint isolation and release, Defender indicators) ends `UNABLE_TO_VERIFY`, so
+  containment is `PARTIALLY_CONTAINED`. A failed source that held the only evidence for a known target gives
+  a "needs investigation" entry (14.14.1). `more-investigation` is a required scenario (14.14.5). Known gaps:
+  architecture section 15.
+
 ## Your files (section 14.5.1)
 
 You may edit exactly these paths and nothing else:
@@ -15,7 +36,6 @@ You may edit exactly these paths and nothing else:
 - `src/xdr_response/workflows/credential_dumping/hooks.py` (optional; `class ...Hooks(WorkflowHooks)` and `HOOKS`)
 - `workflows/credential-dumping/README.md` (the 17 sections of 14.5.4)
 - `workflows/credential-dumping/xdr/*.json` (optional; XDR Automation exports from a real tenant only, never hand-written, without secure-string values)
-- `workflows/credential-dumping/workflow.yaml` and `workflows/credential-dumping/scenarios/` (legacy spec: delete both in the same change that adds the definition and its `legacy-*` scenarios)
 - `tests/workflows/credential_dumping/test_*.py` (workflow-specific unit tests for rules and hooks)
 - `tests/fixtures/workflows/credential-dumping/*.yaml` (simulation scenarios, format of 14.5.2)
 - `.claude/agents/wf-credential-dumping.md` (this file)
@@ -24,7 +44,7 @@ You may read anything in the repository. You never edit framework code (`src/xdr
 
 ## Workflow as built (Phase 3, definition 3.0.0)
 
-The legacy spec (`workflows/credential-dumping/workflow.yaml` and its five scenarios) is migrated and deleted; each legacy scenario is a `legacy-NN-*` fixture with `legacy_source`.
+The 0.1.0 plan-rule spec and its five scenarios (retired after Phase 5, architecture 14.4.3) are migrated and deleted; each legacy scenario is a `legacy-NN-*` fixture with `legacy_source`.
 
 Files:
 

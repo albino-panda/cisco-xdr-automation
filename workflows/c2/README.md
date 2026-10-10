@@ -282,6 +282,10 @@ tunnelling is the dns-tunneling workflow's).
   and the analyst can deselect it.
 - An endpoint that reached C2 without malicious activity of its own is not isolated (considered);
   the analyst can isolate it by hand.
+- An endpoint whose only malicious activity is a hash rating of the process on the C2 connection,
+  where that binary is sanctioned (an approved tool hash or signer, or `never_block.hashes`), is not
+  isolated (considered, like the process termination); an active detection or a malicious process
+  event on the endpoint still stands on its own.
 - An endpoint whose agent policy forbids isolation, or that no EDR manages, is a manual step.
 - IPv6 destinations are not enriched or blocked (IPv4 only); DNS tunnelling is handled by the
   dns-tunneling workflow.

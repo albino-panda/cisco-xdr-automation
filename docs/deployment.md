@@ -1,8 +1,8 @@
 # Deployment
 
-How to deploy the `xdr_response` framework (`src/xdr_response/`) next to Cisco XDR. Audience: the SOC engineer who installs it, wires the secrets and integrations, and takes it from dry run to live containment.
+How to deploy the `xdr_response` framework (`src/xdr_response/`) and its 22 workflows next to Cisco XDR. Audience: the SOC engineer who installs it, wires the secrets and integrations, and takes it from dry run to live containment.
 
-Read [architecture.md](architecture.md) for the design and [integrations.md](integrations.md) for which vendor endpoints are VERIFIED. The older workflow-spec rollout (XDR targets, the guardrails file, the plan engine) is in [deployment/README.md](deployment/README.md).
+Read [architecture.md](architecture.md) for the design and [integrations.md](integrations.md) for which vendor endpoints are VERIFIED. The rollout notes for the XDR Automation side (targets, rollout order, change management) are in [deployment/README.md](deployment/README.md).
 
 ## 1. What you are deploying
 
@@ -20,9 +20,13 @@ The lifecycle is fixed in code. Configuration cannot change it.
 Two pieces run in production:
 
 - **Cisco XDR Automation.** Detects, creates incidents, and starts a small trigger workflow. It can show an approval task to the analyst, but that task never authorizes anything by itself (section 8).
-- **The external orchestrator** (`xdr_response`). Investigates, recommends, records the analyst decision, executes, verifies, restores and writes the audit trail.
+- **The external orchestrator** (`xdr_response`). Routes the incident to its workflow, investigates, recommends, records the analyst decision, executes, verifies, restores and writes the audit trail.
 
-Phase 0 ships `xdr_response` as a library. The entry point is `xdr_response.lifecycle.runtime.bootstrap()`. There is no packaged HTTP service or analyst web UI yet: you host the process and plug in your own approver authentication (section 6).
+The repository ships `xdr_response` and its workflows as a library (Phases 0 to 5 are complete; see the [README](../README.md#status)). The entry point is `xdr_response.lifecycle.runtime.bootstrap()`. There is no packaged HTTP service or analyst web UI: you host the process, expose the intake (section 8) and plug in your own approver authentication (section 6).
+
+Before you plan the rollout, read the known gaps in [architecture section 15](architecture.md#15-known-gaps-and-owner-decisions): which executed actions cannot be verified automatically (`UNABLE_TO_VERIFY`, checked by hand), which recommended actions have no VERIFIED write and stay manual (`UNROUTED`), the identity provider, intake, UI and scheduler you must provide, and the notification, ticketing and audit-forwarding paths that only write locally.
+
+Workflows only investigate and recommend. They never call a state-changing adapter method, never build an approval token and never enter a guard context. Everything that changes vendor state happens in the lifecycle orchestrator after a human approval.
 
 ## 2. Prerequisites
 
@@ -163,7 +167,7 @@ Health statuses: `CONNECTED`, `DEGRADED`, `UNAVAILABLE`, `AUTH_FAILED`, `RATE_LI
 Things to know before you enable each one:
 
 - **UNVERIFIED endpoints are not implemented.** Those adapter methods raise `UnverifiedEndpointError` (a `NotImplementedError`) with `unverified endpoint: <integration>.<operation> - see docs/integrations.md`. The action then fails or is reported as unroutable. It is never guessed. To add one, promote it in [integrations.md](integrations.md) with an official source first.
-- **Native XDR actions come first.** Where Cisco XDR has a native response action (isolate, disable user, block domain, URL, IP or hash, quarantine email), the `cisco_xdr` adapter is preferred and the product adapter verifies the result ([architecture.md](architecture.md) section 4.2).
+- **Native XDR actions come first, when you configure them.** A recommended action runs through a Cisco XDR module action only when `integrations.cisco_xdr.options.native_actions` lists its action type and landing product, with the module name and action id copied from your tenant's `respond/observables` listing. There is no default table and the framework never guesses an id. Without an entry, or when the listing does not offer exactly one matching module instance, the product adapter performs the action and the routing notes say why ([architecture.md](architecture.md) sections 4.2 and 14.1.7; commented example in [`integrations.example.yaml`](../config/integrations.example.yaml)).
 - **Secure Cloud Analytics** has no VERIFIED endpoint. Leave it disabled and read its alerts as XDR incidents.
 - **VirusTotal public API** is for non-commercial use only and allows 4 requests per minute. Use a premium key in production.
 - **Third-party lookups** (VirusTotal, OTX, HIBP) only receive observables that `DisclosurePolicy` allows. Add your internal domains and ranges to `exclusions.yaml`.
@@ -189,7 +193,42 @@ splunk:
 
 - `auth_mode: session_key` (default) sends `Authorization: Splunk <key>`. `basic` uses HTTP Basic with the logical secrets `username` and `password`, which you map to secret names under `secrets:`. `bearer` is UNVERIFIED and raises.
 - Searches are read-only (`POST /services/search/jobs`, then results).
-- `SplunkAdapter.forward_audit(event)` sends one redacted event to HEC. It is bookkeeping, not containment, and needs no approval. The Phase 0 runtime does not forward the audit trail automatically. The JSONL file stays the authoritative record.
+- `SplunkAdapter.forward_audit(event)` sends one redacted event to HEC. It is bookkeeping, not containment, and needs no approval. The runtime does not forward the audit trail automatically. The JSONL file stays the authoritative record.
+- To copy the trail to Splunk, run `tools/deployment/forward_audit.py` from a scheduler next to the runtime (architecture 14.14.4). It verifies the whole hash chain first and forwards nothing when it is broken, then sends every record after its checkpoint in order and stops at the first failure; the next run resumes there. It only reads the audit file:
+
+  ```bash
+  python tools/deployment/forward_audit.py var/audit/audit.jsonl --checkpoint var/audit/splunk.checkpoint
+  ```
+
+  Exit codes: 0 everything after the checkpoint was forwarded, 1 the run stopped early (broken chain, collector failure, Splunk disabled, limit reached), 2 usage or configuration error.
+
+### 5.2 Enabling workflows
+
+`bootstrap()` loads every workflow by default (`workflows=True`). There is no registry file and no per-workflow switch in the config files.
+
+- **Discovery.** Every sub-package of `xdr_response.workflows` that exports a `WorkflowDefinition` is a workflow (22 today). A workflow that fails to import or validate stops the start with `WorkflowDiscoveryError`. It is never skipped silently. `bootstrap(workflows=False)` runs without workflows: every incident then takes the Phase 0 generic path.
+- **Routing.** When `incident.workflow_id` is a workflow id, that workflow handles the incident. Otherwise the automatic triggers decide (`xdr_incident_rule` and `webhook` triggers; `schedule` and `manual` triggers never match on their own). Every criterion a trigger sets must hold: an ATT&CK technique in `incident.trigger["mitre_techniques"]` (a sub-technique matches its parent), a title pattern, a source (`incident.source` or `incident.trigger["source"]`) and an observable type. The highest priority wins, then the workflow id. Each workflow README lists its triggers and priorities under "Trigger". An incident that no workflow matches takes the Phase 0 generic path (`RuleBasedRecommender`) and still needs the same human approval.
+- **Integrations.** Enable the required integrations of the workflows you expect to run (column "Required integrations" in [workflows/README.md](workflows/README.md)). A disabled or failing integration never blocks a run: the run notes it (`required integration ... is not enabled` or `degraded source`), confidence drops, and the other evidence still counts.
+- **Policy files.** Workflows read the shared policy in `config/`: critical assets (ELEVATED with a warning), `allowlists.yaml` (`never_block`, `url_block_allowed_domains`, `approved_rmm` for unauthorized-rmm, `approved_dns_tools` for dns-tunneling), `exclusions.yaml` and the blast-radius caps in `thresholds.yaml`. A workflow cannot override the caps.
+- **Notifications.** `bootstrap()` writes the SOC notification, incident note and analyst summary of each lifecycle event as rendered text to a JSONL outbox (`notifications_path`, else `XDR_RESPONSE_NOTIFICATIONS_PATH`, else `var/notifications/outbox.jsonl`). Nothing is posted to a vendor. Forward the outbox to your channel with your own tooling.
+
+**Running a subset.** To load only some workflows, build the runtime yourself with a smaller catalog. `bootstrap()` does not take a catalog, so you also wire the notification outbox yourself if you want it (`observers=`):
+
+```python
+from xdr_response.config import load_settings
+from xdr_response.lifecycle.runtime import build_runtime
+from xdr_response.secrets import default_secret_provider
+from xdr_response.workflows.discovery import WorkflowCatalog, discover_workflows
+
+everything = discover_workflows()
+subset = WorkflowCatalog(everything.get(w) for w in ("ransomware", "phishing", "malware"))
+runtime = build_runtime(load_settings("/etc/xdr-response"), default_secret_provider(),
+                        authenticator=MyOidcAuthenticator(...), workflows=subset)
+```
+
+An incident whose workflow is not in the subset is not dropped: the triggers of the loaded workflows decide, and if none matches it takes the Phase 0 generic path, which still recommends and still needs approval.
+
+**Dry run is per process, not per workflow.** `DRY_RUN` and `runtime.dry_run` apply to every workflow in the process (section 7). To take workflows live in stages, run two orchestrator processes with separate `var/` paths: a dry-run process with every workflow, and a live process with the reviewed subset. Your intake decides where an incident goes, for example with `discover_workflows().resolve(incident)`, which returns the workflow that would handle it (or `None`).
 
 ## 6. Approvers
 
@@ -218,7 +257,7 @@ Create both groups in your identity provider. Keep the elevated group small.
 
 ## 7. Run in dry run first
 
-Dry run is the default everywhere: the example config sets `dry_run: true`, and the guard starts in dry run until the runtime configures it. In dry run the framework investigates, enriches, scores and recommends with real read calls, records the analyst decision, and prints what it would do:
+Dry run is the default everywhere: the example config sets `dry_run: true`, and the guard starts in dry run until the runtime configures it. Every workflow supports it. In dry run the framework routes the incident, investigates, enriches, scores and recommends with real read calls, records the analyst decision, and prints what it would do:
 
 ```
 DRY RUN
@@ -238,7 +277,14 @@ python tools/simulator/simulate.py ransomware
 python tools/simulator/simulate.py ransomware --live --check
 ```
 
-See [tools/simulator/README.md](../tools/simulator/README.md) and [testing.md](testing.md).
+Every workflow scenario runs the same way:
+
+```bash
+python tools/simulator/simulate.py --workflow ransomware --scenario dry-run --check
+python tools/simulator/simulate.py --all-workflows --check
+```
+
+[samples/](samples/README.md) shows the analyst output for seven workflows, including restoration result tables and the production outcomes `UNROUTED` and `UNABLE_TO_VERIFY`. See [tools/simulator/README.md](../tools/simulator/README.md) and [testing.md](testing.md).
 
 ### 7.2 Dry run against your tenant
 
@@ -257,7 +303,7 @@ print(result.dry_run_report)                                 # the DRY RUN block
 
 One process holds one runtime: the guard's verifier slot is sealed by the first `bootstrap()`, and a second one in the same process is refused.
 
-4. Feed real XDR incidents for at least two weeks. Review every decision card: evidence, risk, confidence, ELEVATED warnings, excluded targets.
+4. Feed real XDR incidents for at least two weeks. Review every decision card: the routed workflow, evidence, risk, confidence, ELEVATED warnings, excluded targets, degraded sources, manual steps and hand-offs. Check that each incident type reaches the workflow you expect (section 5.2).
 5. Fix `critical-assets.yaml`, `allowlists.yaml` and `exclusions.yaml` until no proposal is unsafe.
 6. Verify the audit trail (section 9).
 
@@ -265,13 +311,15 @@ One process holds one runtime: the guard's verifier slot is sealed by the first 
 
 Set `DRY_RUN=false` in the process environment (or `runtime.dry_run: false`) and restart. Live means: once an authenticated human approves, the approved actions run automatically and are verified. Nothing runs without that approval.
 
-You can still force dry run for a single run (`xdr_response.dryrun.dry_run_scope(force=True)`). A per-run request can only turn dry run on, never off.
+`xdr_response.dryrun.dry_run_scope(force=True)` forces dry run for the enclosed block. It also sets the process-wide dry-run switch, which stays on after the block until the runtime is configured again. A dry-run request can only turn dry run on, never off.
 
 ## 8. Cisco XDR Automation side
 
 Based on [integrations.md](integrations.md) section 1 and [architecture.md](architecture.md) section 4.1.
 
-**Trigger.** Create a small XDR workflow started by an automation rule on **new incident** (or a **webhook** rule). It sends only the incident ID to the orchestrator. The orchestrator re-reads the incident through the VERIFIED incident APIs. It never trusts fields in the trigger payload. Polling the incident API instead is also fine.
+**Trigger.** Create a small XDR workflow started by an automation rule on **new incident** (or a **webhook** rule). It sends only the incident ID to the orchestrator. The orchestrator re-reads the incident through the VERIFIED incident APIs. It never trusts fields in the trigger payload. Polling the incident API instead is also fine. The full trigger description and checklist are in [tools/deployment/xdr-trigger-workflow.md](../tools/deployment/xdr-trigger-workflow.md).
+
+**Intake mapping (deployment code).** Your intake builds the `Incident` from the re-read. Routing (section 5.2) uses the title, the source, the observables and `trigger["mitre_techniques"]`, so map the incident's ATT&CK techniques and source into `trigger` and its observables, users and assets into the matching fields. Set `workflow_id` to a workflow id only when you want to force that workflow. The XDR side never chooses the workflow, the actions or the approval.
 
 - Webhook limits (1 MB payload, 25 workflow runs per minute per rule) come from search summaries. Re-read the vendor page before you rely on them.
 - On-premises targets are reached through the **Automation Remote** appliance.
@@ -284,7 +332,7 @@ Based on [integrations.md](integrations.md) section 1 and [architecture.md](arch
 
 **Version control.** Export XDR workflows as JSON (or commit from the Workflow Editor to Git). Secure String values are not carried in exports, but check every export for literals before committing it. An import without "duplicate" overwrites the existing workflow and cannot be undone.
 
-**Legacy guardrails file.** [`deployment/guardrails.example.yaml`](deployment/guardrails.example.yaml) feeds the workflow-spec plan engine (`engine/xdr_plan`). `xdr_response` does not read it in production. Since Phase 1 it has no `auto_approve` section: both the plan engine and the `xdr_response` loader refuse `auto_approve`, `skip_approval`, `bypass_approval` and `approval_required` at any depth. Protected assets stay planned with ELEVATED approval, and over a blast-radius cap actions stay planned, become ELEVATED and the plan escalates. The legacy replay (`tools/simulator/legacy_replay.py`) maps this file onto critical assets, allow-lists and caps only for the dry-run regression replay. Its `expiry_hours` are release-review reminders and never release anything automatically: every release needs its own human approval.
+**No legacy guardrails file.** The legacy guardrails file and the plan engine that read it were retired after Phase 5 (architecture 14.4.3). Critical assets, allow-lists and blast-radius caps live only in [`config/`](../config/): the `xdr_response` loader refuses `auto_approve`, `skip_approval`, `bypass_approval` and `approval_required` at any depth, critical assets need ELEVATED approval with a warning, and over a blast-radius cap actions become ELEVATED. Nothing expires or releases a control automatically: every release needs its own human approval.
 
 ## 9. Runtime files and audit
 
@@ -303,7 +351,7 @@ python tools/validation/verify_audit_chain.py var/audit/audit.jsonl
 python tools/validation/verify_audit_chain.py var/audit/audit.jsonl --anchor-file anchors.json --json
 ```
 
-Exit codes: 0 intact, 1 broken (the first broken record is reported), 2 usage error. Export anchors (`AuditTrail.anchor()`) to write-once storage on a schedule. Only an external anchor detects a rollback of both the file and its head anchor to an older genuine state.
+Exit codes: 0 intact, 1 broken (the first broken record is reported), 2 usage error. Export anchors (`AuditTrail.anchor()`) to write-once storage on a schedule. To keep a copy in your SIEM, schedule `tools/deployment/forward_audit.py` (section 5.1). Only an external anchor detects a rollback of both the file and its head anchor to an older genuine state.
 
 ## 10. Go-live checklist
 
@@ -312,7 +360,8 @@ Exit codes: 0 intact, 1 broken (the first broken record is reported), 2 usage er
 - [ ] Every enabled integration reports `CONNECTED` or `DEGRADED` in the health check.
 - [ ] The production `ApproverAuthenticator` maps only real analysts to `HUMAN`, and both approver groups exist.
 - [ ] `critical-assets.yaml`, `allowlists.yaml` and `exclusions.yaml` were reviewed by the SOC lead and the asset owners.
-- [ ] At least two weeks of dry-run decision cards were reviewed with no unsafe proposal.
+- [ ] At least two weeks of dry-run decision cards were reviewed with no unsafe proposal, and every incident type reached the expected workflow.
+- [ ] The required integrations of every workflow you run are enabled and healthy, or their absence is accepted and visible in the run notes.
 - [ ] The full test suite passes on the deployed version (`python -m pytest`; see [testing.md](testing.md)).
 - [ ] Release (restoration) was exercised once per action type on test assets, with a separate release approval.
 - [ ] Audit chain verification and anchor export are scheduled.

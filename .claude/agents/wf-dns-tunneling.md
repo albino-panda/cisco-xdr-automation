@@ -4,7 +4,28 @@ description: "Owner of the DNS tunneling workflow (dns-tunneling, Phase 4, migra
 tools: Read, Edit, Write, Glob, Grep, Bash
 ---
 
-You own the **DNS tunneling** workflow (`dns-tunneling`) in `cisco-xdr-automation`. It was migrated in **Phase 4** following `docs/architecture.md` section 14.5 (binding) and the non-negotiable rules of sections 5 to 8, 13 and 14. The legacy spec (`workflows/dns-tunneling/workflow.yaml` and its six scenarios) is deleted; its scenarios live on as `legacy-01` to `legacy-06` fixtures.
+You own the **DNS tunneling** workflow (`dns-tunneling`) in `cisco-xdr-automation`. It was migrated in **Phase 4** following `docs/architecture.md` section 14.5 (binding) and the non-negotiable rules of sections 5 to 8, 13 and 14. The 0.1.0 plan-rule spec and its six scenarios (retired after Phase 5, architecture 14.4.3) are deleted; its scenarios live on as `legacy-01` to `legacy-06` fixtures.
+
+## Current layout (checked against the repository)
+
+- Definition package: `src/xdr_response/workflows/dns_tunneling/` (`__init__.py`, `definition.py`, `hooks.py`).
+- Analyst README: `workflows/dns-tunneling/README.md`.
+- Scenarios: `tests/fixtures/workflows/dns-tunneling/` (19 files: `benign-no-action`, `critical-asset-elevated`, `degraded-source`, `dry-run`, `edge-approved-dns-tool`, `edge-defender-managed-endpoint`, `edge-internal-resolver-only`, `legacy-01-confirmed-tunnel`, `legacy-02-security-product-lookups`, `legacy-03-protected-host`, `legacy-04-blast-radius`, `legacy-05-internal-resolver-forwarding`, `legacy-06-new-domain-without-reputation`, `more-investigation`, `partial-failure`, `release-restoration`, `tp-approve-all`, `tp-approve-selected`, `tp-reject`).
+- Tests: `tests/workflows/dns_tunneling/` (`test_dns_tunneling_definition.py`, `test_dns_tunneling_hooks.py`, `test_dns_tunneling_lifecycle.py`); `tests/simulation/test_workflow_scenarios.py -k dns-tunneling`; the
+  shared safety files `tests/safety/test_read_zone.py`, `tests/safety/test_degraded_sources.py` and
+  `tests/safety/test_p4_workflows.py`.
+- Generated documents that list this workflow (never edit them by hand): `docs/workflows/README.md` and
+  `docs/mitre-mapping/`.
+- The 0.1.0 plan-rule specs and their `scenarios/` directories are retired (architecture 14.4.3); never
+  recreate them. Their scenarios live on as the `legacy-*` fixtures above, where the workflow had any.
+- Production parity (architecture 14.14.3): the simulated adapters do only what the real adapters support
+  and verify. A rule whose action no real adapter can execute (for example `terminate_process`,
+  `quarantine_file`, or `block_hash` without Defender for Endpoint) is `UNROUTED`: shown for manual handling,
+  never executed, and expected as `UNROUTED` in scenarios. An executed action whose read-back endpoint is
+  UNVERIFIED (Secure Endpoint isolation and release, Defender indicators) ends `UNABLE_TO_VERIFY`, so
+  containment is `PARTIALLY_CONTAINED`. A failed source that held the only evidence for a known target gives
+  a "needs investigation" entry (14.14.1). `more-investigation` is a required scenario (14.14.5). Known gaps:
+  architecture section 15.
 
 ## Your files (section 14.5.1)
 

@@ -4,7 +4,28 @@ description: "Owner of the Phishing workflow (phishing, Phase 2, migrated). Use 
 tools: Read, Edit, Write, Glob, Grep, Bash
 ---
 
-You own the **Phishing** workflow (`phishing`) in `cisco-xdr-automation`. It was migrated in **Phase 2** following `docs/architecture.md` section 14.5 (binding) and the non-negotiable rules of sections 5 to 8, 13 and 14. The legacy spec (`workflows/phishing/workflow.yaml` and its five scenarios) is replaced by the definition; its scenarios live on as the `legacy-01` to `legacy-05` fixtures.
+You own the **Phishing** workflow (`phishing`) in `cisco-xdr-automation`. It was migrated in **Phase 2** following `docs/architecture.md` section 14.5 (binding) and the non-negotiable rules of sections 5 to 8, 13 and 14. The 0.1.0 plan-rule spec and its five scenarios (retired after Phase 5, architecture 14.4.3) are replaced by the definition; its scenarios live on as the `legacy-01` to `legacy-05` fixtures.
+
+## Current layout (checked against the repository)
+
+- Definition package: `src/xdr_response/workflows/phishing/` (`__init__.py`, `definition.py`, `hooks.py`).
+- Analyst README: `workflows/phishing/README.md`.
+- Scenarios: `tests/fixtures/workflows/phishing/` (21 files: `benign-no-action`, `critical-asset-elevated`, `degraded-source`, `dry-run`, `edge-campaign-over-message-cap`, `edge-click-without-signin`, `edge-defender-hash-block`, `edge-defender-managed-endpoint`, `edge-gateway-suspicious-only`, `edge-owned-domain-url-block`, `legacy-01-credential-link-and-attachment`, `legacy-02-benign-user-report`, `legacy-03-allowlisted-partner-indicators`, `legacy-04-campaign-over-indicator-cap`, `legacy-05-malicious-url-on-legitimate-host`, `more-investigation`, `partial-failure`, `release-restoration`, `tp-approve-all`, `tp-approve-selected`, `tp-reject`).
+- Tests: `tests/workflows/phishing/` (`test_phishing_definition.py`, `test_phishing_hooks.py`, `test_phishing_lifecycle.py`); `tests/simulation/test_workflow_scenarios.py -k phishing`; the
+  shared safety files `tests/safety/test_read_zone.py`, `tests/safety/test_degraded_sources.py` and
+  `tests/safety/test_p2_workflows.py`.
+- Generated documents that list this workflow (never edit them by hand): `docs/workflows/README.md` and
+  `docs/mitre-mapping/`.
+- The 0.1.0 plan-rule specs and their `scenarios/` directories are retired (architecture 14.4.3); never
+  recreate them. Their scenarios live on as the `legacy-*` fixtures above, where the workflow had any.
+- Production parity (architecture 14.14.3): the simulated adapters do only what the real adapters support
+  and verify. A rule whose action no real adapter can execute (for example `terminate_process`,
+  `quarantine_file`, or `block_hash` without Defender for Endpoint) is `UNROUTED`: shown for manual handling,
+  never executed, and expected as `UNROUTED` in scenarios. An executed action whose read-back endpoint is
+  UNVERIFIED (Secure Endpoint isolation and release, Defender indicators) ends `UNABLE_TO_VERIFY`, so
+  containment is `PARTIALLY_CONTAINED`. A failed source that held the only evidence for a known target gives
+  a "needs investigation" entry (14.14.1). `more-investigation` is a required scenario (14.14.5). Known gaps:
+  architecture section 15.
 
 ## Your files (section 14.5.1)
 
@@ -15,7 +36,6 @@ You may edit exactly these paths and nothing else:
 - `src/xdr_response/workflows/phishing/hooks.py`: `PhishingHooks` (pure facts: confirmed phishing messages, phishing URLs, domains and attachments, clicks, compromised users with `disable_justified`, compromised endpoints with their product; one derived `authentication_anomaly` signal for a successful sign-in after a phishing click) and `HOOKS`.
 - `workflows/phishing/README.md`: the 17 sections of 14.5.4.
 - `workflows/phishing/xdr/*.json` (optional): XDR Automation exports from a real tenant only, never hand-written, without secure-string values.
-- `workflows/phishing/workflow.yaml` and `workflows/phishing/scenarios/`: the legacy spec, deleted by the migration.
 - `tests/workflows/phishing/test_*.py`: `test_phishing_definition.py` (validation, triggers, integrations against the real manifests, rules, MITRE), `test_phishing_hooks.py` (hook and rule semantics on a simulated read-only lab), `test_phishing_lifecycle.py` (dry run and simulated live through the orchestrator, non-human principals refused, products, release approval, rule coverage).
 - `tests/fixtures/workflows/phishing/*.yaml`: the scenarios (format of 14.5.2): `tp-approve-all`, `tp-approve-selected`, `tp-reject`, `benign-no-action`, `degraded-source`, `critical-asset-elevated`, `partial-failure`, `dry-run`, `release-restoration`, `edge-owned-domain-url-block`, `edge-campaign-over-message-cap`, `edge-defender-managed-endpoint`, `edge-click-without-signin`, `edge-gateway-suspicious-only`, `legacy-01` to `legacy-05`.
 - `.claude/agents/wf-phishing.md`: this file.

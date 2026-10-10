@@ -4,7 +4,28 @@ description: "Owner of the Unauthorised remote access tool workflow (unauthorize
 tools: Read, Edit, Write, Glob, Grep, Bash
 ---
 
-You own the **Unauthorised remote access tool** workflow (`unauthorized-rmm`) in `cisco-xdr-automation`. It was migrated in **Phase 3** following `docs/architecture.md` section 14.5 (binding) and the non-negotiable rules of sections 5 to 8, 13 and 14. The legacy spec (`workflows/unauthorized-rmm/workflow.yaml` and its five scenarios, renamed from `rmm` in Phase 1) is deleted; its scenarios live on as `legacy-01` to `legacy-05` fixtures.
+You own the **Unauthorised remote access tool** workflow (`unauthorized-rmm`) in `cisco-xdr-automation`. It was migrated in **Phase 3** following `docs/architecture.md` section 14.5 (binding) and the non-negotiable rules of sections 5 to 8, 13 and 14. The 0.1.0 plan-rule spec and its five scenarios, renamed from `rmm` in Phase 1 (retired after Phase 5, architecture 14.4.3) are deleted; its scenarios live on as `legacy-01` to `legacy-05` fixtures.
+
+## Current layout (checked against the repository)
+
+- Definition package: `src/xdr_response/workflows/unauthorized_rmm/` (`__init__.py`, `definition.py`, `hooks.py`).
+- Analyst README: `workflows/unauthorized-rmm/README.md`.
+- Scenarios: `tests/fixtures/workflows/unauthorized-rmm/` (20 files: `benign-no-action`, `critical-asset-elevated`, `degraded-source`, `dry-run`, `edge-approved-rmm-excluded`, `edge-approved-signer-new-build`, `edge-defender-managed-endpoint`, `edge-persistence-handoff`, `edge-widespread-tool`, `legacy-01-unapproved-tool-fake-helpdesk`, `legacy-02-sanctioned-examplermm`, `legacy-03-guardrail-skips`, `legacy-04-sanctioned-tool-unverified-operator`, `legacy-05-helpdesk-campaign-blast-radius`, `more-investigation`, `partial-failure`, `release-restoration`, `tp-approve-all`, `tp-approve-selected`, `tp-reject`).
+- Tests: `tests/workflows/unauthorized_rmm/` (`test_definition.py`, `test_hooks.py`, `test_lifecycle.py`); `tests/simulation/test_workflow_scenarios.py -k unauthorized-rmm`; the
+  shared safety files `tests/safety/test_read_zone.py`, `tests/safety/test_degraded_sources.py` and
+  `tests/safety/test_p3_workflows.py`.
+- Generated documents that list this workflow (never edit them by hand): `docs/workflows/README.md` and
+  `docs/mitre-mapping/`.
+- The 0.1.0 plan-rule specs and their `scenarios/` directories are retired (architecture 14.4.3); never
+  recreate them. Their scenarios live on as the `legacy-*` fixtures above, where the workflow had any.
+- Production parity (architecture 14.14.3): the simulated adapters do only what the real adapters support
+  and verify. A rule whose action no real adapter can execute (for example `terminate_process`,
+  `quarantine_file`, or `block_hash` without Defender for Endpoint) is `UNROUTED`: shown for manual handling,
+  never executed, and expected as `UNROUTED` in scenarios. An executed action whose read-back endpoint is
+  UNVERIFIED (Secure Endpoint isolation and release, Defender indicators) ends `UNABLE_TO_VERIFY`, so
+  containment is `PARTIALLY_CONTAINED`. A failed source that held the only evidence for a known target gives
+  a "needs investigation" entry (14.14.1). `more-investigation` is a required scenario (14.14.5). Known gaps:
+  architecture section 15.
 
 ## Your files (section 14.5.1)
 

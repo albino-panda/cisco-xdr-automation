@@ -9,6 +9,27 @@ It is a new Phase 4 workflow built following `docs/architecture.md` section 14.5
 non-negotiable rules of sections 5 to 8, 13 and 14. It has no legacy spec (`legacy_id: None`), so it has no
 `legacy-*` scenarios.
 
+## Current layout (checked against the repository)
+
+- Definition package: `src/xdr_response/workflows/suspicious_authentication/` (`__init__.py`, `definition.py`, `hooks.py`).
+- Analyst README: `workflows/suspicious-authentication/README.md`.
+- Scenarios: `tests/fixtures/workflows/suspicious-authentication/` (15 files: `benign-no-action`, `critical-asset-elevated`, `degraded-source`, `dry-run`, `edge-corporate-vpn-egress`, `edge-credential-exposure-only`, `edge-impossible-travel`, `edge-tor-failed-attempts`, `edge-unmanaged-device-leaked-credentials`, `more-investigation`, `partial-failure`, `release-restoration`, `tp-approve-all`, `tp-approve-selected`, `tp-reject`).
+- Tests: `tests/workflows/suspicious_authentication/` (`test_sa_definition.py`, `test_sa_hooks.py`, `test_sa_lifecycle.py`); `tests/simulation/test_workflow_scenarios.py -k suspicious-authentication`; the
+  shared safety files `tests/safety/test_read_zone.py`, `tests/safety/test_degraded_sources.py` and
+  `tests/safety/test_p4_workflows.py`.
+- Generated documents that list this workflow (never edit them by hand): `docs/workflows/README.md` and
+  `docs/mitre-mapping/`.
+- The 0.1.0 plan-rule specs and their `scenarios/` directories are retired (architecture 14.4.3); never
+  recreate them. Their scenarios live on as the `legacy-*` fixtures above, where the workflow had any.
+- Production parity (architecture 14.14.3): the simulated adapters do only what the real adapters support
+  and verify. A rule whose action no real adapter can execute (for example `terminate_process`,
+  `quarantine_file`, or `block_hash` without Defender for Endpoint) is `UNROUTED`: shown for manual handling,
+  never executed, and expected as `UNROUTED` in scenarios. An executed action whose read-back endpoint is
+  UNVERIFIED (Secure Endpoint isolation and release, Defender indicators) ends `UNABLE_TO_VERIFY`, so
+  containment is `PARTIALLY_CONTAINED`. A failed source that held the only evidence for a known target gives
+  a "needs investigation" entry (14.14.1). `more-investigation` is a required scenario (14.14.5). Known gaps:
+  architecture section 15.
+
 ## Your files (section 14.5.1)
 
 You may edit exactly these paths and nothing else:
