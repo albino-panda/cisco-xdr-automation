@@ -1,0 +1,47 @@
+# privilege-escalation workflow scenario; fake lab data only.
+schema: 1
+name: edge-pim-activation-normal
+workflow: privilege-escalation
+description: >-
+  adm-lwong activates an eligible Global Administrator role through privileged identity management
+  after a normal sign-in from the office. An activation is made by the account itself by design, so it
+  is not a self-assignment; no account shows a compromise indicator. The change is normal: nothing is
+  proposed and the activation is shown as considered.
+tags: [edge_case, benign]
+mode: both
+incident:
+  incident_id: XDR-PE-0012
+  title: Privileged role activated by adm-lwong@example.com
+  severity: LOW
+  workflow_id: privilege-escalation
+  observables:
+    - {type: user, value: adm-lwong@example.com}
+  users: [adm-lwong@example.com]
+  trigger: {source: entra, mitre_techniques: [T1098.003]}
+environment:
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: adm-lwong@example.com
+      record: {kind: user_profile, user: adm-lwong@example.com, display_name: L Wong (admin), department: IT,
+               groups: [IT Admins], roles: [Global Administrator], privileged: true, account_enabled: true,
+               risk_level: none, risk_state: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: adm-lwong@example.com
+      record: {kind: sign_in, sign_in_id: si-pe-0012-1, user: adm-lwong@example.com, timestamp: "2026-01-15T08:58:00Z",
+               ip: 198.51.100.10, country: GB, app: Azure Portal, result: success, mfa_result: satisfied,
+               risk_level: none}
+    - integration: entra
+      atomic: search_user_activity
+      subject: adm-lwong@example.com
+      record: {kind: role_change, user: adm-lwong@example.com, role_name: Global Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000a7, change: activated, privileged: true,
+               actor: adm-lwong@example.com, timestamp: "2026-01-15T09:00:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  considered: [remove_privileged_role:adm-lwong@example.com/00000000-0000-4000-8000-0000000000a7]
+  manual_steps: []
+  handoffs: []

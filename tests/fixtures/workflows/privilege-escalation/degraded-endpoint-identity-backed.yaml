@@ -1,0 +1,92 @@
+# privilege-escalation workflow scenario; fake lab data only.
+schema: 1
+name: degraded-endpoint-identity-backed
+workflow: privilege-escalation
+description: >-
+  Owner rule (architecture 14.14): a failed source never blocks what other evidence backs. Secure
+  Endpoint is unavailable, so the exploit detection on TH-LT-1047 and its payload rating are missing
+  and the endpoint cannot be isolated. The Entra records still show jsmith (named by the incident)
+  assigning User Administrator to svc-sync-temp, an account with no sign-in before the grant. The grant
+  is treated as suspicious, not confirmed: the role removal, both revocations and the disable of the
+  staged account are still proposed with the failed source in their rationale; the isolation rests on
+  endpoint evidence only and is not invented. Secure Endpoint is listed as degraded.
+tags: [degraded_source, true_positive, approve_all]
+mode: both
+incident:
+  incident_id: XDR-PE-0014
+  title: Exploit prevention alert followed by an unapproved role assignment on TH-LT-1047
+  severity: HIGH
+  workflow_id: privilege-escalation
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+    - {type: user, value: jsmith@example.com}
+    - {type: sha256, value: 7d1a0c3e9b4f2a6810c5e7d93b2f4a6c8e1d0b3a5c7e9f2d4b6a8c0e2f4a6b8c}
+  users: [jsmith@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1068, T1098.003]}
+environment:
+  reputations:
+    - {type: sha256, value: 7d1a0c3e9b4f2a6810c5e7d93b2f4a6c8e1d0b3a5c7e9f2d4b6a8c0e2f4a6b8c, verdict: MALICIOUS,
+       risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal], summary: local exploit payload}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, ip_addresses: [198.51.100.47], users: [jsmith@example.com], groups: [Workstations],
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-pe-0001-1, name: Exploit Prevention - local privilege escalation,
+               category: Exploit, verdict: MALICIOUS, severity: HIGH, endpoint: TH-LT-1047, user: jsmith@example.com,
+               sha256: 7d1a0c3e9b4f2a6810c5e7d93b2f4a6c8e1d0b3a5c7e9f2d4b6a8c0e2f4a6b8c,
+               mitre_techniques: [T1068], status: active, first_seen: "2026-01-15T10:00:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, display_name: J Smith, department: Finance,
+               groups: [Finance Users], roles: [], account_enabled: true, risk_level: medium, risk_state: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: jsmith@example.com
+      record: {kind: sign_in, sign_in_id: si-pe-0001-1, user: jsmith@example.com, timestamp: "2026-01-15T08:55:00Z",
+               ip: 198.51.100.47, country: GB, app: Windows Sign In, result: success, mfa_result: satisfied,
+               risk_level: none}
+    - integration: entra
+      atomic: search_user_activity
+      subject: jsmith@example.com
+      record: {kind: role_change, user: svc-sync-temp@example.com, role_name: User Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000a1, change: assigned, privileged: true,
+               actor: jsmith@example.com, timestamp: "2026-01-15T10:12:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: svc-sync-temp@example.com
+      record: {kind: user_profile, user: svc-sync-temp@example.com, display_name: Sync Temp,
+               roles: [User Administrator], account_enabled: true, risk_level: none, risk_state: none}
+  faults:
+    - {kind: UNAVAILABLE, integration: secure_endpoint, times: null}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - revoke_sessions:jsmith@example.com
+    - revoke_sessions:svc-sync-temp@example.com
+    - disable_user:svc-sync-temp@example.com
+    - remove_privileged_role:svc-sync-temp@example.com/00000000-0000-4000-8000-0000000000a1
+  elevated:
+    - revoke_sessions:svc-sync-temp@example.com
+    - disable_user:svc-sync-temp@example.com
+    - remove_privileged_role:svc-sync-temp@example.com/00000000-0000-4000-8000-0000000000a1
+  degraded_sources: [secure_endpoint]
+  considered: [disable_user:jsmith@example.com]
+  manual_steps: []
+  handoffs: []
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  evidence_min: 1
+  containment: CONTAINED
+  results:
+    revoke_sessions:jsmith@example.com: SUCCESS
+    revoke_sessions:svc-sync-temp@example.com: SUCCESS
+    disable_user:svc-sync-temp@example.com: SUCCESS
+    remove_privileged_role:svc-sync-temp@example.com/00000000-0000-4000-8000-0000000000a1: SUCCESS
+  controls: 2

@@ -1,0 +1,81 @@
+# privilege-escalation workflow scenario; fake lab data only.
+schema: 1
+name: legacy-03-protected-dc-and-breakglass
+workflow: privilege-escalation
+legacy_source: workflows/privilege-escalation/scenarios/03-protected-dc-and-breakglass.yaml
+description: >-
+  Migrated legacy scenario 03. A malicious kernel exploit detection fires on the domain controller
+  dc-02, and the break-glass account (Entra high risk, a successful sign-in with an unfamiliar-location
+  risk detection) assigns itself Privileged Role Administrator with no approved change. As in the legacy
+  plan (protected becomes ELEVATED, C3) every action stays proposed and ELEVATED: the domain controller
+  isolation (domain controller class), and the break-glass revocation and disable (privileged account
+  class). Stricter than the legacy plan: the self-assigned role is removed (always ELEVATED). The lead
+  approves. Production parity: isolate_endpoint through secure_endpoint cannot be read back by the real
+  adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
+tags: [legacy, critical_asset, true_positive, approve_all]
+mode: both
+incident:
+  incident_id: INC-TEST-PE-0003
+  title: Privilege escalation on dc-02 and break-glass role change
+  severity: CRITICAL
+  source: Cisco XDR
+  workflow_id: privilege-escalation
+  observables:
+    - {type: hostname, value: dc-02.example.com}
+    - {type: user, value: breakglass-01@example.com}
+  users: [breakglass-01@example.com]
+  trigger: {source: cisco_xdr, mitre_techniques: [T1068, T1098]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: dc-02.example.com
+      record: {kind: endpoint, hostname: dc-02.example.com, connector_guid: 9a8b7c6d-3e4f-4a5b-8c7d-0000000000d2,
+               isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: dc-02.example.com
+      record: {kind: detection, detection_id: det-legacy-pe-03-1, name: Exploit Prevention - kernel exploit blocked,
+               verdict: MALICIOUS, severity: CRITICAL, endpoint: dc-02.example.com, mitre_techniques: [T1068],
+               status: active, first_seen: "2026-01-15T10:20:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: breakglass-01@example.com
+      record: {kind: user_profile, user: breakglass-01@example.com, department: IT, groups: [Emergency Access],
+               account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: breakglass-01@example.com
+      record: {kind: sign_in, sign_in_id: si-legacy-pe-03-1, user: breakglass-01@example.com,
+               timestamp: "2026-01-15T10:30:00Z", ip: 203.0.113.45, country: unknown, app: Azure Portal,
+               result: success, risk_level: medium}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: breakglass-01@example.com
+      record: {kind: anomaly, anomaly_id: rd-legacy-pe-03-1, anomaly_type: unfamiliar_location, severity: HIGH,
+               user: breakglass-01@example.com, ip: 203.0.113.45, detail: sign-in from an unfamiliar location,
+               first_seen: "2026-01-15T10:30:00Z"}
+    - integration: entra
+      atomic: search_user_activity
+      subject: breakglass-01@example.com
+      record: {kind: role_change, user: breakglass-01@example.com, role_name: Privileged Role Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000b3, change: assigned, privileged: true,
+               actor: breakglass-01@example.com, timestamp: "2026-01-15T10:35:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - isolate_endpoint:DC-02.EXAMPLE.COM
+    - revoke_sessions:breakglass-01@example.com
+    - disable_user:breakglass-01@example.com
+    - remove_privileged_role:breakglass-01@example.com/00000000-0000-4000-8000-0000000000b3
+  elevated:
+    - isolate_endpoint:DC-02.EXAMPLE.COM
+    - revoke_sessions:breakglass-01@example.com
+    - disable_user:breakglass-01@example.com
+    - remove_privileged_role:breakglass-01@example.com/00000000-0000-4000-8000-0000000000b3
+  warnings: [ELEVATED APPROVAL REQUIRED, Domain controller, Privileged account]
+  considered: []
+  manual_steps: []
+  handoffs: [account-takeover:breakglass-01@example.com]
+  containment: PARTIALLY_CONTAINED
+  controls: 3

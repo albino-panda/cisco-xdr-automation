@@ -1,0 +1,49 @@
+# privilege-escalation workflow scenario; fake lab data only.
+schema: 1
+name: edge-defender-managed-endpoint
+workflow: privilege-escalation
+description: >-
+  A MALICIOUS token manipulation detection on TH-LT-4410, an endpoint only Defender for Endpoint
+  manages (no Secure Endpoint connector). The isolation is routed to Defender for Endpoint by the
+  Defender rule, never to a product that does not manage the endpoint. No privilege change is found
+  for its user, who is handed off to account-takeover.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+suite: {defender_endpoint: [endpoint], entra: [identity]}
+incident:
+  incident_id: XDR-PE-0014
+  title: Local privilege escalation on TH-LT-4410
+  severity: HIGH
+  workflow_id: privilege-escalation
+  observables:
+    - {type: hostname, value: TH-LT-4410}
+  trigger: {source: defender_endpoint, mitre_techniques: [T1134]}
+environment:
+  records:
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-4410
+      record: {kind: endpoint, hostname: TH-LT-4410, mde_machine_id: mde-pe-4410, os: Windows 11,
+               users: [tgreen@example.com], groups: [Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: defender_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-4410
+      record: {kind: detection, detection_id: da-pe-0014-1, name: Suspicious access token manipulation,
+               category: PrivilegeEscalation, verdict: MALICIOUS, severity: HIGH, endpoint: TH-LT-4410,
+               user: tgreen@example.com, mitre_techniques: [T1134.001], status: active,
+               first_seen: "2026-01-15T11:20:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: tgreen@example.com
+      record: {kind: user_profile, user: tgreen@example.com, display_name: T Green, department: Sales,
+               groups: [Sales Users], account_enabled: true, risk_level: low, risk_state: none}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  actions: [isolate_endpoint:TH-LT-4410]
+  elevated: []
+  considered: []
+  manual_steps: []
+  handoffs: [account-takeover:tgreen@example.com]
+  containment: CONTAINED
+  controls: 1

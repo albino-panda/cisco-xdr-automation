@@ -1,0 +1,131 @@
+# privilege-escalation workflow scenario; fake lab data only.
+schema: 1
+name: legacy-05-mass-account-creation
+workflow: privilege-escalation
+legacy_source: workflows/privilege-escalation/scenarios/05-mass-account-creation.yaml
+description: >-
+  Migrated legacy scenario 05 (blast radius). A compromised identity administrator (Entra high risk,
+  impossible travel) assigns the Application Administrator role to four accounts with no sign-in
+  history (the legacy account_created entries have no VERIFIED source). As in the legacy plan the
+  administrator and the four accounts are revoked and the four accounts disabled; more users than the
+  blast-radius cap (max_users 3) are touched, so every account action is ELEVATED (C5), never dropped.
+  The administrator's workstation holds a file rated malicious but its connector policy forbids
+  isolation, so no isolation is proposed and the endpoint is shown as considered. Stricter than the
+  legacy plan: the four role assignments are removed and the compromised administrator is disabled.
+tags: [legacy, critical_asset, true_positive, approve_all]
+mode: both
+incident:
+  incident_id: INC-TEST-PE-0005
+  title: Burst of account creations with privileged roles
+  severity: CRITICAL
+  source: Microsoft Entra ID
+  workflow_id: privilege-escalation
+  observables:
+    - {type: user, value: idm-admin-07@example.com}
+    - {type: hostname, value: ws-idm-0007.example.com}
+  users: [idm-admin-07@example.com]
+  trigger: {source: entra, mitre_techniques: [T1098]}
+environment:
+  reputations:
+    - {type: sha256, value: 4c9e2b7a1d3f5e8c0a6b2d4f7e9c1a3b5d7f9e2c4a6b8d0f1e3c5a7b9d2f4e6a, verdict: MALICIOUS,
+       risk_score: 90, confidence: 85, integrations: [secure_endpoint, virustotal], summary: credential tool}
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-idm-0007.example.com
+      record: {kind: endpoint, hostname: ws-idm-0007.example.com, connector_guid: 5d6e7f80-9a1b-4c2d-8e3f-000000000007,
+               users: [idm-admin-07@example.com], isolation_capable: false}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-idm-0007.example.com
+      record: {kind: process_event, event_id: evt-legacy-pe-05-1, endpoint: ws-idm-0007.example.com,
+               timestamp: "2026-01-15T08:50:00Z", event_type: process_start, process_name: tool.exe, pid: 4120,
+               sha256: 4c9e2b7a1d3f5e8c0a6b2d4f7e9c1a3b5d7f9e2c4a6b8d0f1e3c5a7b9d2f4e6a,
+               user: idm-admin-07@example.com}
+    - integration: entra
+      atomic: investigate_user
+      subject: idm-admin-07@example.com
+      record: {kind: user_profile, user: idm-admin-07@example.com, department: IT, groups: [Identity Admins],
+               account_enabled: true, risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: idm-admin-07@example.com
+      record: {kind: anomaly, anomaly_id: rd-legacy-pe-05-1, anomaly_type: impossible_travel, severity: HIGH,
+               user: idm-admin-07@example.com, detail: impossible travel between two sign-ins,
+               first_seen: "2026-01-15T08:40:00Z"}
+    - integration: entra
+      atomic: search_user_activity
+      subject: idm-admin-07@example.com
+      record: {kind: role_change, user: svc-report-a@example.com, role_name: Application Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000b5, change: assigned, privileged: true,
+               actor: idm-admin-07@example.com, timestamp: "2026-01-15T09:01:00Z"}
+    - integration: entra
+      atomic: search_user_activity
+      subject: idm-admin-07@example.com
+      record: {kind: role_change, user: svc-report-b@example.com, role_name: Application Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000b5, change: assigned, privileged: true,
+               actor: idm-admin-07@example.com, timestamp: "2026-01-15T09:02:00Z"}
+    - integration: entra
+      atomic: search_user_activity
+      subject: idm-admin-07@example.com
+      record: {kind: role_change, user: svc-report-c@example.com, role_name: Application Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000b5, change: assigned, privileged: true,
+               actor: idm-admin-07@example.com, timestamp: "2026-01-15T09:03:00Z"}
+    - integration: entra
+      atomic: search_user_activity
+      subject: idm-admin-07@example.com
+      record: {kind: role_change, user: svc-report-d@example.com, role_name: Application Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000b5, change: assigned, privileged: true,
+               actor: idm-admin-07@example.com, timestamp: "2026-01-15T09:04:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: svc-report-a@example.com
+      record: {kind: user_profile, user: svc-report-a@example.com, account_enabled: true, risk_level: none}
+    - integration: entra
+      atomic: investigate_user
+      subject: svc-report-b@example.com
+      record: {kind: user_profile, user: svc-report-b@example.com, account_enabled: true, risk_level: none}
+    - integration: entra
+      atomic: investigate_user
+      subject: svc-report-c@example.com
+      record: {kind: user_profile, user: svc-report-c@example.com, account_enabled: true, risk_level: none}
+    - integration: entra
+      atomic: investigate_user
+      subject: svc-report-d@example.com
+      record: {kind: user_profile, user: svc-report-d@example.com, account_enabled: true, risk_level: none}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - revoke_sessions:idm-admin-07@example.com
+    - disable_user:idm-admin-07@example.com
+    - revoke_sessions:svc-report-a@example.com
+    - revoke_sessions:svc-report-b@example.com
+    - revoke_sessions:svc-report-c@example.com
+    - revoke_sessions:svc-report-d@example.com
+    - disable_user:svc-report-a@example.com
+    - disable_user:svc-report-b@example.com
+    - disable_user:svc-report-c@example.com
+    - disable_user:svc-report-d@example.com
+    - remove_privileged_role:svc-report-a@example.com/00000000-0000-4000-8000-0000000000b5
+    - remove_privileged_role:svc-report-b@example.com/00000000-0000-4000-8000-0000000000b5
+    - remove_privileged_role:svc-report-c@example.com/00000000-0000-4000-8000-0000000000b5
+    - remove_privileged_role:svc-report-d@example.com/00000000-0000-4000-8000-0000000000b5
+  elevated:
+    - revoke_sessions:idm-admin-07@example.com
+    - disable_user:idm-admin-07@example.com
+    - revoke_sessions:svc-report-a@example.com
+    - revoke_sessions:svc-report-b@example.com
+    - revoke_sessions:svc-report-c@example.com
+    - revoke_sessions:svc-report-d@example.com
+    - disable_user:svc-report-a@example.com
+    - disable_user:svc-report-b@example.com
+    - disable_user:svc-report-c@example.com
+    - disable_user:svc-report-d@example.com
+    - remove_privileged_role:svc-report-a@example.com/00000000-0000-4000-8000-0000000000b5
+    - remove_privileged_role:svc-report-b@example.com/00000000-0000-4000-8000-0000000000b5
+    - remove_privileged_role:svc-report-c@example.com/00000000-0000-4000-8000-0000000000b5
+    - remove_privileged_role:svc-report-d@example.com/00000000-0000-4000-8000-0000000000b5
+  considered: [isolate_endpoint:WS-IDM-0007.EXAMPLE.COM]
+  manual_steps: []
+  handoffs: [account-takeover:idm-admin-07@example.com]
+  containment: CONTAINED

@@ -1,0 +1,50 @@
+# privilege-escalation workflow scenario; fake lab data only.
+schema: 1
+name: benign-no-action
+workflow: privilege-escalation
+description: >-
+  Benign: the identity team (it-admin-03) assigns the Exchange Administrator role to alee during an
+  approved change; the incident carries the change reference. Neither account shows a compromise
+  indicator and the grant is not self-assigned, so it is a normal change: nothing is proposed and the
+  grant is shown as considered with the (unverified) change reference.
+tags: [benign]
+mode: both
+incident:
+  incident_id: XDR-PE-0004
+  title: Privileged role assigned to alee@example.com
+  severity: MEDIUM
+  workflow_id: privilege-escalation
+  observables:
+    - {type: user, value: alee@example.com}
+  users: [alee@example.com]
+  trigger: {source: entra, mitre_techniques: [T1098], change_reference: CHG0040123}
+environment:
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: alee@example.com
+      record: {kind: user_profile, user: alee@example.com, display_name: A Lee, department: IT,
+               groups: [Messaging Team], roles: [Exchange Administrator], account_enabled: true, risk_level: low,
+               risk_state: none, last_sign_in: "2026-01-14T08:00:00Z"}
+    - integration: entra
+      atomic: search_user_activity
+      subject: alee@example.com
+      record: {kind: role_change, user: alee@example.com, role_name: Exchange Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000a4, change: assigned, privileged: true,
+               actor: it-admin-03@example.com, timestamp: "2026-01-15T09:00:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: it-admin-03@example.com
+      record: {kind: user_profile, user: it-admin-03@example.com, display_name: IT Admin 03, department: IT,
+               groups: [Identity Admins], roles: [Privileged Role Administrator], account_enabled: true,
+               risk_level: none, risk_state: none}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  below_threshold: []
+  unrouted: []
+  degraded_sources: []
+  considered: [remove_privileged_role:alee@example.com/00000000-0000-4000-8000-0000000000a4]
+  manual_steps: []
+  handoffs: []

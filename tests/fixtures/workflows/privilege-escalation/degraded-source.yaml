@@ -1,0 +1,73 @@
+# privilege-escalation workflow scenario; fake lab data only.
+schema: 1
+name: degraded-source
+workflow: privilege-escalation
+description: >-
+  Secure Endpoint is unavailable for every endpoint read, so the incident endpoint TH-LT-3301 cannot be
+  assessed and the run lists Secure Endpoint as a degraded source. The identity evidence stands on its
+  own: dmorgan (Entra high risk, high-risk sign-in) assigns Global Administrator to bwhite, an
+  established account. The role removal, both revocations and the disable of the compromised identity
+  are still proposed; bwhite signed in before the grant, so its disable is considered, not proposed.
+tags: [degraded_source, true_positive, approve_all]
+mode: both
+incident:
+  incident_id: XDR-PE-0005
+  title: Global Administrator assigned after a risky sign-in on TH-LT-3301
+  severity: HIGH
+  workflow_id: privilege-escalation
+  observables:
+    - {type: hostname, value: TH-LT-3301}
+    - {type: user, value: dmorgan@example.com}
+  users: [dmorgan@example.com]
+  trigger: {source: entra, mitre_techniques: [T1098.003]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-3301
+      record: {kind: endpoint, hostname: TH-LT-3301, connector_guid: 00000000-0000-4000-8000-000000003301,
+               users: [dmorgan@example.com], isolation_capable: true}
+    - integration: entra
+      atomic: investigate_user
+      subject: dmorgan@example.com
+      record: {kind: user_profile, user: dmorgan@example.com, display_name: D Morgan, department: IT,
+               groups: [IT Staff], roles: [User Administrator], account_enabled: true, risk_level: high,
+               risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: dmorgan@example.com
+      record: {kind: sign_in, sign_in_id: si-pe-0005-1, user: dmorgan@example.com, timestamp: "2026-01-15T09:10:00Z",
+               ip: 203.0.113.161, country: unfamiliar, app: Azure Portal, result: success, risk_level: high}
+    - integration: entra
+      atomic: search_user_activity
+      subject: dmorgan@example.com
+      record: {kind: role_change, user: bwhite@example.com, role_name: Global Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000a5, change: assigned, privileged: true,
+               actor: dmorgan@example.com, timestamp: "2026-01-15T09:25:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: bwhite@example.com
+      record: {kind: user_profile, user: bwhite@example.com, display_name: B White, department: Finance,
+               groups: [Finance Users], roles: [Global Administrator], account_enabled: true, risk_level: none,
+               risk_state: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: bwhite@example.com
+      record: {kind: sign_in, sign_in_id: si-pe-0005-2, user: bwhite@example.com, timestamp: "2026-01-15T07:45:00Z",
+               ip: 198.51.100.20, country: GB, app: Microsoft Teams, result: success, risk_level: none}
+  faults:
+    - {kind: UNAVAILABLE, integration: secure_endpoint, operation: investigate, times: 20}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  package: true
+  actions:
+    - revoke_sessions:dmorgan@example.com
+    - disable_user:dmorgan@example.com
+    - revoke_sessions:bwhite@example.com
+    - remove_privileged_role:bwhite@example.com/00000000-0000-4000-8000-0000000000a5
+  degraded_sources: [secure_endpoint]
+  considered: [disable_user:bwhite@example.com]
+  manual_steps: []
+  handoffs: [account-takeover:dmorgan@example.com]
+  containment: CONTAINED
+  controls: 2

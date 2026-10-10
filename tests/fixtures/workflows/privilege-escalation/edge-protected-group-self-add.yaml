@@ -1,0 +1,64 @@
+# privilege-escalation workflow scenario; fake lab data only.
+schema: 1
+name: edge-protected-group-self-add
+workflow: privilege-escalation
+description: >-
+  A MALICIOUS UAC bypass on TH-LT-0077, then mortiz (the workstation's user) adds himself to Domain
+  Admins. The source does not flag the membership as privileged; the workflow recognises the group. The
+  protected group the attacker just joined never shields the account: the revocation and the disable
+  stay proposed and are ELEVATED with the privileged-account warning, the workstation isolation is
+  STANDARD, and removing the membership is a manual step (no VERIFIED group write) to do before the
+  account is ever re-enabled. The lead approves. Production parity: isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
+tags: [edge_case, critical_asset, true_positive, approve_all]
+mode: both
+incident:
+  incident_id: XDR-PE-0010
+  title: UAC bypass followed by Domain Admins membership change on TH-LT-0077
+  severity: HIGH
+  workflow_id: privilege-escalation
+  observables:
+    - {type: hostname, value: TH-LT-0077}
+    - {type: user, value: mortiz@example.com}
+  users: [mortiz@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1548.002, T1098.007]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-0077
+      record: {kind: endpoint, hostname: TH-LT-0077, connector_guid: 00000000-0000-4000-8000-000000000077,
+               os: Windows 11, users: [mortiz@example.com], groups: [Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-0077
+      record: {kind: detection, detection_id: det-pe-0010-1, name: UAC bypass behaviour, category: PrivilegeEscalation,
+               verdict: MALICIOUS, severity: HIGH, endpoint: TH-LT-0077, user: mortiz@example.com,
+               mitre_techniques: [T1548.002], status: active, first_seen: "2026-01-15T09:30:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: mortiz@example.com
+      record: {kind: user_profile, user: mortiz@example.com, display_name: M Ortiz, department: Engineering,
+               groups: [Engineering, Domain Admins], account_enabled: true, risk_level: medium, risk_state: none}
+    - integration: entra
+      atomic: search_user_activity
+      subject: mortiz@example.com
+      record: {kind: role_change, user: mortiz@example.com, role_name: Domain Admins, change: assigned,
+               actor: mortiz@example.com, timestamp: "2026-01-15T09:41:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - isolate_endpoint:TH-LT-0077
+    - revoke_sessions:mortiz@example.com
+    - disable_user:mortiz@example.com
+  elevated:
+    - revoke_sessions:mortiz@example.com
+    - disable_user:mortiz@example.com
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  considered: []
+  manual_steps: [remove-group-membership:mortiz@example.com/Domain Admins]
+  handoffs: [account-takeover:mortiz@example.com]
+  containment: PARTIALLY_CONTAINED
+  controls: 2

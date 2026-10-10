@@ -1,0 +1,68 @@
+# privilege-escalation workflow scenario; fake lab data only.
+schema: 1
+name: release-restoration
+workflow: privilege-escalation
+description: >-
+  The lead approves the tp-approve-all package (isolation, revocations, disable of the staged account,
+  role removal). After the investigation the account turns out to be a mis-scoped automation test, so a
+  separate release is proposed and approved by the lead (the role restoration is ELEVATED like the
+  removal): the endpoint is released, the account re-enabled and the role assignment recreated. Session
+  revocation is not reversible and has no control to release. Production parity: isolate_endpoint and
+  release_endpoint through secure_endpoint cannot be read back by the real adapters and end
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED, restoration is PARTIALLY_RESTORED and the
+  incident stays AWAITING_RELEASE_APPROVAL.
+tags: [release, true_positive, approve_all]
+mode: live
+incident:
+  incident_id: XDR-PE-0009
+  title: Exploit prevention alert followed by an unapproved role assignment on TH-LT-1047
+  severity: HIGH
+  workflow_id: privilege-escalation
+  observables:
+    - {type: hostname, value: TH-LT-1047}
+    - {type: user, value: jsmith@example.com}
+  users: [jsmith@example.com]
+  trigger: {source: secure_endpoint, mitre_techniques: [T1068]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: endpoint, hostname: TH-LT-1047, connector_guid: 00000000-0000-4000-8000-000000001047,
+               os: Windows 11, users: [jsmith@example.com], groups: [Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-1047
+      record: {kind: detection, detection_id: det-pe-0009-1, name: Exploit Prevention - local privilege escalation,
+               category: Exploit, verdict: MALICIOUS, severity: HIGH, endpoint: TH-LT-1047, user: jsmith@example.com,
+               mitre_techniques: [T1068], status: active, first_seen: "2026-01-15T10:00:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: jsmith@example.com
+      record: {kind: user_profile, user: jsmith@example.com, display_name: J Smith, department: Finance,
+               groups: [Finance Users], account_enabled: true, risk_level: medium, risk_state: none}
+    - integration: entra
+      atomic: search_user_activity
+      subject: jsmith@example.com
+      record: {kind: role_change, user: svc-sync-temp@example.com, role_name: User Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000a1, change: assigned, privileged: true,
+               actor: jsmith@example.com, timestamp: "2026-01-15T10:12:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: svc-sync-temp@example.com
+      record: {kind: user_profile, user: svc-sync-temp@example.com, display_name: Sync Temp,
+               roles: [User Administrator], account_enabled: true, risk_level: none, risk_state: none}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+release: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - revoke_sessions:jsmith@example.com
+    - revoke_sessions:svc-sync-temp@example.com
+    - disable_user:svc-sync-temp@example.com
+    - remove_privileged_role:svc-sync-temp@example.com/00000000-0000-4000-8000-0000000000a1
+  containment: PARTIALLY_CONTAINED
+  controls: 3
+  restoration: PARTIALLY_RESTORED
+  final_state: AWAITING_RELEASE_APPROVAL

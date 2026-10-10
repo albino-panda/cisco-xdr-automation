@@ -1,0 +1,64 @@
+# privilege-escalation workflow scenario; fake lab data only.
+schema: 1
+name: tp-approve-selected
+workflow: privilege-escalation
+description: >-
+  True positive: kchen (Entra high risk, a high-risk successful sign-in) assigns herself the
+  Privileged Role Administrator role outside a privileged identity management activation. The
+  package removes the role, revokes the sessions and disables the account, all ELEVATED (role removal,
+  and the account the change made privileged). The lead approves only the role removal and the
+  revocation (the manager keeps the account enabled while the help desk resets it); the disable is
+  reported REJECTED_BY_ANALYST and nothing else is done to the account.
+tags: [true_positive, approve_selected]
+mode: both
+incident:
+  incident_id: XDR-PE-0002
+  title: Privileged role assignment by kchen@example.com after a risky sign-in
+  severity: HIGH
+  workflow_id: privilege-escalation
+  observables:
+    - {type: user, value: kchen@example.com}
+  users: [kchen@example.com]
+  trigger: {source: entra, mitre_techniques: [T1098.003]}
+environment:
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: kchen@example.com
+      record: {kind: user_profile, user: kchen@example.com, display_name: K Chen, department: Marketing,
+               groups: [Marketing Users], roles: [Privileged Role Administrator], account_enabled: true,
+               risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: kchen@example.com
+      record: {kind: sign_in, sign_in_id: si-pe-0002-1, user: kchen@example.com, timestamp: "2026-01-15T09:40:00Z",
+               ip: 203.0.113.150, country: unfamiliar, app: Azure Portal, result: success, mfa_result: satisfied,
+               risk_level: high}
+    - integration: entra
+      atomic: search_user_activity
+      subject: kchen@example.com
+      record: {kind: role_change, user: kchen@example.com, role_name: Privileged Role Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000a2, change: assigned, privileged: true,
+               actor: kchen@example.com, timestamp: "2026-01-15T09:52:00Z"}
+analyst:
+  decision: APPROVE_SELECTED
+  approvers: [lead]
+  select: [revoke_sessions:kchen@example.com,
+           "remove_privileged_role:kchen@example.com/00000000-0000-4000-8000-0000000000a2"]
+expect:
+  actions:
+    - revoke_sessions:kchen@example.com
+    - disable_user:kchen@example.com
+    - remove_privileged_role:kchen@example.com/00000000-0000-4000-8000-0000000000a2
+  elevated:
+    - revoke_sessions:kchen@example.com
+    - disable_user:kchen@example.com
+    - remove_privileged_role:kchen@example.com/00000000-0000-4000-8000-0000000000a2
+  handoffs: [account-takeover:kchen@example.com]
+  manual_steps: []
+  results:
+    revoke_sessions:kchen@example.com: SUCCESS
+    remove_privileged_role:kchen@example.com/00000000-0000-4000-8000-0000000000a2: SUCCESS
+    disable_user:kchen@example.com: REJECTED_BY_ANALYST
+  containment: CONTAINED
+  controls: 1

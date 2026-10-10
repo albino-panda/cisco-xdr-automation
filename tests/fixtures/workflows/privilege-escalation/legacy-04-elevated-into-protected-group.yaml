@@ -1,0 +1,70 @@
+# privilege-escalation workflow scenario; fake lab data only.
+schema: 1
+name: legacy-04-elevated-into-protected-group
+workflow: privilege-escalation
+legacy_source: workflows/privilege-escalation/scenarios/04-elevated-into-protected-group.yaml
+description: >-
+  Migrated legacy scenario 04. A UAC bypass detection fires on the engineering workstation ws-eng-0077
+  and the user's account (m.ortiz) is then added to Domain Admins by itself, with no approved change.
+  The membership the attacker just created never shields the account: as in the legacy plan the
+  workstation isolation is STANDARD and the revocation and disable are ELEVATED (privileged-account
+  class, from the very group membership under investigation). Removing the Domain Admins membership is a
+  manual step (no VERIFIED group write), to do before the account is re-enabled. Production parity:
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
+tags: [legacy, critical_asset, true_positive, approve_all]
+mode: both
+incident:
+  incident_id: INC-TEST-PE-0004
+  title: UAC bypass followed by Domain Admins membership change
+  severity: HIGH
+  source: Splunk
+  workflow_id: privilege-escalation
+  observables:
+    - {type: hostname, value: ws-eng-0077.example.com}
+    - {type: user, value: m.ortiz@example.com}
+  users: [m.ortiz@example.com]
+  trigger: {source: splunk, mitre_techniques: [T1548.002, T1098]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-eng-0077.example.com
+      record: {kind: endpoint, hostname: ws-eng-0077.example.com, connector_guid: 2c3d4e5f-6a7b-4c8d-9e0f-000000000077,
+               users: [m.ortiz@example.com], isolation_capable: true, isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-eng-0077.example.com
+      record: {kind: detection, detection_id: det-legacy-pe-04-1, name: UAC bypass behaviour, verdict: MALICIOUS,
+               severity: HIGH, endpoint: ws-eng-0077.example.com, user: m.ortiz@example.com,
+               mitre_techniques: [T1548.002], status: active, first_seen: "2026-01-15T09:30:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: m.ortiz@example.com
+      record: {kind: user_profile, user: m.ortiz@example.com, department: Engineering,
+               groups: [Engineering, Domain Admins], account_enabled: true, risk_level: medium, risk_state: none}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: m.ortiz@example.com
+      record: {kind: anomaly, anomaly_id: rd-legacy-pe-04-1, anomaly_type: new_device, severity: MEDIUM,
+               user: m.ortiz@example.com, detail: sign-in from a new device, first_seen: "2026-01-15T09:20:00Z"}
+    - integration: entra
+      atomic: search_user_activity
+      subject: m.ortiz@example.com
+      record: {kind: role_change, user: m.ortiz@example.com, role_name: Domain Admins, change: assigned,
+               privileged: true, actor: m.ortiz@example.com, timestamp: "2026-01-15T09:41:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - isolate_endpoint:WS-ENG-0077.EXAMPLE.COM
+    - revoke_sessions:m.ortiz@example.com
+    - disable_user:m.ortiz@example.com
+  elevated:
+    - revoke_sessions:m.ortiz@example.com
+    - disable_user:m.ortiz@example.com
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  considered: []
+  manual_steps: [remove-group-membership:m.ortiz@example.com/Domain Admins]
+  handoffs: [account-takeover:m.ortiz@example.com]
+  containment: PARTIALLY_CONTAINED
+  controls: 2

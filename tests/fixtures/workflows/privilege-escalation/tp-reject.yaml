@@ -1,0 +1,55 @@
+# privilege-escalation workflow scenario; fake lab data only.
+schema: 1
+name: tp-reject
+workflow: privilege-escalation
+description: >-
+  True positive on the evidence: a MALICIOUS UAC bypass detection on TH-LT-2210 and, from the same
+  user's account, a self-assignment of the Exchange Administrator role. The lead rejects the package
+  (an authorised red-team exercise confirmed out of band): the incident closes, nothing is executed and
+  no control is registered.
+tags: [true_positive, reject]
+mode: both
+incident:
+  incident_id: XDR-PE-0003
+  title: UAC bypass followed by a privileged role assignment on TH-LT-2210
+  severity: HIGH
+  workflow_id: privilege-escalation
+  observables:
+    - {type: hostname, value: TH-LT-2210}
+  trigger: {source: secure_endpoint, mitre_techniques: [T1548.002]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: endpoint, hostname: TH-LT-2210, connector_guid: 00000000-0000-4000-8000-000000002210,
+               os: Windows 11, users: [rpatel@example.com], groups: [Workstations], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: TH-LT-2210
+      record: {kind: detection, detection_id: det-pe-0003-1, name: UAC bypass behaviour, category: PrivilegeEscalation,
+               verdict: MALICIOUS, severity: HIGH, endpoint: TH-LT-2210, user: rpatel@example.com,
+               mitre_techniques: [T1548.002], status: active, first_seen: "2026-01-15T10:30:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: rpatel@example.com
+      record: {kind: user_profile, user: rpatel@example.com, display_name: R Patel, department: Engineering,
+               groups: [Engineering], roles: [], account_enabled: true, risk_level: low, risk_state: none}
+    - integration: entra
+      atomic: search_user_activity
+      subject: rpatel@example.com
+      record: {kind: role_change, user: rpatel@example.com, role_name: Exchange Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000a3, change: assigned, privileged: true,
+               actor: rpatel@example.com, timestamp: "2026-01-15T10:41:00Z"}
+analyst: {decision: REJECT, approvers: [lead], comment: authorised red-team exercise confirmed out of band}
+expect:
+  actions:
+    - isolate_endpoint:TH-LT-2210
+    - revoke_sessions:rpatel@example.com
+    - disable_user:rpatel@example.com
+    - remove_privileged_role:rpatel@example.com/00000000-0000-4000-8000-0000000000a3
+  handoffs: [account-takeover:rpatel@example.com]
+  decision_state: CLOSED
+  controls: 0
+  final_state: CLOSED

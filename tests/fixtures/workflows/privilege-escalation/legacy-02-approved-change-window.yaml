@@ -1,0 +1,59 @@
+# privilege-escalation workflow scenario; fake lab data only.
+schema: 1
+name: legacy-02-approved-change-window
+workflow: privilege-escalation
+legacy_source: workflows/privilege-escalation/scenarios/02-approved-change-window.yaml
+description: >-
+  Migrated legacy scenario 02 (benign). An IT administrator assigns the Exchange Administrator role to
+  a colleague during an approved change window; the colleague's workstation has only a clean detection.
+  The legacy approved change number is carried as the incident's change reference (unverified context).
+  Neither account shows a compromise indicator and the grant is not self-assigned: a normal change, so
+  no containment is proposed (as in the legacy plan) and the grant is shown as considered.
+tags: [legacy, benign]
+mode: both
+incident:
+  incident_id: INC-TEST-PE-0002
+  title: Privileged role assigned to a.lee@example.com
+  severity: MEDIUM
+  source: Microsoft Entra ID
+  workflow_id: privilege-escalation
+  observables:
+    - {type: user, value: a.lee@example.com}
+    - {type: hostname, value: ws-it-0031.example.com}
+  users: [a.lee@example.com]
+  trigger: {source: entra, mitre_techniques: [T1098], change_reference: CHG0040123}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-it-0031.example.com
+      record: {kind: endpoint, hostname: ws-it-0031.example.com, connector_guid: 0b7c6d5e-2f3a-4b1c-9d8e-000000000031,
+               users: [a.lee@example.com], isolation_capable: true}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: ws-it-0031.example.com
+      record: {kind: detection, detection_id: det-legacy-pe-02-1, name: Potentially unwanted application,
+               verdict: CLEAN, severity: LOW, endpoint: ws-it-0031.example.com, status: active}
+    - integration: entra
+      atomic: investigate_user
+      subject: a.lee@example.com
+      record: {kind: user_profile, user: a.lee@example.com, department: IT, groups: [Messaging Team],
+               roles: [Exchange Administrator], account_enabled: true, risk_level: low, risk_state: none}
+    - integration: entra
+      atomic: search_user_activity
+      subject: a.lee@example.com
+      record: {kind: role_change, user: a.lee@example.com, role_name: Exchange Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000b2, change: assigned, privileged: true,
+               actor: it-admin-03@example.com, timestamp: "2026-01-15T09:00:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: it-admin-03@example.com
+      record: {kind: user_profile, user: it-admin-03@example.com, department: IT, groups: [Identity Admins],
+               account_enabled: true, risk_level: none, risk_state: none}
+analyst: {decision: APPROVE_ALL, approvers: [analyst]}
+expect:
+  package: false
+  actions: []
+  considered: [remove_privileged_role:a.lee@example.com/00000000-0000-4000-8000-0000000000b2]
+  manual_steps: []
+  handoffs: []

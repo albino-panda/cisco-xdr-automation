@@ -1,0 +1,54 @@
+# privilege-escalation workflow scenario; fake lab data only.
+schema: 1
+name: edge-self-assigned-role-always-elevated
+workflow: privilege-escalation
+description: >-
+  hdops, a help-desk account with no compromise indicator, assigns itself Global Administrator directly
+  (an "assigned" grant, not a privileged identity management activation). Self-assignment makes the
+  change anomalous on its own: the role removal (always ELEVATED by the catalog) and the revocation
+  (ELEVATED: the account the change made privileged) are proposed; with no compromise indicator the
+  disable is considered, not proposed. The analyst alone cannot approve; the lead does.
+tags: [edge_case, critical_asset, true_positive, approve_all]
+mode: both
+incident:
+  incident_id: XDR-PE-0011
+  title: Global Administrator role assignment by hdops@example.com
+  severity: HIGH
+  workflow_id: privilege-escalation
+  observables:
+    - {type: user, value: hdops@example.com}
+  users: [hdops@example.com]
+  trigger: {source: entra, mitre_techniques: [T1098.003]}
+environment:
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: hdops@example.com
+      record: {kind: user_profile, user: hdops@example.com, display_name: Help Desk Ops, department: IT,
+               groups: [Helpdesk], roles: [Global Administrator], account_enabled: true, risk_level: none,
+               risk_state: none, last_sign_in: "2026-01-15T08:00:00Z"}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: hdops@example.com
+      record: {kind: sign_in, sign_in_id: si-pe-0011-1, user: hdops@example.com, timestamp: "2026-01-15T08:00:00Z",
+               ip: 198.51.100.30, country: GB, app: Azure Portal, result: success, risk_level: none}
+    - integration: entra
+      atomic: search_user_activity
+      subject: hdops@example.com
+      record: {kind: role_change, user: hdops@example.com, role_name: Global Administrator,
+               role_definition_id: 00000000-0000-4000-8000-0000000000a6, change: assigned, privileged: true,
+               actor: hdops@example.com, timestamp: "2026-01-15T08:20:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - revoke_sessions:hdops@example.com
+    - remove_privileged_role:hdops@example.com/00000000-0000-4000-8000-0000000000a6
+  elevated:
+    - revoke_sessions:hdops@example.com
+    - remove_privileged_role:hdops@example.com/00000000-0000-4000-8000-0000000000a6
+  warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
+  considered: [disable_user:hdops@example.com]
+  manual_steps: []
+  handoffs: []
+  containment: CONTAINED
+  controls: 1

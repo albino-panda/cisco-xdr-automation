@@ -1,0 +1,53 @@
+# privilege-escalation workflow scenario; fake lab data only.
+schema: 1
+name: edge-service-principal-permissions
+workflow: privilege-escalation
+description: >-
+  opscloud (Entra high risk, a high-risk successful sign-in) grants tenant-wide consent for
+  RoleManagement.ReadWrite.Directory to the application "Directory Sync Helper (test)", which lets the
+  service principal grant itself any directory role. The account is revoked and disabled (ELEVATED: it
+  holds the Cloud Application Administrator role); the application permissions have no VERIFIED write,
+  so removing them and disabling the service principal is a manual step with the records that show it.
+tags: [edge_case, true_positive, approve_all]
+mode: both
+incident:
+  incident_id: XDR-PE-0013
+  title: High-privilege permission granted to an application by opscloud@example.com
+  severity: HIGH
+  workflow_id: privilege-escalation
+  observables:
+    - {type: user, value: opscloud@example.com}
+  users: [opscloud@example.com]
+  trigger: {source: entra, mitre_techniques: [T1098.003]}
+environment:
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: opscloud@example.com
+      record: {kind: user_profile, user: opscloud@example.com, display_name: Ops Cloud, department: IT,
+               groups: [Cloud Team], roles: [Cloud Application Administrator], account_enabled: true,
+               risk_level: high, risk_state: at_risk}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: opscloud@example.com
+      record: {kind: sign_in, sign_in_id: si-pe-0013-1, user: opscloud@example.com, timestamp: "2026-01-15T10:02:00Z",
+               ip: 203.0.113.171, country: unfamiliar, app: Azure Portal, result: success, risk_level: high}
+    - integration: entra
+      atomic: search_user_activity
+      subject: opscloud@example.com
+      record: {kind: cloud_app, app_id: 00000000-0000-4000-8000-0000000c0013, display_name: Directory Sync Helper (test),
+               publisher_verified: false, permissions: [RoleManagement.ReadWrite.Directory, User.Read],
+               consent_type: admin, consented_by: opscloud@example.com, created_at: "2026-01-15T10:10:00Z"}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions:
+    - revoke_sessions:opscloud@example.com
+    - disable_user:opscloud@example.com
+  elevated:
+    - revoke_sessions:opscloud@example.com
+    - disable_user:opscloud@example.com
+  considered: []
+  manual_steps: [revoke-app-permissions:00000000-0000-4000-8000-0000000c0013]
+  handoffs: [account-takeover:opscloud@example.com]
+  containment: CONTAINED
+  controls: 1

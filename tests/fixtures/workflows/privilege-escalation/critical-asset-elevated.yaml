@@ -1,0 +1,50 @@
+# privilege-escalation workflow scenario; fake lab data only.
+schema: 1
+name: critical-asset-elevated
+workflow: privilege-escalation
+description: >-
+  A MALICIOUS kernel exploit detection on the executive laptop EXEC-LT-0042 (used by cfo). No privilege
+  change is found for the account. The isolation of the originating endpoint stays proposed, ELEVATED
+  with the executive-asset warning (never skipped silently); the analyst alone cannot approve it and the
+  lead does. The CFO account is handed off to account-takeover for review. Production parity:
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
+tags: [critical_asset, true_positive, approve_all]
+mode: both
+incident:
+  incident_id: XDR-PE-0006
+  title: Exploit prevention - kernel privilege escalation on EXEC-LT-0042
+  severity: CRITICAL
+  workflow_id: privilege-escalation
+  observables:
+    - {type: hostname, value: EXEC-LT-0042}
+  trigger: {source: secure_endpoint, mitre_techniques: [T1068]}
+environment:
+  records:
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: EXEC-LT-0042
+      record: {kind: endpoint, hostname: EXEC-LT-0042, connector_guid: 00000000-0000-4000-8000-000000000042,
+               os: Windows 11, users: [cfo@example.com], groups: [Executives], isolation_capable: true,
+               isolation_state: not_isolated}
+    - integration: secure_endpoint
+      atomic: investigate_endpoint
+      subject: EXEC-LT-0042
+      record: {kind: detection, detection_id: det-pe-0006-1, name: Exploit Prevention - kernel exploit blocked,
+               category: Exploit, verdict: MALICIOUS, severity: CRITICAL, endpoint: EXEC-LT-0042, user: cfo@example.com,
+               mitre_techniques: [T1068], status: active, first_seen: "2026-01-15T11:05:00Z"}
+    - integration: entra
+      atomic: investigate_user
+      subject: cfo@example.com
+      record: {kind: user_profile, user: cfo@example.com, display_name: Chief Financial Officer, department: Finance,
+               groups: [Executives], roles: [], account_enabled: true, risk_level: low, risk_state: none}
+analyst: {decision: APPROVE_ALL, approvers: [lead]}
+expect:
+  actions: [isolate_endpoint:EXEC-LT-0042]
+  elevated: [isolate_endpoint:EXEC-LT-0042]
+  warnings: [ELEVATED APPROVAL REQUIRED, Executive or VIP asset]
+  considered: []
+  manual_steps: []
+  handoffs: [account-takeover:cfo@example.com]
+  containment: PARTIALLY_CONTAINED
+  controls: 1
