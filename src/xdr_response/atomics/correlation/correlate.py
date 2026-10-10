@@ -6,6 +6,11 @@ link cites the records it was computed from and every cited id is in the run's `
 Entities a record "mentions" (``_record_entities``) are the assets and indicators it is about: an
 endpoint's own IP and MAC addresses, a DNS client address and a connection's local address are
 attributes of the asset, not mentions, so they never inflate the indicator scope.
+
+With ``merge_aliases=True`` (opt-in, Phase 5) every mention is first mapped to its canonical
+spelling (:class:`~xdr_response.atomics.correlation.aliases.EntityAliases`): a host that Defender
+names by its DNS name and Secure Endpoint by its short name is one endpoint, and a mailbox address
+is the user it belongs to. The default keeps the Phase 1 behaviour exactly.
 """
 from __future__ import annotations
 
@@ -16,6 +21,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
+from xdr_response.atomics.correlation.aliases import EntityAliases
 from xdr_response.atomics.correlation.models import (
     FRAMEWORK_ORIGIN,
     CorrelationLink,
@@ -164,29 +170,53 @@ def _record_entities(record: RecordBase) -> tuple[EntityRef, ...]:
     return _refs(_record_pairs(record))
 
 
+def _canonical_refs(refs: Iterable[EntityRef], aliases: EntityAliases) -> tuple[EntityRef, ...]:
+    """Canonical spellings of ``refs``, unique, in first-seen order."""
+    out: dict[str, EntityRef] = {}
+    for ref in refs:
+        canonical = aliases.canon(ref)
+        out.setdefault(canonical.key(), canonical)
+    return tuple(out.values())
+
+
+def _resolve_aliases(index: RecordIndex) -> EntityAliases:
+    """Aliases among every entity the index's records mention."""
+    return EntityAliases.resolve(e for record in index.records() for e in _record_entities(record))
+
+
 @dataclass(frozen=True)
 class _Mentions:
-    """Which entities each record mentions, and which records mention each entity."""
+    """Which entities each record mentions, and which records mention each entity.
+
+    Entities are canonical spellings under ``aliases`` (no alias by default: the raw mentions).
+    """
 
     by_record: dict[str, tuple[EntityRef, ...]]
     by_entity: dict[str, list[str]]
     entities: dict[str, EntityRef]
+    aliases: EntityAliases
 
     @classmethod
-    def build(cls, index: RecordIndex) -> "_Mentions":
+    def build(cls, index: RecordIndex, aliases: EntityAliases | None = None) -> "_Mentions":
+        aliases = aliases if aliases is not None else EntityAliases()
         by_record: dict[str, tuple[EntityRef, ...]] = {}
         by_entity: dict[str, list[str]] = defaultdict(list)
         entities: dict[str, EntityRef] = {}
         for record in index.records():
-            refs = _record_entities(record)
+            refs = _canonical_refs(_record_entities(record), aliases)
             by_record[record.record_id] = refs
             for ref in refs:
                 entities.setdefault(ref.key(), ref)
                 by_entity[ref.key()].append(record.record_id)
-        return cls(by_record, dict(by_entity), entities)
+        return cls(by_record, dict(by_entity), entities, aliases)
 
     def of_kind(self, record_id: str, kinds: Collection[TargetKind]) -> tuple[EntityRef, ...]:
         return tuple(e for e in self.by_record.get(record_id, ()) if e.kind in kinds)
+
+    def ref(self, kind: TargetKind, value: str | None) -> EntityRef | None:
+        """The canonical entity for a record field (``None`` when empty or not normalizable)."""
+        ref = _ref(kind, value)
+        return self.aliases.canon(ref) if ref is not None else None
 
 
 # ------------------------------------------------------------------------------------------ timeline
@@ -307,6 +337,7 @@ def _parent_key(event: ProcessEventRecord, pids: Collection[str], hashes: Collec
 
 def _endpoint_lineage(index: RecordIndex, endpoint: str,
                       events: list[ProcessEventRecord]) -> list[CorrelationLink | None]:
+    """Lineage links of one endpoint (``endpoint`` is its canonical value)."""
     by_key: dict[str, list[str]] = defaultdict(list)
     for event in events:
         if event.pid is not None:
@@ -331,12 +362,12 @@ def _endpoint_lineage(index: RecordIndex, endpoint: str,
     return links
 
 
-def _lineage_links(index: RecordIndex) -> list[CorrelationLink | None]:
+def _lineage_links(index: RecordIndex, m: _Mentions) -> list[CorrelationLink | None]:
     """process_lineage: events on one endpoint whose parent pid or hash is another event's pid or hash."""
     by_endpoint: dict[str, list[ProcessEventRecord]] = defaultdict(list)
     for record in index.records():
         if isinstance(record, ProcessEventRecord):
-            by_endpoint[normalize_target(TargetKind.ENDPOINT, record.endpoint)].append(record)
+            by_endpoint[_canonical_value(m, TargetKind.ENDPOINT, record.endpoint)].append(record)
     links: list[CorrelationLink | None] = []
     for endpoint in sorted(by_endpoint):
         links += _endpoint_lineage(index, endpoint, by_endpoint[endpoint])
@@ -358,34 +389,40 @@ def _activity_user_times(record: RecordBase) -> tuple[list[str], list[datetime]]
     return [], []
 
 
-def _activity_entities(record: RecordBase) -> list[EntityRef | None]:
+def _activity_entities(record: RecordBase, m: _Mentions) -> list[EntityRef | None]:
     if isinstance(record, MailboxRuleRecord):
         addresses = record.forward_to + record.redirect_to + record.forward_as_attachment_to
-        return [_ref(TargetKind.EMAIL_ADDRESS, a) for a in addresses]
+        return [m.ref(TargetKind.EMAIL_ADDRESS, a) for a in addresses]
     if isinstance(record, RoleChangeRecord):
         target = record.target
-        return [_ref(TargetKind.USER, record.user), _ref(TargetKind.ROLE_ASSIGNMENT, target) if target else None]
+        return [m.ref(TargetKind.USER, record.user), m.ref(TargetKind.ROLE_ASSIGNMENT, target) if target else None]
     if isinstance(record, CloudAppRecord):
-        return [_ref(TargetKind.APPLICATION, record.app_id)]
+        return [m.ref(TargetKind.APPLICATION, record.app_id)]
     return []
 
 
-def _sign_in_links(index: RecordIndex, window: timedelta) -> list[CorrelationLink | None]:
+def _canonical_value(m: _Mentions, kind: TargetKind, value: str) -> str:
+    """The canonical value of a record field that is known to be non-empty."""
+    ref = m.ref(kind, value)
+    return ref.value if ref is not None else normalize_target(kind, value)
+
+
+def _sign_in_links(index: RecordIndex, m: _Mentions, window: timedelta) -> list[CorrelationLink | None]:
     """sign_in_to_activity: a successful sign-in followed within the window by a mailbox rule,
     role change or cloud app consent for the same user."""
     sign_ins: dict[str, list[SignInRecord]] = defaultdict(list)
     for record in index.records():
         if isinstance(record, SignInRecord) and record.result == "success":
-            sign_ins[normalize_target(TargetKind.USER, record.user)].append(record)
+            sign_ins[_canonical_value(m, TargetKind.USER, record.user)].append(record)
     links: list[CorrelationLink | None] = []
     for record in index.records():
         users, times = _activity_user_times(record)
-        for user in sorted({normalize_target(TargetKind.USER, u) for u in users}):
+        for user in sorted({_canonical_value(m, TargetKind.USER, u) for u in users}):
             matched = [s for s in sign_ins.get(user, []) if any(_within(s.timestamp, t, window) for t in times)]
             if not matched:
                 continue
-            entities = [_ref(TargetKind.USER, user), *(_ref(TargetKind.IP, s.ip) for s in matched),
-                        *_activity_entities(record)]
+            entities = [m.ref(TargetKind.USER, user), *(m.ref(TargetKind.IP, s.ip) for s in matched),
+                        *_activity_entities(record, m)]
             note = (f"successful sign-in by {user} followed within {_minutes(window)} minutes by "
                     f"{record.kind.value.replace('_', ' ')}")
             links.append(_link(index, LinkKind.SIGN_IN_TO_ACTIVITY, [e for e in entities if e is not None],
@@ -424,17 +461,17 @@ def _click_domain(record: RecordBase) -> str | None:
     return None
 
 
-def _clicker(record: RecordBase) -> list[EntityRef | None]:
+def _clicker(record: RecordBase, m: _Mentions) -> list[EntityRef | None]:
     if isinstance(record, NetworkConnectionRecord):
-        return [_ref(TargetKind.ENDPOINT, record.endpoint), _ref(TargetKind.USER, record.user)]
+        return [m.ref(TargetKind.ENDPOINT, record.endpoint), m.ref(TargetKind.USER, record.user)]
     if isinstance(record, DnsQueryRecord):
-        return [_ref(TargetKind.ENDPOINT, record.endpoint)]
+        return [m.ref(TargetKind.ENDPOINT, record.endpoint)]
     return []
 
 
 def _recipient_assets(message: EmailMessageRecord, m: _Mentions) -> set[str]:
     """Entity keys of the recipients and of every endpoint a record names together with a recipient."""
-    users = [r for r in (_ref(TargetKind.USER, v) for v in message.recipients) if r is not None]
+    users = [r for r in (m.ref(TargetKind.USER, v) for v in message.recipients) if r is not None]
     keys = {u.key() for u in users}
     for user in users:
         for rid in m.by_entity.get(user.key(), []):
@@ -453,12 +490,12 @@ def _email_click_links(index: RecordIndex, m: _Mentions, window: timedelta) -> l
         hits: dict[str, list[RecordBase]] = defaultdict(list)
         for click in clicks:
             domain = _domain_match(_click_domain(click), domains)
-            who = [e for e in _clicker(click) if e is not None and e.key() in recipients]
+            who = [e for e in _clicker(click, m) if e is not None and e.key() in recipients]
             if domain and who and _within(received, _record_time(click), window):
                 hits[domain].append(click)
         for domain in sorted(hits):
-            entities = [_ref(TargetKind.EMAIL_MESSAGE, message.message_id), _ref(TargetKind.DOMAIN, domain)]
-            entities += [e for c in hits[domain] for e in _clicker(c) if e is not None and e.key() in recipients]
+            entities = [m.ref(TargetKind.EMAIL_MESSAGE, message.message_id), m.ref(TargetKind.DOMAIN, domain)]
+            entities += [e for c in hits[domain] for e in _clicker(c, m) if e is not None and e.key() in recipients]
             note = f"message {message.message_id} carried {domain}, contacted by a recipient within the window"
             links.append(_link(index, LinkKind.EMAIL_TO_CLICK, [e for e in entities if e is not None],
                                [message.record_id, *(c.record_id for c in hits[domain])], note))
@@ -536,8 +573,8 @@ def _framework_links(index: RecordIndex, m: _Mentions, window: timedelta,
     candidates: list[CorrelationLink | None] = []
     candidates += _indicator_links(index, m)
     candidates += _asset_links(index, m)
-    candidates += _lineage_links(index)
-    candidates += _sign_in_links(index, window)
+    candidates += _lineage_links(index, m)
+    candidates += _sign_in_links(index, m, window)
     candidates += _email_click_links(index, m, window)
     candidates += _campaign_links(index)
     return [link for link in candidates if link is not None and link.kind in kinds]
@@ -553,16 +590,19 @@ def _check_extra(index: RecordIndex, extra_links: Sequence[CorrelationLink]) -> 
 
 def correlate(ctx: AtomicContext, results: Sequence[AtomicResult], *,
               extra_links: Sequence[CorrelationLink] = (), window: timedelta = DEFAULT_WINDOW,
-              link_kinds: Collection[LinkKind] = FRAMEWORK_LINK_KINDS) -> CorrelationResult:
+              link_kinds: Collection[LinkKind] = FRAMEWORK_LINK_KINDS,
+              merge_aliases: bool = False) -> CorrelationResult:
     """Entities, framework links (restricted to ``link_kinds``), ``extra_links``, clusters and timeline.
 
     ``window`` is ``CorrelationSpec.window_minutes``; ``extra_links`` (workflow-hook links) must cite
     records of ``results`` (:class:`EvidenceError` otherwise) and are never filtered by ``link_kinds``.
+    ``merge_aliases`` (opt-in) maps every record mention to its canonical spelling first (module
+    docstring); hook links are kept exactly as given. Pass the same flag to ``blast_radius``.
     """
     if window <= timedelta(0):
         raise ValueError("correlation window must be positive")
     index = RecordIndex(results)
-    mentions = _Mentions.build(index)
+    mentions = _Mentions.build(index, _resolve_aliases(index) if merge_aliases else None)
     found = _framework_links(index, mentions, window, frozenset(link_kinds)) + _check_extra(index, extra_links)
     links = sorted({link.link_id: link for link in found}.values(), key=lambda link: link.link_id)
     entities = dict(mentions.entities)

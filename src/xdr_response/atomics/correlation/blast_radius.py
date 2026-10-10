@@ -10,7 +10,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING
 
-from xdr_response.atomics.correlation.correlate import _Mentions, _observable_entity, _ref
+from xdr_response.atomics.correlation.aliases import EntityAliases
+from xdr_response.atomics.correlation.correlate import _Mentions, _observable_entity, _ref, _resolve_aliases
 from xdr_response.atomics.correlation.models import (
     BLAST_RADIUS_CAP_NAMES,
     BlastRadiusReport,
@@ -34,12 +35,13 @@ _ASSET_KINDS = frozenset({TargetKind.ENDPOINT, TargetKind.USER})
 _CLASSIFIED_KINDS = frozenset({TargetKind.ENDPOINT, TargetKind.USER, TargetKind.EMAIL_ADDRESS, TargetKind.IP})
 
 
-def _incident_entities(incident: Incident) -> tuple[EntityRef, ...]:
-    """Entities the incident itself names: observables, assets and users (sorted, unique)."""
+def _incident_entities(incident: Incident, aliases: EntityAliases | None = None) -> tuple[EntityRef, ...]:
+    """Entities the incident itself names: observables, assets and users (sorted, unique, canonical)."""
+    aliases = aliases if aliases is not None else EntityAliases()
     refs = [_observable_entity(o) for o in incident.observables]
     refs += [_ref(a.kind, a.name) for a in incident.assets]
     refs += [_ref(TargetKind.USER, u) for u in incident.users]
-    unique = {r.key(): r for r in refs if r is not None}
+    unique = {c.key(): c for c in (aliases.canon(r) for r in refs if r is not None)}
     return tuple(sorted(unique.values(), key=EntityRef.sort_key))
 
 
@@ -53,7 +55,7 @@ def _default_scope(incident: Incident, correlation: CorrelationResult, index: Re
     Indicators other records merely mention (any domain a host queried) are not added.
     """
     scope: dict[str, EntityRef] = {}
-    for seed in _incident_entities(incident):
+    for seed in _incident_entities(incident, mentions.aliases):
         scope[seed.key()] = seed
         for entity in correlation.cluster_of(seed):
             scope.setdefault(entity.key(), entity)
@@ -75,24 +77,34 @@ def _values(scope: dict[str, EntityRef], kinds: Iterable[TargetKind]) -> tuple[s
     return tuple(out)
 
 
-def _asset_context(entity: EntityRef, index: RecordIndex, incident: Incident) -> Asset | None:
-    """Groups, tags, roles and first IP the run's own records (and the incident) report for an asset."""
+def _asset_context(entity: EntityRef, index: RecordIndex, incident: Incident,
+                   aliases: EntityAliases | None = None) -> Asset | None:
+    """Groups, tags, roles and first IP the run's own records (and the incident) report for an asset.
+
+    With aliases, the records and incident assets of every spelling of the entity contribute.
+    """
+    aliases = aliases if aliases is not None else EntityAliases()
+
+    def same(kind: TargetKind, value: str | None) -> bool:
+        ref = _ref(kind, value)
+        return ref is not None and aliases.canon(ref) == entity
+
     groups: list[str] = []
     tags: list[str] = []
     roles: list[str] = []
     ip: str | None = None
     for record in index.records():
         if isinstance(record, EndpointRecord) and entity.kind is TargetKind.ENDPOINT \
-                and _ref(TargetKind.ENDPOINT, record.hostname) == entity:
+                and same(TargetKind.ENDPOINT, record.hostname):
             groups += record.groups
             tags += record.tags
             ip = ip or (record.ip_addresses[0] if record.ip_addresses else None)
         elif isinstance(record, UserProfileRecord) and entity.kind is TargetKind.USER \
-                and _ref(TargetKind.USER, record.user) == entity:
+                and same(TargetKind.USER, record.user):
             groups += record.groups
             roles += record.roles
     for asset in incident.assets:
-        if asset.kind is entity.kind and asset.name == entity.value:
+        if asset.kind is entity.kind and (asset.name == entity.value or same(asset.kind, asset.name)):
             groups += asset.groups
             tags += asset.tags
             roles += asset.roles
@@ -109,8 +121,13 @@ def _critical_hits(ctx: AtomicContext, scope: dict[str, EntityRef], index: Recor
     for entity in sorted(scope.values(), key=EntityRef.sort_key):
         if entity.kind not in _CLASSIFIED_KINDS:
             continue
-        asset = _asset_context(entity, index, ctx.incident)
-        classes = ctx.critical_assets.classify(entity.value, entity.kind, asset)
+        asset = _asset_context(entity, index, ctx.incident, mentions.aliases)
+        # Every spelling is classified: a policy that names the host by its DNS name still matches
+        # when the canonical spelling is the short name (a critical asset is never skipped).
+        found = list(ctx.critical_assets.classify(entity.value, entity.kind, asset))
+        for alias in mentions.aliases.aliases_of(entity):
+            found += ctx.critical_assets.classify(alias.value, alias.kind, asset)
+        classes = list(dict.fromkeys(found))
         if classes:
             ids = tuple(sorted(set(mentions.by_entity.get(entity.key(), []))))
             hits.append(CriticalAssetHit(entity=entity, classes=tuple(classes), record_ids=ids))
@@ -124,18 +141,22 @@ def _caps(ctx: AtomicContext) -> dict[str, int]:
 
 
 def blast_radius(ctx: AtomicContext, correlation: CorrelationResult, results: Sequence[AtomicResult], *,
-                 scope: Sequence[EntityRef] | None = None) -> BlastRadiusReport:
+                 scope: Sequence[EntityRef] | None = None, merge_aliases: bool = False) -> BlastRadiusReport:
     """Endpoints, users, indicators and messages in scope, critical assets among them, and caps exceeded.
 
     ``scope`` defaults to the clusters that contain an incident observable, asset or user, plus those
-    incident entities, widened by one hop (``_default_scope``). An explicit ``scope`` is used as given.
+    incident entities, widened by one hop (``_default_scope``). An explicit ``scope`` is used as given
+    (mapped to canonical spellings when ``merge_aliases``). ``merge_aliases`` (opt-in) must match the
+    flag the correlation was computed with: one host named two ways then counts once, and the
+    critical-asset policy is checked against every spelling.
     """
     index = RecordIndex(results)
-    mentions = _Mentions.build(index)
+    mentions = _Mentions.build(index, _resolve_aliases(index) if merge_aliases else None)
     if scope is None:
         in_scope = _default_scope(ctx.incident, correlation, index, mentions)
     else:
-        in_scope = {e.key(): e for e in (EntityRef.model_validate(x) for x in scope)}
+        refs = (mentions.aliases.canon(EntityRef.model_validate(x)) for x in scope)
+        in_scope = {e.key(): e for e in refs}
     counts = {
         "endpoints": _values(in_scope, (TargetKind.ENDPOINT,)),
         "users": _values(in_scope, (TargetKind.USER,)),
