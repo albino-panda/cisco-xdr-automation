@@ -1,0 +1,1713 @@
+{
+  "workflow": {
+    "unique_name": "definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF",
+    "name": "Phishing",
+    "title": "Phishing",
+    "type": "generic.workflow",
+    "base_type": "workflow",
+    "variables": [
+      {
+        "schema_id": "datatype.boolean",
+        "properties": {
+          "value": true,
+          "scope": "input",
+          "name": "Dry Run",
+          "type": "datatype.boolean",
+          "description": "True: investigate, ask for approval and report what would be done, but change nothing. Set to false only after a dry run looked right.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_02VP5LJFB47KJU1TRvGN4kEbYfwmBEv6xbM",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.boolean",
+        "properties": {
+          "value": false,
+          "scope": "input",
+          "name": "Audit Only",
+          "type": "datatype.boolean",
+          "description": "True: investigate and write the assessment to the incident worklog, but raise no approval task and change nothing. For tuning the rule that starts the workflow.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_02R2BXAMMAUBF4AMGHuX3nSeoga1UDGBoHp",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.string",
+        "properties": {
+          "value": "",
+          "scope": "input",
+          "name": "Observables",
+          "type": "datatype.string",
+          "description": "Optional. Observables to assess when the workflow is started by hand, one per line or separated by commas.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_022PH8HTH1A992XJIq5PF8GhFrT2zDnAIZA",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.integer",
+        "properties": {
+          "value": 20,
+          "scope": "input",
+          "name": "Maximum Observables",
+          "type": "datatype.integer",
+          "description": "Observables assessed per run (1 to 50). The rest is reported, not assessed.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_02FZDSOQDE6RFPZN7bwqGPjrMG9sGvCZeAE",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.boolean",
+        "properties": {
+          "value": true,
+          "scope": "input",
+          "name": "Collect Sightings",
+          "type": "datatype.boolean",
+          "description": "False skips the sightings query, for incidents whose sightings are too large.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_02W3T98O69ZO5LSXFHi9wDykunsmh0d4q1A",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.string",
+        "properties": {
+          "value": "",
+          "scope": "input",
+          "name": "Internal Domain Suffixes",
+          "type": "datatype.string",
+          "description": "Comma-separated DNS suffixes of your own hosts and mail domains (corp.example.com, example.com). A dotted name under one of them is an endpoint; any other dotted name is a domain. When set, account actions are proposed only for addresses under them.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_02G6QNGXPI7NAANI4bMY5s5vutvZG1gNLyI",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.string",
+        "properties": {
+          "value": "",
+          "scope": "input",
+          "name": "Protected Assets",
+          "type": "datatype.string",
+          "description": "Comma-separated names or patterns (DC-*, ceo@example.com, @finance.example) that always need elevated approval.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_026BRBZK560AG4EIItmGATIDqnWnSxH6jb5",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.string",
+        "properties": {
+          "value": "",
+          "scope": "input",
+          "name": "Never Act On",
+          "type": "datatype.string",
+          "description": "Comma-separated values, patterns or networks that are never proposed (your own domains, resolvers, break-glass accounts, 203.0.113.0/24). A domain also covers its subdomains.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_0226PAB5WR4CC80I4Fy7K5x1mn2JS3WTGwp",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.string",
+        "properties": {
+          "value": "disable_user",
+          "scope": "input",
+          "name": "Excluded Actions",
+          "type": "datatype.string",
+          "description": "Comma-separated action kinds this run must not propose: isolate_endpoint, block_indicator, block_hash, revoke_sessions, disable_user, quarantine_email.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_02ZMM8PNNS2OX9290cEThkQRK9bhAfcdakO",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.boolean",
+        "properties": {
+          "value": true,
+          "scope": "input",
+          "name": "Trust Analyst Selection",
+          "type": "datatype.boolean",
+          "description": "True: an endpoint, account or message a person chose is proposed even when no indicator of the incident is rated high enough. The approval is still required.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_0245IEGADJSAZ4NSQ9wnQiivluyUOk3s5uT",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.boolean",
+        "properties": {
+          "value": false,
+          "scope": "input",
+          "name": "Block Unrated Indicators",
+          "type": "datatype.boolean",
+          "description": "True: a domain, URL, address or hash that no module rates is proposed for blocking when a person started the workflow with it. An indicator rated clean is never proposed.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_023C84Y6FIF5OKUIC56kQXwbBAjB2WMyr0I",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.integer",
+        "properties": {
+          "value": 5,
+          "scope": "input",
+          "name": "Elevated Approval Above",
+          "type": "datatype.integer",
+          "description": "More proposed actions than this need elevated approval.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_02XG26JZ4YUIQN7VBtsJIcayP9rr4pK6E4J",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.string",
+        "properties": {
+          "value": "^(isolate|contain|network contain)",
+          "scope": "input",
+          "name": "Isolate Action Pattern",
+          "type": "datatype.string",
+          "description": "Text of the XDR response action used for isolate_endpoint (regular expression on its title, case-insensitive). The decision card lists the titles on offer when nothing matches.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_02D8ZLJVW01SD9T5fAM7kRFsDuovNyd8ZqB",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.string",
+        "properties": {
+          "value": "^(block|deny|add .*(block|deny))",
+          "scope": "input",
+          "name": "Block Action Pattern",
+          "type": "datatype.string",
+          "description": "Text of the XDR response action used for block_indicator (regular expression on its title, case-insensitive). The decision card lists the titles on offer when nothing matches.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_02ZYO7R4RDHOMWWHMDZtaS83umISn7Jb0Ax",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.string",
+        "properties": {
+          "value": "^(block|deny|add .*(block|deny|custom detection))",
+          "scope": "input",
+          "name": "Block Hash Action Pattern",
+          "type": "datatype.string",
+          "description": "Text of the XDR response action used for block_hash (regular expression on its title, case-insensitive). The decision card lists the titles on offer when nothing matches.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_02ZCK7JHJZIFXFRAzrdtJvER5XFyKA6v766",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.string",
+        "properties": {
+          "value": "^(revoke|sign.?out|log.?out|invalidate) .*(session|token|sign.?in)",
+          "scope": "input",
+          "name": "Revoke Sessions Action Pattern",
+          "type": "datatype.string",
+          "description": "Text of the XDR response action used for revoke_sessions (regular expression on its title, case-insensitive). The decision card lists the titles on offer when nothing matches.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_02B36DWMSWJ8D2TMpF8CbCNKwVYtlu55htR",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.string",
+        "properties": {
+          "value": "^(disable|suspend|lock) .*(user|account|identity)",
+          "scope": "input",
+          "name": "Disable User Action Pattern",
+          "type": "datatype.string",
+          "description": "Text of the XDR response action used for disable_user (regular expression on its title, case-insensitive). The decision card lists the titles on offer when nothing matches.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_02U8A8DWZGEU6YIHaT1FRoGTphT4PPvyODB",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.string",
+        "properties": {
+          "value": "^(quarantine|move .*quarantine)",
+          "scope": "input",
+          "name": "Quarantine Email Action Pattern",
+          "type": "datatype.string",
+          "description": "Text of the XDR response action used for quarantine_email (regular expression on its title, case-insensitive). The decision card lists the titles on offer when nothing matches.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_02WOS38QSGN77F8BXErNQNR8AMLEDitELE0",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.string",
+        "properties": {
+          "value": "{\"name\": \"Phishing\", \"types\": [\"email_messageid\", \"url\", \"domain\", \"sha256\", \"user\", \"email\", \"hostname\", \"ip\", \"ipv6\"], \"rules\": [{\"kind\": \"quarantine_email\", \"types\": [\"email_messageid\"], \"basis\": \"asset\", \"min_risk\": 60, \"label\": \"quarantine every delivered copy of a confirmed phishing message\"}, {\"kind\": \"block_indicator\", \"types\": [\"url\", \"domain\"], \"basis\": \"indicator\", \"min_risk\": 60, \"label\": \"block a URL or domain carried by the phishing messages that is rated malicious or suspicious\"}, {\"kind\": \"block_hash\", \"types\": [\"sha256\"], \"basis\": \"indicator\", \"min_risk\": 60, \"label\": \"block an attachment hash rated malicious or suspicious\"}, {\"kind\": \"revoke_sessions\", \"types\": [\"user\", \"email\"], \"basis\": \"asset\", \"min_risk\": 60, \"label\": \"revoke the sessions of a recipient who clicked and then signed in or was flagged\"}, {\"kind\": \"disable_user\", \"types\": [\"user\", \"email\"], \"basis\": \"asset\", \"min_risk\": 90, \"label\": \"disable an account whose compromise after the click is confirmed or strongly indicated\"}, {\"kind\": \"isolate_endpoint\", \"types\": [\"hostname\"], \"basis\": \"asset\", \"min_risk\": 90, \"label\": \"isolate an endpoint with malicious activity after the click\"}], \"manual\": [\"Search the mail product for other copies of the campaign (same sender, subject or URL) and add their message IDs.\"], \"checks\": [\"Who received the message and who clicked.\", \"Whether a recipient entered credentials: then treat it as an account takeover.\", \"A URL on a shared service (file sharing, forms): block the URL, not the domain.\"]}",
+          "scope": "local",
+          "name": "Workflow Rules",
+          "type": "datatype.string",
+          "description": "Rules of this attack type, read by the script steps. Generated: do not edit here.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_02PSGJLIXB74IH3YUtWVTzMQoN5ra1DefMH",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.string",
+        "properties": {
+          "value": "",
+          "scope": "local",
+          "name": "Candidate Observables",
+          "type": "datatype.string",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_02RR1YB2U3J9FWTRpzkv886E2CtL8qO8tBG",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.string",
+        "properties": {
+          "value": "",
+          "scope": "local",
+          "name": "Decision",
+          "type": "datatype.string",
+          "description": "Answer of the approval task.",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_028XYMCUBT0CT4F36Yqw6Z2XPvjEqJsOdIf",
+        "object_type": "variable_workflow"
+      },
+      {
+        "schema_id": "datatype.string",
+        "properties": {
+          "value": "{}",
+          "scope": "local",
+          "name": "Action Tally",
+          "type": "datatype.string",
+          "is_required": false,
+          "display_on_wizard": false,
+          "is_invisible": false,
+          "variable_string_format": ""
+        },
+        "unique_name": "variable_workflow_023LMD8M1XVLSAOA5hVOqKhiIWo4wE80cZc",
+        "object_type": "variable_workflow"
+      }
+    ],
+    "properties": {
+      "atomic": {
+        "is_atomic": false
+      },
+      "automation_rules": {
+        "type": [
+          "incident.rule_event"
+        ]
+      },
+      "delete_workflow_instance": false,
+      "description": "Responds to a reported or detected phishing message. It rates every observable with the Cisco XDR modules, lists the response actions they offer and asks an administrator or incident responder to approve the proposed actions. Nothing is changed without that approval, and nothing is changed while Dry Run is true.",
+      "display_name": "Phishing",
+      "runtime_user": {
+        "target_default": true
+      },
+      "target": {
+        "no_target": true
+      },
+      "wf_metadata": {
+        "coa": {
+          "action": [
+            "response"
+          ],
+          "intent": "incident_response",
+          "observable_types": [
+            "email_messageid",
+            "url",
+            "domain",
+            "sha256",
+            "user",
+            "email",
+            "hostname",
+            "ip",
+            "ipv6"
+          ]
+        }
+      }
+    },
+    "object_type": "definition_workflow",
+    "actions": [
+      {
+        "unique_name": "definition_activity_02QYI1LVTNVBJ9EIEZausAFbHfXMNjecihM",
+        "name": "Group",
+        "title": "Incident response with observables",
+        "type": "logic.group",
+        "base_type": "activity",
+        "properties": {
+          "continue_on_failure": false,
+          "description": "Rates the observables of the incident, asks for approval and acts on the answer.",
+          "display_as_suggestion": false,
+          "display_name": "Incident response with observables",
+          "skip_execution": false
+        },
+        "object_type": "definition_activity",
+        "actions": [
+          {
+            "unique_name": "definition_activity_027IWWYTQMOQ2LAS9Jiu75HSvio33wF24be",
+            "name": "Set Variables",
+            "title": "Start with the Observables input",
+            "type": "core.set_multiple_variables",
+            "base_type": "activity",
+            "properties": {
+              "continue_on_failure": false,
+              "display_name": "Start with the Observables input",
+              "skip_execution": false,
+              "variables_to_update": [
+                {
+                  "variable_to_update": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_02RR1YB2U3J9FWTRpzkv886E2CtL8qO8tBG$",
+                  "variable_value_new": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_022PH8HTH1A992XJIq5PF8GhFrT2zDnAIZA$"
+                },
+                {
+                  "variable_to_update": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_028XYMCUBT0CT4F36Yqw6Z2XPvjEqJsOdIf$",
+                  "variable_value_new": ""
+                },
+                {
+                  "variable_to_update": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_023LMD8M1XVLSAOA5hVOqKhiIWo4wE80cZc$",
+                  "variable_value_new": "{}"
+                }
+              ]
+            },
+            "object_type": "definition_activity"
+          },
+          {
+            "unique_name": "definition_activity_029THIORPTD5NUD8udBiyY5lmCnuAzFgtdm",
+            "name": "Condition Block",
+            "title": "How was the workflow started?",
+            "type": "logic.if_else",
+            "base_type": "activity",
+            "properties": {
+              "conditions": null,
+              "continue_on_failure": false,
+              "display_name": "How was the workflow started?",
+              "skip_execution": false
+            },
+            "object_type": "definition_activity",
+            "blocks": [
+              {
+                "unique_name": "definition_activity_025GXOLNRRWRHL32AFjRjVM7pXAE9GNrGiw",
+                "name": "Condition Branch",
+                "title": "Playbook task",
+                "type": "logic.condition_block",
+                "base_type": "activity",
+                "properties": {
+                  "condition": {
+                    "left_operand": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.started_by_type$",
+                    "operator": "eq",
+                    "right_operand": "playbook_task"
+                  },
+                  "continue_on_failure": false,
+                  "display_name": "Playbook task",
+                  "skip_execution": false
+                },
+                "object_type": "definition_activity",
+                "actions": [
+                  {
+                    "unique_name": "definition_activity_02XEQEIDN1AYZM4WtWqmFQH9nzHKcpSN28N",
+                    "name": "For Each",
+                    "title": "For each selected observable",
+                    "type": "logic.for_each",
+                    "base_type": "activity",
+                    "properties": {
+                      "continue_on_failure": false,
+                      "description": "Collects the observables the analyst selected in the playbook task.",
+                      "display_name": "For each selected observable",
+                      "skip_execution": false,
+                      "source_array": "$intent.intent incident_response.input.selected_observables$"
+                    },
+                    "object_type": "definition_activity",
+                    "actions": [
+                      {
+                        "unique_name": "definition_activity_02HD9IEZ9CQTX6L26ftxG8uTqrumWjeXpaw",
+                        "name": "Set Variables",
+                        "title": "Collect selected observable",
+                        "type": "core.set_multiple_variables",
+                        "base_type": "activity",
+                        "properties": {
+                          "continue_on_failure": false,
+                          "display_name": "Collect selected observable",
+                          "skip_execution": false,
+                          "variables_to_update": [
+                            {
+                              "variable_to_update": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_02RR1YB2U3J9FWTRpzkv886E2CtL8qO8tBG$",
+                              "variable_value_new": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_02RR1YB2U3J9FWTRpzkv886E2CtL8qO8tBG$\n$activity.definition_activity_02XEQEIDN1AYZM4WtWqmFQH9nzHKcpSN28N.input.source_array[@].value$"
+                            }
+                          ]
+                        },
+                        "object_type": "definition_activity"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "unique_name": "definition_activity_02Z2M2SPCJUDBMAVRPf9uJzhMEDc0iX3IjK",
+                "name": "Condition Branch",
+                "title": "Incident automation rule",
+                "type": "logic.condition_block",
+                "base_type": "activity",
+                "properties": {
+                  "condition": {
+                    "left_operand": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.started_by_type$",
+                    "operator": "eq",
+                    "right_operand": "incident_rule"
+                  },
+                  "continue_on_failure": false,
+                  "display_name": "Incident automation rule",
+                  "skip_execution": false
+                },
+                "object_type": "definition_activity",
+                "actions": [
+                  {
+                    "unique_name": "definition_activity_02F8FX0UQA5FWVDZjrpD0eCdWqZcyhBMqGi",
+                    "name": "For Each",
+                    "title": "For each incident observable",
+                    "type": "logic.for_each",
+                    "base_type": "activity",
+                    "properties": {
+                      "continue_on_failure": false,
+                      "description": "Collects the observables of the incident.",
+                      "display_name": "For each incident observable",
+                      "skip_execution": false,
+                      "source_array": "$rule.incident rule_event.output.targets.data$"
+                    },
+                    "object_type": "definition_activity",
+                    "actions": [
+                      {
+                        "unique_name": "definition_activity_02L04A4S0B21LK04dkxFx53AtEAV10fV7rd",
+                        "name": "Set Variables",
+                        "title": "Collect incident observable",
+                        "type": "core.set_multiple_variables",
+                        "base_type": "activity",
+                        "properties": {
+                          "continue_on_failure": false,
+                          "display_name": "Collect incident observable",
+                          "skip_execution": false,
+                          "variables_to_update": [
+                            {
+                              "variable_to_update": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_02RR1YB2U3J9FWTRpzkv886E2CtL8qO8tBG$",
+                              "variable_value_new": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_02RR1YB2U3J9FWTRpzkv886E2CtL8qO8tBG$\n$activity.definition_activity_02F8FX0UQA5FWVDZjrpD0eCdWqZcyhBMqGi.input.source_array[@].value$"
+                            }
+                          ]
+                        },
+                        "object_type": "definition_activity"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "unique_name": "definition_activity_028PSI6H384LO9T9bDGGDbyLKw3cGwHxn06",
+            "name": "Execute Python Script",
+            "title": "Classify observables",
+            "type": "python3.script",
+            "base_type": "activity",
+            "properties": {
+              "action_timeout": 180,
+              "continue_on_failure": false,
+              "display_name": "Classify observables",
+              "script": "import json, re, sys\ncandidates = sys.argv[1]\nallowed = json.loads(sys.argv[2])[\"types\"]\ninternal = [s.strip().lower().lstrip(\"*\").lstrip(\"@\").lstrip(\".\") for s in re.split(r\"[,;\\s]+\", sys.argv[3]) if s.strip()]\nlimit = max(1, min(int(float(sys.argv[4] or \"20\")), 50))\nsightings = str(sys.argv[5]).strip().lower() != \"false\"\nhexes = {64: \"sha256\", 40: \"sha1\", 32: \"md5\"}\n\ndef typed(value):\n    if re.match(r\"^<[^<>\\s`]+@[^<>\\s`]+>$\", value):\n        return [(\"email_messageid\", value)]\n    if re.match(r\"^[0-9a-fA-F]+$\", value) and len(value) in hexes:\n        return [(hexes[len(value)], value.lower())]\n    clean = re.sub(r\"^hxxp\", \"http\", value, flags=re.I).replace(\"[.]\", \".\").replace(\"(.)\", \".\").replace(\"[:]\", \":\")\n    if re.match(r\"^[a-z][a-z0-9+.-]*://[^\\s`]+$\", clean, re.I):\n        return [(\"url\", clean)]\n    parts = clean.split(\".\")\n    if len(parts) == 4 and all(p.isdigit() and len(p) <= 3 and int(p) <= 255 for p in parts):\n        return [(\"ip\", \".\".join(str(int(p)) for p in parts))]\n    if clean.count(\":\") >= 2 and re.match(r\"^[0-9a-fA-F:.]+$\", clean) and len(clean) <= 45:\n        return [(\"ipv6\", clean.lower())]\n    lowered = clean.lower()\n    if re.match(r\"^[a-z0-9._%+'-]+@[a-z0-9-]+(\\.[a-z0-9-]+)+$\", lowered):\n        return [(\"email\", lowered), (\"user\", lowered)]\n    if re.match(r\"^[a-z0-9_-]+(\\.[a-z0-9_-]+)+$\", lowered):\n        if any(lowered == s or lowered.endswith(\".\" + s) for s in internal):\n            return [(\"hostname\", clean)]\n        if \"domain\" in allowed or internal:\n            return [(\"domain\", lowered)]\n        return [(\"hostname\", clean)]\n    if re.match(r\"^[A-Za-z0-9_-]{1,63}$\", clean):\n        return [(\"hostname\", clean), (\"user\", clean)]  # a bare name is an endpoint or an account\n    return []\n\nvalues = []\nfor line in candidates.splitlines():\n    line = line.strip()\n    if \"://\" in line or re.search(r\"hxxp\", line, re.I):\n        values.extend(re.split(r\"[,;]\\s+|[,;]$\", line))  # a URL may contain a comma: split only before a space\n    else:\n        values.extend(re.split(r\"[,;]+\", line))\nrows, seen, ignored, over = [], set(), 0, 0\nfor raw in values:\n    value = raw.strip().strip(\"\\\"'\")\n    if not value:\n        continue\n    found = [] if re.search(r\"\\s\", value) or len(value) > 2000 else [(t, v) for t, v in typed(value) if t in allowed]\n    if not found:\n        ignored += 1\n        continue\n    for kind, text in found:\n        key = (kind, text.lower())\n        if key in seen:\n            continue\n        seen.add(key)\n        if len(rows) >= limit:\n            over += 1\n            continue\n        rows.append({\"type\": kind, \"value\": text})\ncounts = {}\nfor row in rows:\n    counts[row[\"type\"]] = counts.get(row[\"type\"], 0) + 1\nobservables_json = json.dumps(rows)\nobserve_body = observables_json if sightings else \"[]\"\nhas_observables = \"true\" if rows else \"false\"\nobservable_count = str(len(rows))\nignored_count = str(ignored)\nover_limit_count = str(over)\nintake = \", \".join(str(n) + \" \" + t for t, n in sorted(counts.items())) or \"none\"\n",
+              "script_arguments": [
+                "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_02RR1YB2U3J9FWTRpzkv886E2CtL8qO8tBG$",
+                "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_02PSGJLIXB74IH3YUtWVTzMQoN5ra1DefMH$",
+                "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02G6QNGXPI7NAANI4bMY5s5vutvZG1gNLyI$",
+                "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02FZDSOQDE6RFPZN7bwqGPjrMG9sGvCZeAE$",
+                "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02W3T98O69ZO5LSXFHi9wDykunsmh0d4q1A$"
+              ],
+              "script_queries": [
+                {
+                  "script_query": "observables_json",
+                  "script_query_name": "observables_json",
+                  "script_query_type": "string"
+                },
+                {
+                  "script_query": "observe_body",
+                  "script_query_name": "observe_body",
+                  "script_query_type": "string"
+                },
+                {
+                  "script_query": "has_observables",
+                  "script_query_name": "has_observables",
+                  "script_query_type": "string"
+                },
+                {
+                  "script_query": "observable_count",
+                  "script_query_name": "observable_count",
+                  "script_query_type": "string"
+                },
+                {
+                  "script_query": "ignored_count",
+                  "script_query_name": "ignored_count",
+                  "script_query_type": "string"
+                },
+                {
+                  "script_query": "over_limit_count",
+                  "script_query_name": "over_limit_count",
+                  "script_query_type": "string"
+                },
+                {
+                  "script_query": "intake",
+                  "script_query_name": "intake",
+                  "script_query_type": "string"
+                }
+              ],
+              "skip_execution": false
+            },
+            "object_type": "definition_activity"
+          },
+          {
+            "unique_name": "definition_activity_021590IBAIQUOLOVlSUZXHQR7XitRqGtx1F",
+            "name": "Condition Block",
+            "title": "Any observable to assess?",
+            "type": "logic.if_else",
+            "base_type": "activity",
+            "properties": {
+              "conditions": null,
+              "continue_on_failure": false,
+              "display_name": "Any observable to assess?",
+              "skip_execution": false
+            },
+            "object_type": "definition_activity",
+            "blocks": [
+              {
+                "unique_name": "definition_activity_02IO21VLNKVJKOEBgX4kg425YYWYhDbdFZL",
+                "name": "Condition Branch",
+                "title": "No observable",
+                "type": "logic.condition_block",
+                "base_type": "activity",
+                "properties": {
+                  "condition": {
+                    "left_operand": "$activity.definition_activity_028PSI6H384LO9T9bDGGDbyLKw3cGwHxn06.output.script_queries.has_observables$",
+                    "operator": "ne",
+                    "right_operand": "true"
+                  },
+                  "continue_on_failure": false,
+                  "display_name": "No observable",
+                  "skip_execution": false
+                },
+                "object_type": "definition_activity",
+                "actions": [
+                  {
+                    "unique_name": "definition_activity_02EV4MNBN928WUUItHd0xnbP9eFtk5WtERz",
+                    "name": "Set Variables",
+                    "title": "Report nothing to assess",
+                    "type": "core.set_multiple_variables",
+                    "base_type": "activity",
+                    "properties": {
+                      "continue_on_failure": false,
+                      "display_name": "Report nothing to assess",
+                      "skip_execution": false,
+                      "variables_to_update": [
+                        {
+                          "variable_to_update": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.workflow_results$",
+                          "variable_value_new": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.workflow_results$\n- Phishing: no observable of a type this workflow handles (email_messageid, url, domain, sha256, user, email, hostname, ip, ipv6). Nothing was changed."
+                        }
+                      ]
+                    },
+                    "object_type": "definition_activity"
+                  }
+                ]
+              },
+              {
+                "unique_name": "definition_activity_020HY0ZFQO7HFVTORdjlRfIGsm5EHrHZSY4",
+                "name": "Condition Branch",
+                "title": "Observables found",
+                "type": "logic.condition_block",
+                "base_type": "activity",
+                "properties": {
+                  "condition": {
+                    "left_operand": "$activity.definition_activity_028PSI6H384LO9T9bDGGDbyLKw3cGwHxn06.output.script_queries.has_observables$",
+                    "operator": "eq",
+                    "right_operand": "true"
+                  },
+                  "continue_on_failure": false,
+                  "display_name": "Observables found",
+                  "skip_execution": false
+                },
+                "object_type": "definition_activity",
+                "actions": [
+                  {
+                    "unique_name": "definition_activity_02XXO6NWHO6NFGHMnV7m61YSbq3zeM2kDSA",
+                    "name": "Set Variables",
+                    "title": "Report intake",
+                    "type": "core.set_multiple_variables",
+                    "base_type": "activity",
+                    "properties": {
+                      "continue_on_failure": false,
+                      "display_name": "Report intake",
+                      "skip_execution": false,
+                      "variables_to_update": [
+                        {
+                          "variable_to_update": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.workflow_results$",
+                          "variable_value_new": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.workflow_results$\n- Phishing: assessing $activity.definition_activity_028PSI6H384LO9T9bDGGDbyLKw3cGwHxn06.output.script_queries.intake$ ($activity.definition_activity_028PSI6H384LO9T9bDGGDbyLKw3cGwHxn06.output.script_queries.ignored_count$ values of other types ignored, $activity.definition_activity_028PSI6H384LO9T9bDGGDbyLKw3cGwHxn06.output.script_queries.over_limit_count$ over the limit)."
+                        }
+                      ]
+                    },
+                    "object_type": "definition_activity"
+                  },
+                  {
+                    "unique_name": "definition_activity_02URIGIY69G9N4MYmgJKxqTWjHNQUV963fm",
+                    "name": "HTTP Request",
+                    "title": "Get verdicts",
+                    "type": "web-service.http_request",
+                    "base_type": "activity",
+                    "properties": {
+                      "accept": "application/json",
+                      "action_timeout": 180,
+                      "allow_auto_redirect": true,
+                      "allow_headers_redirect": false,
+                      "body": "$activity.definition_activity_028PSI6H384LO9T9bDGGDbyLKw3cGwHxn06.output.script_queries.observables_json$",
+                      "content_type": "application/json",
+                      "continue_on_error_status_code": true,
+                      "continue_on_failure": false,
+                      "display_name": "Get verdicts",
+                      "method": "POST",
+                      "relative_url": "/iroh-enrich/deliberate/observables",
+                      "runtime_user": {
+                        "target_default": true
+                      },
+                      "skip_execution": false,
+                      "target": {
+                        "override_workflow_target": true,
+                        "target_id": "$module_target;Cisco XDR;securex:ao:iroh_api;platform-apis$"
+                      }
+                    },
+                    "object_type": "definition_activity"
+                  },
+                  {
+                    "unique_name": "definition_activity_02I0OTY9F5LGMPB5TS2hsCduv1yVqW6j4TT",
+                    "name": "HTTP Request",
+                    "title": "Get sightings",
+                    "type": "web-service.http_request",
+                    "base_type": "activity",
+                    "properties": {
+                      "accept": "application/json",
+                      "action_timeout": 180,
+                      "allow_auto_redirect": true,
+                      "allow_headers_redirect": false,
+                      "body": "$activity.definition_activity_028PSI6H384LO9T9bDGGDbyLKw3cGwHxn06.output.script_queries.observe_body$",
+                      "content_type": "application/json",
+                      "continue_on_error_status_code": true,
+                      "continue_on_failure": false,
+                      "display_name": "Get sightings",
+                      "method": "POST",
+                      "relative_url": "/iroh-enrich/observe/observables",
+                      "runtime_user": {
+                        "target_default": true
+                      },
+                      "skip_execution": false,
+                      "target": {
+                        "override_workflow_target": true,
+                        "target_id": "$module_target;Cisco XDR;securex:ao:iroh_api;platform-apis$"
+                      }
+                    },
+                    "object_type": "definition_activity"
+                  },
+                  {
+                    "unique_name": "definition_activity_02KU1JADKPU9UMF4IPVYJAECexMmIKv7rFo",
+                    "name": "HTTP Request",
+                    "title": "List response actions",
+                    "type": "web-service.http_request",
+                    "base_type": "activity",
+                    "properties": {
+                      "accept": "application/json",
+                      "action_timeout": 180,
+                      "allow_auto_redirect": true,
+                      "allow_headers_redirect": false,
+                      "body": "$activity.definition_activity_028PSI6H384LO9T9bDGGDbyLKw3cGwHxn06.output.script_queries.observables_json$",
+                      "content_type": "application/json",
+                      "continue_on_error_status_code": true,
+                      "continue_on_failure": false,
+                      "display_name": "List response actions",
+                      "method": "POST",
+                      "relative_url": "/iroh-response/respond/observables",
+                      "runtime_user": {
+                        "target_default": true
+                      },
+                      "skip_execution": false,
+                      "target": {
+                        "override_workflow_target": true,
+                        "target_id": "$module_target;Cisco XDR;securex:ao:iroh_api;platform-apis$"
+                      }
+                    },
+                    "object_type": "definition_activity"
+                  },
+                  {
+                    "unique_name": "definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd",
+                    "name": "Execute Python Script",
+                    "title": "Assess and write decision card",
+                    "type": "python3.script",
+                    "base_type": "activity",
+                    "properties": {
+                      "action_timeout": 180,
+                      "continue_on_failure": false,
+                      "display_name": "Assess and write decision card",
+                      "script": "import json, re, sys\nobservables = json.loads(sys.argv[1] or \"[]\")\nstarted_by = str(sys.argv[2]).strip()\ndeliberate_status, deliberate_raw = str(sys.argv[3]).strip(), sys.argv[4]\nobserve_status, observe_raw = str(sys.argv[5]).strip(), sys.argv[6]\nrespond_status, respond_raw = str(sys.argv[7]).strip(), sys.argv[8]\nspec = json.loads(sys.argv[9])\ndry_run = str(sys.argv[10]).strip().lower() != \"false\"\ndef listed(raw):\n    return [p.strip() for p in re.split(r\"[,;\\s]+\", raw or \"\") if p.strip()]\nprotected = listed(sys.argv[11])\nnever_act = listed(sys.argv[12])\nexcluded_kinds = set(k.lower() for k in re.split(r\"[,;\\n]+\", sys.argv[13] or \"\"))\nexcluded_kinds = set(re.sub(r\"\\s+\", \"_\", k.strip()) for k in excluded_kinds if k.strip())\nelevated_above = int(float(sys.argv[14] or \"5\"))\ntrust_selection = str(sys.argv[15]).strip().lower() != \"false\"\nblock_unrated = str(sys.argv[16]).strip().lower() == \"true\"\ninternal = [s.lower().lstrip(\"*\").lstrip(\"@\").lstrip(\".\") for s in listed(sys.argv[17])]\ncollect_sightings = str(sys.argv[18]).strip().lower() != \"false\"\n# One pattern per kind the attack type uses, in the fixed order of the kinds.\nkinds_in_order = (\"isolate_endpoint\", \"block_indicator\", \"block_hash\", \"revoke_sessions\", \"disable_user\", \"quarantine_email\")\nused_kinds = [k for k in kinds_in_order if any(r.get(\"kind\") == k for r in spec.get(\"rules\") or [])]\npatterns = dict(zip(used_kinds, sys.argv[19:19 + len(used_kinds)]))\n# An action whose title or ID says it undoes a containment is never chosen, whatever the pattern matches.\nreversal = (r\"\\b(un|de)-?(isolat|contain|block|quarantin|lock|suspend)|cancel|stop|undo|revert|restor|releas|remov\"\n            r\"|lift|clear|exit|deliver|allow|safe.?list|white.?list|re-?activat|\\b(re-?)?enabl|delet\"\n            r\"|end (of )?(isolation|containment)|out of|expir|exclud|exempt|bypass|paus|suppress|ignor\")\nundo = {\n    \"isolate_endpoint\": reversal + r\"|disabl\",\n    \"block_indicator\": reversal + r\"|disabl\",\n    \"block_hash\": reversal + r\"|disabl\",\n    \"revoke_sessions\": reversal,\n    \"disable_user\": reversal + r\"|mfa|multi.?factor|two.?factor|2fa|disabl\\w* (isolation|contain|block|rule|polic)\",\n    \"quarantine_email\": reversal + r\"|inbox|disabl\",\n}\nlabels = {\"isolate_endpoint\": \"Isolate endpoint\", \"block_indicator\": \"Block\", \"block_hash\": \"Block file hash\",\n          \"revoke_sessions\": \"Revoke sessions of\", \"disable_user\": \"Disable user\", \"quarantine_email\": \"Quarantine message\"}\nindicator_types = (\"ip\", \"ipv6\", \"domain\", \"url\", \"sha256\", \"sha1\", \"md5\")\nrisk_of = {2: 90, 3: 60, 1: 5, 4: 5, 5: 0}\nname_of = {1: \"clean\", 2: \"malicious\", 3: \"suspicious\", 4: \"common\", 5: \"unknown\"}\n\ndef plain(text, limit=80):\n    \"\"\"Module-supplied text as one short line of printable characters, with no Markdown or HTML.\"\"\"\n    out = []\n    for char in str(text)[:4 * limit]:\n        out.append(\"'\" if char == '\"' else char if 32 <= ord(char) < 127 and char not in \"*`[]<>|#\\\\~_{}\" else \" \")\n    line = \" \".join(\"\".join(out).split())\n    return (line[:limit] + \"...\") if len(line) > limit else line\n\ndef show(value):\n    \"\"\"An observable inside backticks on the card.\"\"\"\n    line = \"\".join(c if 32 <= ord(c) < 127 and c != \"`\" else \"?\" for c in str(value))\n    return \"`\" + ((line[:200] + \"...\") if len(line) > 200 else line) + \"`\"\n\ndef rows_of(status, raw):\n    \"\"\"Top-level list of a platform response, or None when the source failed.\"\"\"\n    if status != \"200\":\n        return None\n    try:\n        body = json.loads(raw or \"null\")\n    except Exception:\n        return None\n    if isinstance(body, dict):\n        body = body.get(\"data\")\n    return [r for r in body if isinstance(r, dict)] if isinstance(body, list) else []\n\ndef part(node, name, kind):\n    \"\"\"``node[name]`` when it has the expected type, else an empty value of that type.\"\"\"\n    value = node.get(name) if isinstance(node, dict) else None\n    return value if isinstance(value, kind) else kind()\n\ndef key_of(kind, value):\n    return str(kind) + \"|\" + str(value).lower()\n\nindex = {}\nfor obs in observables:\n    index[key_of(obs[\"type\"], obs[\"value\"])] = obs\nonly = list(index)[0] if len(index) == 1 else None\n\ndef key_for(named):\n    \"\"\"Key of the observable a response entry names. Without a name, the only observable asked for.\"\"\"\n    if isinstance(named, dict) and (named.get(\"type\") is not None or named.get(\"value\") is not None):\n        key = key_of(named.get(\"type\"), named.get(\"value\"))\n        return key if key in index else None\n    return only\n\ndef v4(text):\n    \"\"\"An IPv4 address as a number, or None.\"\"\"\n    if not re.fullmatch(r\"\\d{1,3}(\\.\\d{1,3}){3}\", text):\n        return None\n    parts = [int(p) for p in text.split(\".\")]\n    return None if max(parts) > 255 else (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]\n\ndef v6(text):\n    \"\"\"An IPv6 address as a number, or None.\"\"\"\n    text = text.split(\"%\")[0].lower()\n    if len(text) > 45 or text.count(\"::\") > 1 or \":\" not in text or not re.fullmatch(r\"[0-9a-f:.]+\", text):\n        return None\n    def groups(piece):\n        out = []\n        fields = piece.split(\":\") if piece else []\n        for position, field in enumerate(fields):\n            if \".\" in field:\n                number = v4(field)\n                if number is None or position != len(fields) - 1:\n                    return None\n                out += [number >> 16, number & 0xffff]\n            elif re.fullmatch(r\"[0-9a-f]{1,4}\", field):\n                out.append(int(field, 16))\n            else:\n                return None\n        return out\n    if \"::\" in text:\n        head, tail = text.split(\"::\")\n        left, right = groups(head), groups(tail)\n        if left is None or right is None or len(left) + len(right) > 7:\n            return None\n        fields = left + [0] * (8 - len(left) - len(right)) + right\n    else:\n        fields = groups(text)\n        if fields is None or len(fields) != 8:\n            return None\n    number = 0\n    for field in fields:\n        number = (number << 16) | field\n    return number\n\ndef host_of(obs):\n    \"\"\"Lower-case host of a URL (no user, port or trailing dot); the value itself for other types.\"\"\"\n    value = obs[\"value\"].lower()\n    if obs[\"type\"] != \"url\":\n        return value.rstrip(\".\")\n    rest = re.split(r\"[/?#\\\\]\", re.sub(r\"^[a-z][a-z0-9+.-]*://\", \"\", value), maxsplit=1)[0].rsplit(\"@\", 1)[-1]\n    if rest.startswith(\"[\"):\n        return rest[1:].split(\"]\")[0]\n    return rest.split(\":\")[0].rstrip(\".\")\n\ndef private_v4(number):\n    a, b = number >> 24, (number >> 16) & 255\n    return (a in (0, 10, 127) or a >= 224 or (a == 172 and 16 <= b <= 31) or (a == 192 and b == 168)\n            or (a == 169 and b == 254) or (a == 100 and 64 <= b <= 127))\n\ndef is_public(obs):\n    \"\"\"False for an address (or a URL on an address) that is private, loopback, link-local, shared or multicast.\"\"\"\n    host = host_of(obs)\n    number = v4(host)\n    if number is not None:\n        return not private_v4(number)\n    number = v6(host)\n    if number is None:\n        return obs[\"type\"] not in (\"ip\", \"ipv6\")  # an address that does not parse is not blocked\n    top = number >> 112\n    if number >> 32 == 0xffff:  # IPv4-mapped\n        return not private_v4(number & 0xffffffff)\n    return not (number in (0, 1) or top & 0xfe00 == 0xfc00 or top & 0xffc0 in (0xfe80, 0xfec0) or top & 0xff00 == 0xff00)\n\ndef in_network(host, entry):\n    \"\"\"True when ``host`` is the address ``entry`` or lies in the network ``entry`` (a.b.c.d/n).\"\"\"\n    base, _, bits = entry.partition(\"/\")\n    for parse, width in ((v4, 32), (v6, 128)):\n        address, network = parse(host), parse(base)\n        if address is not None and network is not None:\n            size = int(bits) if bits.isdigit() and int(bits) <= width else width\n            return address >> (width - size) == network >> (width - size)\n    return False\n\ndef wildcard(text, pattern):\n    \"\"\"Match where * stands for any text and ? for one character. Linear in len(text) * len(pattern).\"\"\"\n    text, pattern = text[:256], pattern[:100]\n    t, p, star, mark = 0, 0, -1, 0\n    while t < len(text):\n        if p < len(pattern) and pattern[p] in (\"?\", text[t]):\n            t, p = t + 1, p + 1\n        elif p < len(pattern) and pattern[p] == \"*\":\n            star, mark, p = p, t, p + 1\n        elif star >= 0:\n            mark += 1\n            t, p = mark, star + 1\n        else:\n            return False\n    return pattern[p:].strip(\"*\") == \"\"\n\ndef matches(obs, entries):\n    \"\"\"The entry of a Protected Assets or Never Act On list that covers ``obs``, or an empty string.\"\"\"\n    value, host = obs[\"value\"].lower(), host_of(obs)\n    for entry in entries:\n        pattern = entry.lower().rstrip(\".\")\n        if wildcard(value, pattern) or wildcard(host, pattern) or in_network(host, pattern):\n            return entry\n        if obs[\"type\"] == \"hostname\" and (wildcard(value.split(\".\")[0], pattern) or value == pattern.split(\".\")[0]):\n            return entry  # DC-01 covers dc-01.corp.example.com, and the other way round\n        if obs[\"type\"] in (\"domain\", \"url\") and host.endswith(\".\" + pattern.lstrip(\"*.\")):\n            return entry\n        if obs[\"type\"] in (\"email\", \"user\") and pattern.startswith(\"@\") and value.endswith(pattern):\n            return entry\n    return \"\"\n\ndef is_own_account(obs):\n    \"\"\"True when no internal suffix is configured, or the address belongs to one of them.\"\"\"\n    if \"@\" not in obs[\"value\"] or not internal:\n        return True\n    domain = obs[\"value\"].lower().rsplit(\"@\", 1)[1]\n    return any(domain == s or domain.endswith(\".\" + s) for s in internal)\n\ndegraded = []\nverdicts = {}\ndeliberate = rows_of(deliberate_status, deliberate_raw)\nif deliberate is None:\n    degraded.append(\"verdicts (HTTP \" + plain(deliberate_status, 12) + \")\")\nfor module in deliberate or []:\n    name = plain(module.get(\"module\") or module.get(\"module-name\") or \"unknown module\", 40)\n    for doc in part(part(part(module, \"data\", dict), \"verdicts\", dict), \"docs\", list):\n        if not isinstance(doc, dict):\n            continue\n        key = key_for(doc.get(\"observable\"))\n        disposition = doc.get(\"disposition\")\n        if key and isinstance(disposition, int) and not isinstance(disposition, bool):\n            verdicts.setdefault(key, []).append((name, disposition))\n\nsightings, sighting_total = {}, {}\nobserve = rows_of(observe_status, observe_raw) if collect_sightings else []\nif observe is None:\n    degraded.append(\"sightings (HTTP \" + plain(observe_status, 12) + \")\")\nfor module in observe or []:\n    name = plain(module.get(\"module\") or module.get(\"module-name\") or \"unknown module\", 40)\n    seen = part(part(module, \"data\", dict), \"sightings\", dict)\n    count = seen.get(\"count\")\n    if isinstance(count, int) and not isinstance(count, bool) and 0 < count < 10 ** 9:\n        sighting_total[name] = sighting_total.get(name, 0) + count\n    for doc in part(seen, \"docs\", list):\n        for rated in part(doc, \"observables\", list):\n            if isinstance(rated, dict) and key_of(rated.get(\"type\"), rated.get(\"value\")) in index:\n                per = sightings.setdefault(key_of(rated.get(\"type\"), rated.get(\"value\")), {})\n                per[name] = per.get(name, 0) + 1\n\noffers = {}\nrespond = rows_of(respond_status, respond_raw)\nif respond is None:\n    degraded.append(\"response actions (HTTP \" + plain(respond_status, 12) + \")\")\nfor entry in respond or []:\n    action_id = entry.get(\"id\")\n    instance = entry.get(\"module_instance_id\") or entry.get(\"module-instance-id\")\n    if not isinstance(action_id, str) or not isinstance(instance, str):\n        continue\n    if not action_id.strip(\". \") or not instance.strip(\". \") or len(action_id) > 200 or len(instance) > 200:\n        continue  # an empty or dots-only path segment is not an action\n    params = part(entry, \"query-params\", dict)\n    named = {\"type\": params.get(\"observable_type\"), \"value\": params.get(\"observable_value\")}\n    key = key_for(named)\n    if not key:\n        continue\n    extra = {}\n    for name, value in params.items():\n        reserved = re.sub(r\"[^a-z]\", \"\", str(name).lower()) in (\"observabletype\", \"observablevalue\")\n        if not reserved and re.fullmatch(r\"[A-Za-z0-9_.-]{1,64}\", str(name)) and isinstance(value, (str, int)) \\\n                and not isinstance(value, bool) and len(str(value)) <= 300:\n            extra[str(name)] = str(value)\n    raw_title = entry.get(\"title\") if isinstance(entry.get(\"title\"), str) else \"\"\n    offers.setdefault(key, []).append({\n        \"id\": action_id, \"instance\": instance, \"match\": raw_title.strip()[:400] or action_id,\n        \"title\": plain(raw_title) or plain(action_id), \"shown_id\": plain(action_id, 60),\n        \"module\": plain(entry.get(\"module\") or entry.get(\"module-name\") or entry.get(\"module_name\") or \"module\", 40),\n        \"params\": extra,\n    })\n\ndef risk_for(key):\n    return max([risk_of.get(d, 0) for _, d in verdicts.get(key, [])] or [0])\n\ndef verdict_text(key):\n    found = verdicts.get(key, [])\n    if not found:\n        return \"no verdict\"\n    return \", \".join(sorted(set(m + \": \" + name_of.get(d, \"unknown\") for m, d in found))[:8])\n\nincident_risk = max([risk_for(k) for k, o in index.items() if o[\"type\"] in indicator_types] or [0])\nselected = started_by != \"incident_rule\"  # a person chose these observables\n\ndef encode(text):\n    out = []\n    for byte in str(text).encode(\"utf-8\", \"replace\"):\n        char = chr(byte)\n        out.append(char if byte < 128 and (char.isalnum() or char in \"-._~\") else \"%%%02X\" % byte)\n    return \"\".join(out)\n\nproposals, considered, missing, used = [], [], [], set()\nfor rule in spec.get(\"rules\") or []:\n    kind = rule[\"kind\"]\n    for key, obs in index.items():\n        if obs[\"type\"] not in rule[\"types\"]:\n            continue\n        what = labels[kind] + \" \" + show(obs[\"value\"])\n        if obs[\"type\"] in (\"ip\", \"ipv6\", \"url\") and not is_public(obs):\n            considered.append(what + \": not proposed, it is not a public address.\")\n            continue\n        if rule[\"basis\"] == \"asset\" and obs[\"type\"] in (\"email\", \"user\") and not is_own_account(obs):\n            considered.append(what + \": not proposed, the address is outside the Internal Domain Suffixes, so it is not one of your accounts.\")\n            continue\n        if kind in excluded_kinds:\n            considered.append(what + \": not proposed because *\" + kind + \"* is on the Excluded Actions input. Design rule: \" + rule[\"label\"] + \".\")\n            continue\n        hit = matches(obs, never_act)\n        if hit:\n            considered.append(what + \": not proposed, it matches the Never Act On entry \" + show(hit) + \".\")\n            continue\n        if rule[\"basis\"] == \"indicator\":\n            score = risk_for(key)\n            if score >= rule[\"min_risk\"]:\n                reason = \"rated \" + verdict_text(key) + \" (risk \" + str(score) + \")\"\n            elif block_unrated and selected and not verdicts.get(key):\n                reason = \"not rated by any module; chosen by the person who started the workflow, and Block Unrated Indicators is true\"\n            else:\n                considered.append(what + \": not proposed, rated \" + verdict_text(key) + \" (risk \" + str(score) + \", needs \" + str(rule[\"min_risk\"]) + \").\")\n                continue\n        elif incident_risk >= rule[\"min_risk\"]:\n            reason = \"an indicator of this incident is rated at risk \" + str(incident_risk) + \" (needs \" + str(rule[\"min_risk\"]) + \")\"\n        elif selected and trust_selection:\n            reason = \"chosen by the person who started the workflow; no indicator of this incident reaches risk \" + str(rule[\"min_risk\"])\n        else:\n            considered.append(what + \": not proposed, no indicator of this incident reaches risk \" + str(rule[\"min_risk\"]) + \" (highest \" + str(incident_risk) + \"). Start the workflow from a playbook task with it selected to propose it.\")\n            continue\n        include = patterns.get(kind) or \".\"\n        chosen, extra = {}, 0\n        for offer in offers.get(key, []):\n            try:\n                wanted = re.search(include, offer[\"match\"], re.I) and not re.search(undo[kind], offer[\"match\"], re.I)\n            except re.error:\n                raise SystemExit(\"The action pattern for \" + kind + \" is not a valid regular expression: \" + include)\n            if not wanted:\n                continue\n            if offer[\"instance\"] in chosen:\n                extra += 1\n            else:\n                chosen[offer[\"instance\"]] = offer\n        if not chosen:\n            others = sorted(set(o[\"title\"] + \" (\" + o[\"module\"] + \")\" for o in offers.get(key, [])))\n            missing.append((kind, key, what + \": XDR offers no matching response action (\" + reason + \"). \"\n                            + (\"Offered for it: \" + \"; \".join(others[:6]) + \".\" if others else \"No module offers an action for it.\")\n                            + \" Do it in the product console if it is needed.\"))\n            continue\n        for offer in chosen.values():\n            url = (\"/iroh-response/respond/trigger/\" + encode(offer[\"instance\"]) + \"/\" + encode(offer[\"id\"])\n                   + \"?observable_type=\" + encode(obs[\"type\"]) + \"&observable_value=\" + encode(obs[\"value\"]))\n            for name in sorted(offer[\"params\"]):\n                url += \"&\" + encode(name) + \"=\" + encode(offer[\"params\"][name])\n            if url in used:\n                continue\n            used.add(url)\n            proposals.append({\n                \"url\": url, \"title\": offer[\"title\"], \"target\": obs[\"value\"], \"kind\": kind, \"module\": offer[\"module\"],\n                \"key\": \"|\".join((offer[\"id\"], offer[\"instance\"], obs[\"type\"], obs[\"value\"].lower())),\n                \"type\": obs[\"type\"], \"reason\": reason, \"rule\": rule[\"label\"], \"protected\": matches(obs, protected),\n                \"extra\": str(extra), \"shown_id\": offer[\"shown_id\"],\n            })\n\norder = dict((k, i) for i, k in enumerate(labels))\nproposals.sort(key=lambda p: (order[p[\"kind\"]], p[\"target\"], p[\"module\"]))\ncovered = set((p[\"kind\"], p[\"target\"].lower()) for p in proposals)\nforms = {}\nfor key, obs in index.items():\n    forms.setdefault(obs[\"value\"].lower(), []).append(key)\nmanual = []\nfor kind, key, text in missing:\n    value = index[key][\"value\"].lower()\n    # A value asked for in two forms (an address as email and user, a bare name as endpoint and account)\n    # is one target: the form no module knows is not reported when another form of it is known.\n    other_form_known = not offers.get(key) and any(offers.get(k) for k in forms[value] if k != key)\n    if (kind, value) not in covered and not other_form_known and text not in manual:\n        manual.append(text)\nconsidered = [c for i, c in enumerate(considered) if c not in considered[:i]]\nreasons = []\nguarded = sorted(set(show(p[\"target\"]) + \" (entry \" + show(p[\"protected\"]) + \")\" for p in proposals if p[\"protected\"]))\nif guarded:\n    reasons.append(\"protected asset: \" + \", \".join(guarded))\nif len(proposals) > elevated_above:\n    reasons.append(str(len(proposals)) + \" actions is above the limit of \" + str(elevated_above) + \" for standard approval\")\nelevated = bool(reasons) and bool(proposals)\ndef digest(text):\n    \"\"\"Short identifier of the package: SHA-256 when the module is present, FNV-1a otherwise.\"\"\"\n    try:\n        import hashlib\n        return hashlib.sha256(text.encode(\"utf-8\")).hexdigest()[:12]\n    except ImportError:\n        value = 0xcbf29ce484222325\n        for byte in text.encode(\"utf-8\"):\n            value = ((value ^ byte) * 0x100000001b3) % (1 << 64)\n        return \"%012x\" % (value % (1 << 48))\n\npackage_digest = digest(json.dumps(sorted(p[\"url\"] for p in proposals)))\nname = spec.get(\"name\", \"Incident\")\n\ndef evidence_lines():\n    lines, grouped = [], {}\n    for key, obs in index.items():\n        grouped.setdefault(obs[\"value\"].lower(), []).append((key, obs))\n    for members in grouped.values():\n        rated = sorted(set(m + \": \" + name_of.get(d, \"unknown\") for key, _ in members for m, d in verdicts.get(key, [])))\n        line = \"- \" + show(members[0][1][\"value\"]) + \" (\" + \", \".join(o[\"type\"] for _, o in members) + \"): \" + (\", \".join(rated[:8]) or \"no verdict\")\n        seen = {}\n        for key, _ in members:\n            for module, number in sightings.get(key, {}).items():\n                seen[module] = seen.get(module, 0) + number\n        if seen:\n            line += \"; sightings \" + \", \".join(m + \" \" + str(n) for m, n in sorted(seen.items())[:8])\n        lines.append(line)\n    if sighting_total:\n        lines.append(\"- Sightings for all observables by module: \" + \", \".join(m + \" \" + str(n) for m, n in sorted(sighting_total.items())[:12]) + \".\")\n    return lines\n\nfacts = (name + \": \" + str(len(index)) + \" observables assessed, highest indicator risk \" + str(incident_risk))\nif proposals:\n    lines = []\n    if elevated:\n        lines += [\"**ELEVATED APPROVAL REQUIRED: \" + \"; \".join(reasons) + \".**\", \"\"]\n    lines += [\"**Mode: \" + (\"DRY RUN. Approving changes nothing; the workflow only reports what it would do.\" if dry_run else \"LIVE. Approving runs the actions below.\") + \"**\", \"\",\n              \"**\" + name + \": \" + str(len(proposals)) + \" proposed actions. Package `\" + package_digest + \"`.**\", \"\"]\n    for number, p in enumerate(proposals, 1):\n        lines.append(str(number) + \". \" + labels[p[\"kind\"]] + \" \" + show(p[\"target\"]) + \" with the XDR response action \\\"\" + p[\"title\"] + \"\\\" of \" + p[\"module\"] + \" (action ID \" + p[\"shown_id\"] + \"). Why: \" + p[\"reason\"] + \". Rule: \" + p[\"rule\"] + \".\"\n                     + (\" Other matching actions of this module, not used: \" + p[\"extra\"] + \".\" if p[\"extra\"] != \"0\" else \"\"))\n    lines += [\"\", \"Approve runs the \" + str(len(proposals)) + \" numbered actions above and nothing else. The action names in quotes come from the products and are shown as plain text. To run fewer, answer *More investigation* and start the workflow again with fewer observables or with kinds on the Excluded Actions input.\"]\n    if manual:\n        lines += [\"\", \"**Needed but not available as an XDR response action (\" + str(len(manual)) + \"):**\"] + [\"- \" + m for m in manual[:20]]\n    if spec.get(\"manual\"):\n        lines += [\"\", \"**Manual steps this workflow never runs:**\"] + [\"- \" + m for m in spec[\"manual\"]]\n    if considered:\n        lines += [\"\", \"**Considered, not proposed (\" + str(len(considered)) + \"):**\"] + [\"- \" + c for c in considered[:20]]\n    if spec.get(\"checks\"):\n        lines += [\"\", \"**Check before you approve:**\"] + [\"- \" + c for c in spec[\"checks\"]]\n    lines += [\"\", \"**Evidence from Cisco XDR:**\"] + evidence_lines()\n    if not collect_sightings:\n        lines += [\"- Sightings were not collected (Collect Sightings is false).\"]\n    if degraded:\n        lines += [\"\", \"**Degraded source:** \" + \", \".join(degraded) + \" did not answer. The proposal uses what was collected.\"]\n    card = \"\\n\".join(lines)\n    summary = facts + \". Proposed: \" + str(len(proposals)) + \" actions (package \" + package_digest + \")\" + (\", elevated approval\" if elevated else \"\") + \".\"\nelse:\n    card = \"\"\n    why = \"; \".join(degraded) + \" did not answer\" if degraded and not index else \"nothing met the rules\"\n    summary = facts + \". No action proposed: \" + why + \".\"\n    if manual:\n        summary += \" Needed but not offered by XDR: \" + \" \".join(manual[:5])\n    if considered:\n        summary += \" Considered: \" + \" \".join(considered[:5])\n    if degraded:\n        summary += \" Degraded source: \" + \", \".join(degraded) + \".\"\nhas_proposal = \"true\" if proposals else \"false\"\nelevated = \"true\" if elevated else \"false\"\nactions_json = json.dumps([dict((k, p[k]) for k in (\"url\", \"title\", \"target\", \"kind\", \"module\", \"key\")) for p in proposals])\naction_count = str(len(proposals))\nacted, verify = set(), []\nfor p in proposals:\n    if (p[\"type\"], p[\"target\"]) not in acted:\n        acted.add((p[\"type\"], p[\"target\"]))\n        verify.append({\"type\": p[\"type\"], \"value\": p[\"target\"]})\nverify_body = json.dumps(verify)\nrisk = str(incident_risk)\n",
+                      "script_arguments": [
+                        "$activity.definition_activity_028PSI6H384LO9T9bDGGDbyLKw3cGwHxn06.output.script_queries.observables_json$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.started_by_type$",
+                        "$activity.definition_activity_02URIGIY69G9N4MYmgJKxqTWjHNQUV963fm.output.status_code$",
+                        "$activity.definition_activity_02URIGIY69G9N4MYmgJKxqTWjHNQUV963fm.output.response_body$",
+                        "$activity.definition_activity_02I0OTY9F5LGMPB5TS2hsCduv1yVqW6j4TT.output.status_code$",
+                        "$activity.definition_activity_02I0OTY9F5LGMPB5TS2hsCduv1yVqW6j4TT.output.response_body$",
+                        "$activity.definition_activity_02KU1JADKPU9UMF4IPVYJAECexMmIKv7rFo.output.status_code$",
+                        "$activity.definition_activity_02KU1JADKPU9UMF4IPVYJAECexMmIKv7rFo.output.response_body$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_02PSGJLIXB74IH3YUtWVTzMQoN5ra1DefMH$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02VP5LJFB47KJU1TRvGN4kEbYfwmBEv6xbM$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_026BRBZK560AG4EIItmGATIDqnWnSxH6jb5$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_0226PAB5WR4CC80I4Fy7K5x1mn2JS3WTGwp$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02ZMM8PNNS2OX9290cEThkQRK9bhAfcdakO$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02XG26JZ4YUIQN7VBtsJIcayP9rr4pK6E4J$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_0245IEGADJSAZ4NSQ9wnQiivluyUOk3s5uT$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_023C84Y6FIF5OKUIC56kQXwbBAjB2WMyr0I$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02G6QNGXPI7NAANI4bMY5s5vutvZG1gNLyI$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02W3T98O69ZO5LSXFHi9wDykunsmh0d4q1A$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02D8ZLJVW01SD9T5fAM7kRFsDuovNyd8ZqB$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02ZYO7R4RDHOMWWHMDZtaS83umISn7Jb0Ax$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02ZCK7JHJZIFXFRAzrdtJvER5XFyKA6v766$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02B36DWMSWJ8D2TMpF8CbCNKwVYtlu55htR$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02U8A8DWZGEU6YIHaT1FRoGTphT4PPvyODB$",
+                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02WOS38QSGN77F8BXErNQNR8AMLEDitELE0$"
+                      ],
+                      "script_queries": [
+                        {
+                          "script_query": "has_proposal",
+                          "script_query_name": "has_proposal",
+                          "script_query_type": "string"
+                        },
+                        {
+                          "script_query": "elevated",
+                          "script_query_name": "elevated",
+                          "script_query_type": "string"
+                        },
+                        {
+                          "script_query": "card",
+                          "script_query_name": "card",
+                          "script_query_type": "string"
+                        },
+                        {
+                          "script_query": "summary",
+                          "script_query_name": "summary",
+                          "script_query_type": "string"
+                        },
+                        {
+                          "script_query": "actions_json",
+                          "script_query_name": "actions_json",
+                          "script_query_type": "string"
+                        },
+                        {
+                          "script_query": "action_count",
+                          "script_query_name": "action_count",
+                          "script_query_type": "string"
+                        },
+                        {
+                          "script_query": "verify_body",
+                          "script_query_name": "verify_body",
+                          "script_query_type": "string"
+                        },
+                        {
+                          "script_query": "package_digest",
+                          "script_query_name": "package_digest",
+                          "script_query_type": "string"
+                        },
+                        {
+                          "script_query": "risk",
+                          "script_query_name": "risk",
+                          "script_query_type": "string"
+                        }
+                      ],
+                      "skip_execution": false
+                    },
+                    "object_type": "definition_activity"
+                  },
+                  {
+                    "unique_name": "definition_activity_02ACDAJ4R98DUZXVa1R5aaYGRKRRIk3Lia4",
+                    "name": "Condition Block",
+                    "title": "Anything to propose?",
+                    "type": "logic.if_else",
+                    "base_type": "activity",
+                    "properties": {
+                      "conditions": null,
+                      "continue_on_failure": false,
+                      "display_name": "Anything to propose?",
+                      "skip_execution": false
+                    },
+                    "object_type": "definition_activity",
+                    "blocks": [
+                      {
+                        "unique_name": "definition_activity_02VF3Y0VNBLXVKSYvedYkHiPpFH7bN7yuws",
+                        "name": "Condition Branch",
+                        "title": "No proposal",
+                        "type": "logic.condition_block",
+                        "base_type": "activity",
+                        "properties": {
+                          "condition": {
+                            "left_operand": "$activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.has_proposal$",
+                            "operator": "ne",
+                            "right_operand": "true"
+                          },
+                          "continue_on_failure": false,
+                          "display_name": "No proposal",
+                          "skip_execution": false
+                        },
+                        "object_type": "definition_activity",
+                        "actions": [
+                          {
+                            "unique_name": "definition_activity_024CPLNIOJ2ZZ7NFxUTCBoyi5gTaXa8CT8p",
+                            "name": "Set Variables",
+                            "title": "Report assessment without proposal",
+                            "type": "core.set_multiple_variables",
+                            "base_type": "activity",
+                            "properties": {
+                              "continue_on_failure": false,
+                              "display_name": "Report assessment without proposal",
+                              "skip_execution": false,
+                              "variables_to_update": [
+                                {
+                                  "variable_to_update": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.workflow_results$",
+                                  "variable_value_new": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.workflow_results$\n- $activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.summary$"
+                                }
+                              ]
+                            },
+                            "object_type": "definition_activity"
+                          }
+                        ]
+                      },
+                      {
+                        "unique_name": "definition_activity_02HSGXNTRPF0Z319DbL5cmCZ7mkjbIkqPM5",
+                        "name": "Condition Branch",
+                        "title": "Proposal",
+                        "type": "logic.condition_block",
+                        "base_type": "activity",
+                        "properties": {
+                          "condition": {
+                            "left_operand": "$activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.has_proposal$",
+                            "operator": "eq",
+                            "right_operand": "true"
+                          },
+                          "continue_on_failure": false,
+                          "display_name": "Proposal",
+                          "skip_execution": false
+                        },
+                        "object_type": "definition_activity",
+                        "actions": [
+                          {
+                            "unique_name": "definition_activity_02BOHPM66MAPCT8ZDpLgv19fIqNyeiyHaFV",
+                            "name": "Set Variables",
+                            "title": "Report proposal",
+                            "type": "core.set_multiple_variables",
+                            "base_type": "activity",
+                            "properties": {
+                              "continue_on_failure": false,
+                              "display_name": "Report proposal",
+                              "skip_execution": false,
+                              "variables_to_update": [
+                                {
+                                  "variable_to_update": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.workflow_results$",
+                                  "variable_value_new": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.workflow_results$\n- $activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.summary$"
+                                }
+                              ]
+                            },
+                            "object_type": "definition_activity"
+                          },
+                          {
+                            "unique_name": "definition_activity_028DDTG1D2OZ861OXzTiL4WqtFp96Iy42Sm",
+                            "name": "Condition Block",
+                            "title": "Audit only?",
+                            "type": "logic.if_else",
+                            "base_type": "activity",
+                            "properties": {
+                              "conditions": null,
+                              "continue_on_failure": false,
+                              "display_name": "Audit only?",
+                              "skip_execution": false
+                            },
+                            "object_type": "definition_activity",
+                            "blocks": [
+                              {
+                                "unique_name": "definition_activity_02E8B7JFO8GP2L31eEB3akDS7H2S4bdHVui",
+                                "name": "Condition Branch",
+                                "title": "Audit only: no approval task",
+                                "type": "logic.condition_block",
+                                "base_type": "activity",
+                                "properties": {
+                                  "condition": {
+                                    "left_operand": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02R2BXAMMAUBF4AMGHuX3nSeoga1UDGBoHp$",
+                                    "operator": "eq",
+                                    "right_operand": true
+                                  },
+                                  "continue_on_failure": false,
+                                  "display_name": "Audit only: no approval task",
+                                  "skip_execution": false
+                                },
+                                "object_type": "definition_activity",
+                                "actions": [
+                                  {
+                                    "unique_name": "definition_activity_02HECKZN7FGZ2QHSZq7CtquIXqFSO0L8wGg",
+                                    "name": "Set Variables",
+                                    "title": "Report audit only",
+                                    "type": "core.set_multiple_variables",
+                                    "base_type": "activity",
+                                    "properties": {
+                                      "continue_on_failure": false,
+                                      "display_name": "Report audit only",
+                                      "skip_execution": false,
+                                      "variables_to_update": [
+                                        {
+                                          "variable_to_update": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.workflow_results$",
+                                          "variable_value_new": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.workflow_results$\n- Phishing: AUDIT ONLY. No approval task was raised and nothing was changed (package $activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.package_digest$)."
+                                        }
+                                      ]
+                                    },
+                                    "object_type": "definition_activity"
+                                  }
+                                ]
+                              },
+                              {
+                                "unique_name": "definition_activity_02V31FQ31T0VY4RC1SF41sC2cMGjyGlvesH",
+                                "name": "Condition Branch",
+                                "title": "Ask for approval",
+                                "type": "logic.condition_block",
+                                "base_type": "activity",
+                                "properties": {
+                                  "condition": {
+                                    "left_operand": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02R2BXAMMAUBF4AMGHuX3nSeoga1UDGBoHp$",
+                                    "operator": "eq",
+                                    "right_operand": false
+                                  },
+                                  "continue_on_failure": false,
+                                  "display_name": "Ask for approval",
+                                  "skip_execution": false
+                                },
+                                "object_type": "definition_activity",
+                                "actions": [
+                                  {
+                                    "unique_name": "definition_activity_02DWPLKOYJZE1FYBExhiADEft7zzPsRnTPg",
+                                    "name": "Condition Block",
+                                    "title": "Which approval level?",
+                                    "type": "logic.if_else",
+                                    "base_type": "activity",
+                                    "properties": {
+                                      "conditions": null,
+                                      "continue_on_failure": false,
+                                      "display_name": "Which approval level?",
+                                      "skip_execution": false
+                                    },
+                                    "object_type": "definition_activity",
+                                    "blocks": [
+                                      {
+                                        "unique_name": "definition_activity_02X4KEA1WD3QG4QZTk2n5R4GCEnSUCxe3tv",
+                                        "name": "Condition Branch",
+                                        "title": "Elevated",
+                                        "type": "logic.condition_block",
+                                        "base_type": "activity",
+                                        "properties": {
+                                          "condition": {
+                                            "left_operand": "$activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.elevated$",
+                                            "operator": "eq",
+                                            "right_operand": "true"
+                                          },
+                                          "continue_on_failure": false,
+                                          "display_name": "Elevated",
+                                          "skip_execution": false
+                                        },
+                                        "object_type": "definition_activity",
+                                        "actions": [
+                                          {
+                                            "unique_name": "definition_activity_021IHOR45DKKTCH8lFaGBFNu2pBpdGxJERL",
+                                            "name": "Request Approval",
+                                            "title": "Request elevated approval",
+                                            "type": "task.request_approval",
+                                            "base_type": "activity",
+                                            "properties": {
+                                              "approval_choices_holder": {
+                                                "approval_choices": [
+                                                  "Approve",
+                                                  "Reject",
+                                                  "More investigation"
+                                                ],
+                                                "is_custom_approval_choices": true,
+                                                "is_default_approval_choices": false
+                                              },
+                                              "approval_title": "ELEVATED APPROVAL REQUIRED - Phishing: $activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.action_count$ containment actions",
+                                              "assignee_roles": [
+                                                "admin"
+                                              ],
+                                              "body_text": "$activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.card$",
+                                              "continue_on_failure": false,
+                                              "display_name": "Request elevated approval",
+                                              "due_date": {
+                                                "is_relative_time": true,
+                                                "relative_time": {
+                                                  "duration": 72,
+                                                  "time_units": "hours"
+                                                },
+                                                "set_due_date": true
+                                              },
+                                              "expiration_date": {
+                                                "is_relative_time": true,
+                                                "relative_time": {
+                                                  "duration": 72,
+                                                  "time_units": "hours"
+                                                }
+                                              },
+                                              "expiration_status": "Expired",
+                                              "minimum_approvals": 2,
+                                              "priority": "high",
+                                              "skip_execution": false,
+                                              "task_owner": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.started_by$",
+                                              "task_requestor": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.started_by$",
+                                              "wait_for_request_approval_response": true
+                                            },
+                                            "object_type": "definition_activity"
+                                          },
+                                          {
+                                            "unique_name": "definition_activity_022CJPWUKW5O9DC7YOJzuA8F4aahdp9HiCI",
+                                            "name": "Set Variables",
+                                            "title": "Record elevated decision",
+                                            "type": "core.set_multiple_variables",
+                                            "base_type": "activity",
+                                            "properties": {
+                                              "continue_on_failure": false,
+                                              "display_name": "Record elevated decision",
+                                              "skip_execution": false,
+                                              "variables_to_update": [
+                                                {
+                                                  "variable_to_update": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_028XYMCUBT0CT4F36Yqw6Z2XPvjEqJsOdIf$",
+                                                  "variable_value_new": "$activity.definition_activity_021IHOR45DKKTCH8lFaGBFNu2pBpdGxJERL.output.response$"
+                                                }
+                                              ]
+                                            },
+                                            "object_type": "definition_activity"
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "unique_name": "definition_activity_02DXE4GXFZJ6ULVA8bz2WrxBBsFeTI2slk7",
+                                        "name": "Condition Branch",
+                                        "title": "Standard",
+                                        "type": "logic.condition_block",
+                                        "base_type": "activity",
+                                        "properties": {
+                                          "condition": {
+                                            "left_operand": "$activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.elevated$",
+                                            "operator": "ne",
+                                            "right_operand": "true"
+                                          },
+                                          "continue_on_failure": false,
+                                          "display_name": "Standard",
+                                          "skip_execution": false
+                                        },
+                                        "object_type": "definition_activity",
+                                        "actions": [
+                                          {
+                                            "unique_name": "definition_activity_02V2JQ2P3KSK3DCWNj8Nj2ZVHdXyiAcp5Ay",
+                                            "name": "Request Approval",
+                                            "title": "Request standard approval",
+                                            "type": "task.request_approval",
+                                            "base_type": "activity",
+                                            "properties": {
+                                              "approval_choices_holder": {
+                                                "approval_choices": [
+                                                  "Approve",
+                                                  "Reject",
+                                                  "More investigation"
+                                                ],
+                                                "is_custom_approval_choices": true,
+                                                "is_default_approval_choices": false
+                                              },
+                                              "approval_title": "Phishing: $activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.action_count$ containment actions",
+                                              "assignee_roles": [
+                                                "admin",
+                                                "user"
+                                              ],
+                                              "body_text": "$activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.card$",
+                                              "continue_on_failure": false,
+                                              "display_name": "Request standard approval",
+                                              "due_date": {
+                                                "is_relative_time": true,
+                                                "relative_time": {
+                                                  "duration": 72,
+                                                  "time_units": "hours"
+                                                },
+                                                "set_due_date": true
+                                              },
+                                              "expiration_date": {
+                                                "is_relative_time": true,
+                                                "relative_time": {
+                                                  "duration": 72,
+                                                  "time_units": "hours"
+                                                }
+                                              },
+                                              "expiration_status": "Expired",
+                                              "minimum_approvals": 1,
+                                              "priority": "high",
+                                              "skip_execution": false,
+                                              "task_owner": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.started_by$",
+                                              "task_requestor": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.started_by$",
+                                              "wait_for_request_approval_response": true
+                                            },
+                                            "object_type": "definition_activity"
+                                          },
+                                          {
+                                            "unique_name": "definition_activity_029GSPLD6SAJZ5NJzkbAkkafOv0eHGNk6Fv",
+                                            "name": "Set Variables",
+                                            "title": "Record standard decision",
+                                            "type": "core.set_multiple_variables",
+                                            "base_type": "activity",
+                                            "properties": {
+                                              "continue_on_failure": false,
+                                              "display_name": "Record standard decision",
+                                              "skip_execution": false,
+                                              "variables_to_update": [
+                                                {
+                                                  "variable_to_update": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_028XYMCUBT0CT4F36Yqw6Z2XPvjEqJsOdIf$",
+                                                  "variable_value_new": "$activity.definition_activity_02V2JQ2P3KSK3DCWNj8Nj2ZVHdXyiAcp5Ay.output.response$"
+                                                }
+                                              ]
+                                            },
+                                            "object_type": "definition_activity"
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "unique_name": "definition_activity_02NTBULFGQI8ZZNNm7z2UVKw5HOmQMuBhiI",
+                                    "name": "Condition Block",
+                                    "title": "What did the approver decide?",
+                                    "type": "logic.if_else",
+                                    "base_type": "activity",
+                                    "properties": {
+                                      "conditions": null,
+                                      "continue_on_failure": false,
+                                      "display_name": "What did the approver decide?",
+                                      "skip_execution": false
+                                    },
+                                    "object_type": "definition_activity",
+                                    "blocks": [
+                                      {
+                                        "unique_name": "definition_activity_02OA7SAC90RWR9ZDEhGIlcgJqujsGP07oC1",
+                                        "name": "Condition Branch",
+                                        "title": "Approved",
+                                        "type": "logic.condition_block",
+                                        "base_type": "activity",
+                                        "properties": {
+                                          "condition": {
+                                            "left_operand": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_028XYMCUBT0CT4F36Yqw6Z2XPvjEqJsOdIf$",
+                                            "operator": "eq",
+                                            "right_operand": "Approve"
+                                          },
+                                          "continue_on_failure": false,
+                                          "display_name": "Approved",
+                                          "skip_execution": false
+                                        },
+                                        "object_type": "definition_activity",
+                                        "actions": [
+                                          {
+                                            "unique_name": "definition_activity_02OM77N9H2985JO6eoNtGHl5fDOtJ1UjAEy",
+                                            "name": "Condition Block",
+                                            "title": "Dry run?",
+                                            "type": "logic.if_else",
+                                            "base_type": "activity",
+                                            "properties": {
+                                              "conditions": null,
+                                              "continue_on_failure": false,
+                                              "display_name": "Dry run?",
+                                              "skip_execution": false
+                                            },
+                                            "object_type": "definition_activity",
+                                            "blocks": [
+                                              {
+                                                "unique_name": "definition_activity_02P35YH6P9EJ24P33PMcQApIDTqM8LGrzjA",
+                                                "name": "Condition Branch",
+                                                "title": "Dry run: report only",
+                                                "type": "logic.condition_block",
+                                                "base_type": "activity",
+                                                "properties": {
+                                                  "condition": {
+                                                    "left_operand": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02VP5LJFB47KJU1TRvGN4kEbYfwmBEv6xbM$",
+                                                    "operator": "eq",
+                                                    "right_operand": true
+                                                  },
+                                                  "continue_on_failure": false,
+                                                  "display_name": "Dry run: report only",
+                                                  "skip_execution": false
+                                                },
+                                                "object_type": "definition_activity",
+                                                "actions": [
+                                                  {
+                                                    "unique_name": "definition_activity_02BKARB0TT0S8U1M6fOJaJ4Tue7BHEBStj8",
+                                                    "name": "Set Variables",
+                                                    "title": "Report dry run",
+                                                    "type": "core.set_multiple_variables",
+                                                    "base_type": "activity",
+                                                    "properties": {
+                                                      "continue_on_failure": false,
+                                                      "display_name": "Report dry run",
+                                                      "skip_execution": false,
+                                                      "variables_to_update": [
+                                                        {
+                                                          "variable_to_update": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.workflow_results$",
+                                                          "variable_value_new": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.workflow_results$\n- Phishing: APPROVED in DRY RUN. Would run $activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.action_count$ response actions (package $activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.package_digest$). Nothing was changed."
+                                                        }
+                                                      ]
+                                                    },
+                                                    "object_type": "definition_activity"
+                                                  }
+                                                ]
+                                              },
+                                              {
+                                                "unique_name": "definition_activity_02V7B1HETA64N6B4XDcVPXWutawBlnWEMFA",
+                                                "name": "Condition Branch",
+                                                "title": "Live: execute the approved package",
+                                                "type": "logic.condition_block",
+                                                "base_type": "activity",
+                                                "properties": {
+                                                  "condition": {
+                                                    "left_operand": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.input.variable_workflow_02VP5LJFB47KJU1TRvGN4kEbYfwmBEv6xbM$",
+                                                    "operator": "eq",
+                                                    "right_operand": false
+                                                  },
+                                                  "continue_on_failure": false,
+                                                  "display_name": "Live: execute the approved package",
+                                                  "skip_execution": false
+                                                },
+                                                "object_type": "definition_activity",
+                                                "actions": [
+                                                  {
+                                                    "unique_name": "definition_activity_02U2IZBD5MAIJCUMfi6lyCKQR2NWiEVDvKy",
+                                                    "name": "Read Table from JSON",
+                                                    "title": "Approved actions table",
+                                                    "type": "corejava.read_table_from_json",
+                                                    "base_type": "activity",
+                                                    "properties": {
+                                                      "action_timeout": 180,
+                                                      "continue_on_failure": false,
+                                                      "display_name": "Approved actions table",
+                                                      "input_json": "$activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.actions_json$",
+                                                      "jsonpath_query": "$.*",
+                                                      "persist_output": false,
+                                                      "populate_columns": false,
+                                                      "skip_execution": false,
+                                                      "table_columns": [
+                                                        {
+                                                          "column_name": "url",
+                                                          "column_type": "string"
+                                                        },
+                                                        {
+                                                          "column_name": "title",
+                                                          "column_type": "string"
+                                                        },
+                                                        {
+                                                          "column_name": "target",
+                                                          "column_type": "string"
+                                                        },
+                                                        {
+                                                          "column_name": "kind",
+                                                          "column_type": "string"
+                                                        },
+                                                        {
+                                                          "column_name": "module",
+                                                          "column_type": "string"
+                                                        },
+                                                        {
+                                                          "column_name": "key",
+                                                          "column_type": "string"
+                                                        }
+                                                      ]
+                                                    },
+                                                    "object_type": "definition_activity"
+                                                  },
+                                                  {
+                                                    "unique_name": "definition_activity_02RCR99T3HD7T833n5VeysSUc9TzijWbZPJ",
+                                                    "name": "For Each",
+                                                    "title": "For each approved action",
+                                                    "type": "logic.for_each",
+                                                    "base_type": "activity",
+                                                    "properties": {
+                                                      "continue_on_failure": false,
+                                                      "description": "Triggers one response action that was listed on the decision card.",
+                                                      "display_name": "For each approved action",
+                                                      "skip_execution": false,
+                                                      "source_array": "$activity.definition_activity_02U2IZBD5MAIJCUMfi6lyCKQR2NWiEVDvKy.output.read_table_from_json$"
+                                                    },
+                                                    "object_type": "definition_activity",
+                                                    "actions": [
+                                                      {
+                                                        "unique_name": "definition_activity_02FP9ZITDYDQXGO7KAW8WcAY9WCK29QRRh0",
+                                                        "name": "HTTP Request",
+                                                        "title": "Trigger response action",
+                                                        "type": "web-service.http_request",
+                                                        "base_type": "activity",
+                                                        "properties": {
+                                                          "accept": "application/json",
+                                                          "action_timeout": 180,
+                                                          "allow_auto_redirect": true,
+                                                          "allow_headers_redirect": false,
+                                                          "content_type": "application/json",
+                                                          "continue_on_error_status_code": true,
+                                                          "continue_on_failure": false,
+                                                          "display_name": "Trigger response action",
+                                                          "method": "POST",
+                                                          "relative_url": "$activity.definition_activity_02RCR99T3HD7T833n5VeysSUc9TzijWbZPJ.input.source_array[@].url$",
+                                                          "runtime_user": {
+                                                            "target_default": true
+                                                          },
+                                                          "skip_execution": false,
+                                                          "target": {
+                                                            "override_workflow_target": true,
+                                                            "target_id": "$module_target;Cisco XDR;securex:ao:iroh_api;platform-apis$"
+                                                          }
+                                                        },
+                                                        "object_type": "definition_activity"
+                                                      },
+                                                      {
+                                                        "unique_name": "definition_activity_02J3T6ILJHN9L0VTPgXUOJbjZQNQoRKAEcg",
+                                                        "name": "Execute Python Script",
+                                                        "title": "Record action result",
+                                                        "type": "python3.script",
+                                                        "base_type": "activity",
+                                                        "properties": {
+                                                          "action_timeout": 180,
+                                                          "continue_on_failure": false,
+                                                          "display_name": "Record action result",
+                                                          "script": "import json, sys\ntally = json.loads(sys.argv[1] or \"{}\")\nstatus_code = str(sys.argv[2]).strip()\nraw_response = sys.argv[3]\ntitle, target, key = sys.argv[4], sys.argv[5], sys.argv[6]\n\ndef plain(text, limit=160):\n    line = \"\".join(c if 32 <= ord(c) < 127 and c not in \"*`[]<>|#\\\\~_{}\" else \" \" for c in str(text)[:4 * limit])\n    return \" \".join(line.split())[:limit]\n\nok, detail = False, \"\"\nif status_code == \"200\":\n    try:\n        body = json.loads(raw_response or \"{}\")\n    except Exception:\n        body = {}\n    data = body.get(\"data\") if isinstance(body, dict) and isinstance(body.get(\"data\"), dict) else {}\n    state = data.get(\"status\")\n    ok = state == \"success\"\n    if not ok:\n        errors = body.get(\"errors\") if isinstance(body, dict) else None\n        parts = []\n        for error in (errors if isinstance(errors, list) else [])[:3]:\n            parts.append(str(error.get(\"message\") or error.get(\"error\") or error) if isinstance(error, dict) else str(error))\n        detail = \"XDR reported \" + plain(state or \"no status\", 30) + (\": \" + plain(\"; \".join(parts)) if parts else \"\")\nelse:\n    detail = \"HTTP \" + plain(status_code, 12)\ntally.setdefault(\"results\", []).append({\"key\": key, \"title\": title, \"target\": target, \"ok\": ok, \"detail\": detail})\ntally_json = json.dumps(tally)\n",
+                                                          "script_arguments": [
+                                                            "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_023LMD8M1XVLSAOA5hVOqKhiIWo4wE80cZc$",
+                                                            "$activity.definition_activity_02FP9ZITDYDQXGO7KAW8WcAY9WCK29QRRh0.output.status_code$",
+                                                            "$activity.definition_activity_02FP9ZITDYDQXGO7KAW8WcAY9WCK29QRRh0.output.response_body$",
+                                                            "$activity.definition_activity_02RCR99T3HD7T833n5VeysSUc9TzijWbZPJ.input.source_array[@].title$",
+                                                            "$activity.definition_activity_02RCR99T3HD7T833n5VeysSUc9TzijWbZPJ.input.source_array[@].target$",
+                                                            "$activity.definition_activity_02RCR99T3HD7T833n5VeysSUc9TzijWbZPJ.input.source_array[@].key$"
+                                                          ],
+                                                          "script_queries": [
+                                                            {
+                                                              "script_query": "tally_json",
+                                                              "script_query_name": "tally_json",
+                                                              "script_query_type": "string"
+                                                            }
+                                                          ],
+                                                          "skip_execution": false
+                                                        },
+                                                        "object_type": "definition_activity"
+                                                      },
+                                                      {
+                                                        "unique_name": "definition_activity_028KV5LLLNSM7MP5fyvyOKRzfz8SkktcOl1",
+                                                        "name": "Set Variables",
+                                                        "title": "Store action tally",
+                                                        "type": "core.set_multiple_variables",
+                                                        "base_type": "activity",
+                                                        "properties": {
+                                                          "continue_on_failure": false,
+                                                          "display_name": "Store action tally",
+                                                          "skip_execution": false,
+                                                          "variables_to_update": [
+                                                            {
+                                                              "variable_to_update": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_023LMD8M1XVLSAOA5hVOqKhiIWo4wE80cZc$",
+                                                              "variable_value_new": "$activity.definition_activity_02J3T6ILJHN9L0VTPgXUOJbjZQNQoRKAEcg.output.script_queries.tally_json$"
+                                                            }
+                                                          ]
+                                                        },
+                                                        "object_type": "definition_activity"
+                                                      }
+                                                    ]
+                                                  },
+                                                  {
+                                                    "unique_name": "definition_activity_020M7DDBYYP4UE5RB0XyicH5nUXNLm967mI",
+                                                    "name": "HTTP Request",
+                                                    "title": "List response actions again",
+                                                    "type": "web-service.http_request",
+                                                    "base_type": "activity",
+                                                    "properties": {
+                                                      "accept": "application/json",
+                                                      "action_timeout": 180,
+                                                      "allow_auto_redirect": true,
+                                                      "allow_headers_redirect": false,
+                                                      "body": "$activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.verify_body$",
+                                                      "content_type": "application/json",
+                                                      "continue_on_error_status_code": true,
+                                                      "continue_on_failure": false,
+                                                      "display_name": "List response actions again",
+                                                      "method": "POST",
+                                                      "relative_url": "/iroh-response/respond/observables",
+                                                      "runtime_user": {
+                                                        "target_default": true
+                                                      },
+                                                      "skip_execution": false,
+                                                      "target": {
+                                                        "override_workflow_target": true,
+                                                        "target_id": "$module_target;Cisco XDR;securex:ao:iroh_api;platform-apis$"
+                                                      }
+                                                    },
+                                                    "object_type": "definition_activity"
+                                                  },
+                                                  {
+                                                    "unique_name": "definition_activity_027BOUF0RMDKQ6ZIf1Lha9hYRRttck8hy1n",
+                                                    "name": "Execute Python Script",
+                                                    "title": "Build containment result",
+                                                    "type": "python3.script",
+                                                    "base_type": "activity",
+                                                    "properties": {
+                                                      "action_timeout": 180,
+                                                      "continue_on_failure": false,
+                                                      "display_name": "Build containment result",
+                                                      "script": "import json, sys\nname, digest = json.loads(sys.argv[1]).get(\"name\", \"Incident\"), sys.argv[2]\ntally = json.loads(sys.argv[3] or \"{}\")\nverify_status, verify_raw = str(sys.argv[4]).strip(), sys.argv[5]\nresults = tally.get(\"results\") if isinstance(tally, dict) and isinstance(tally.get(\"results\"), list) else []\nresults = [r for r in results if isinstance(r, dict)]\n\ndef show(value):\n    line = \"\".join(c if 32 <= ord(c) < 127 and c != \"`\" else \"?\" for c in str(value))\n    return \"`\" + line[:200] + \"`\"\n\n# What XDR offers now, per module: the exact action for the exact observable, or, when the answer does\n# not say which observable an offer is for, the action of that module for any observable.\nanswered, exact, loose = None, set(), set()\nif verify_status == \"200\":\n    try:\n        body = json.loads(verify_raw or \"null\")\n        if isinstance(body, dict):\n            body = body.get(\"data\")\n        if isinstance(body, list):\n            answered = set()\n            for entry in body:\n                if not isinstance(entry, dict):\n                    continue\n                instance = str(entry.get(\"module_instance_id\") or entry.get(\"module-instance-id\"))\n                answered.add(instance)\n                params = entry.get(\"query-params\") if isinstance(entry.get(\"query-params\"), dict) else {}\n                if params.get(\"observable_type\") is None and params.get(\"observable_value\") is None:\n                    loose.add(str(entry.get(\"id\")) + \"|\" + instance)\n                else:\n                    exact.add(\"|\".join((str(entry.get(\"id\")), instance, str(params.get(\"observable_type\")),\n                                        str(params.get(\"observable_value\")).lower())))\n    except Exception:\n        answered = None\nsucceeded = [r for r in results if r.get(\"ok\")]\nfailed = [r for r in results if not r.get(\"ok\")]\nlines = []\nfor r in results:\n    line = \"\\\"\" + str(r.get(\"title\")) + \"\\\" on \" + show(r.get(\"target\")) + \": \"\n    fields = str(r.get(\"key\")).split(\"|\")\n    if not r.get(\"ok\"):\n        line += \"FAILED (\" + str(r.get(\"detail\") or \"no detail\") + \")\"\n    elif answered is None or len(fields) < 4 or fields[1] not in answered:\n        line += \"XDR reported success; UNABLE TO VERIFY (the module did not list its actions afterwards)\"\n    elif r.get(\"key\") in exact or fields[0] + \"|\" + fields[1] in loose:\n        line += \"XDR reported success; the action is still offered, so the change is NOT CONFIRMED\"\n    else:\n        line += \"XDR reported success and no longer offers the action (consistent with the change being applied)\"\n    lines.append(line)\nresult = (name + \": APPROVED and executed (package \" + digest + \"). \" + str(len(succeeded)) + \" of \" + str(len(results))\n          + \" actions reported success\" + (\", \" + str(len(failed)) + \" failed\" if failed else \"\") + \". \"\n          + \" | \".join(lines)\n          + \" | The XDR trigger reports only success or failure: confirm each change in the product console. \"\n          + \"To undo an action, use the matching restore task of the incident playbook; that is a separate decision.\")\n",
+                                                      "script_arguments": [
+                                                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_02PSGJLIXB74IH3YUtWVTzMQoN5ra1DefMH$",
+                                                        "$activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.package_digest$",
+                                                        "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_023LMD8M1XVLSAOA5hVOqKhiIWo4wE80cZc$",
+                                                        "$activity.definition_activity_020M7DDBYYP4UE5RB0XyicH5nUXNLm967mI.output.status_code$",
+                                                        "$activity.definition_activity_020M7DDBYYP4UE5RB0XyicH5nUXNLm967mI.output.response_body$"
+                                                      ],
+                                                      "script_queries": [
+                                                        {
+                                                          "script_query": "result",
+                                                          "script_query_name": "result",
+                                                          "script_query_type": "string"
+                                                        }
+                                                      ],
+                                                      "skip_execution": false
+                                                    },
+                                                    "object_type": "definition_activity"
+                                                  },
+                                                  {
+                                                    "unique_name": "definition_activity_02CPIL9JB7A2JGM1FvNgQd22mXXTwseCEXK",
+                                                    "name": "Set Variables",
+                                                    "title": "Report containment",
+                                                    "type": "core.set_multiple_variables",
+                                                    "base_type": "activity",
+                                                    "properties": {
+                                                      "continue_on_failure": false,
+                                                      "display_name": "Report containment",
+                                                      "skip_execution": false,
+                                                      "variables_to_update": [
+                                                        {
+                                                          "variable_to_update": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.workflow_results$",
+                                                          "variable_value_new": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.workflow_results$\n- $activity.definition_activity_027BOUF0RMDKQ6ZIf1Lha9hYRRttck8hy1n.output.script_queries.result$"
+                                                        }
+                                                      ]
+                                                    },
+                                                    "object_type": "definition_activity"
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "unique_name": "definition_activity_02QYRUKB1ZVL96VJdR1ZfHVmXCIo6w16NmJ",
+                                        "name": "Condition Branch",
+                                        "title": "Not approved",
+                                        "type": "logic.condition_block",
+                                        "base_type": "activity",
+                                        "properties": {
+                                          "condition": {
+                                            "left_operand": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_028XYMCUBT0CT4F36Yqw6Z2XPvjEqJsOdIf$",
+                                            "operator": "ne",
+                                            "right_operand": "Approve"
+                                          },
+                                          "continue_on_failure": false,
+                                          "display_name": "Not approved",
+                                          "skip_execution": false
+                                        },
+                                        "object_type": "definition_activity",
+                                        "actions": [
+                                          {
+                                            "unique_name": "definition_activity_022JCQGDWTXI58KYh5YS2V1qpppIdzgd5bs",
+                                            "name": "Set Variables",
+                                            "title": "Report decision without action",
+                                            "type": "core.set_multiple_variables",
+                                            "base_type": "activity",
+                                            "properties": {
+                                              "continue_on_failure": false,
+                                              "display_name": "Report decision without action",
+                                              "skip_execution": false,
+                                              "variables_to_update": [
+                                                {
+                                                  "variable_to_update": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.workflow_results$",
+                                                  "variable_value_new": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.workflow_results$\n- Phishing: decision \"$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.local.variable_workflow_028XYMCUBT0CT4F36Yqw6Z2XPvjEqJsOdIf$\". Nothing was changed (package $activity.definition_activity_020W3AOGX4LTT7IGKkPMtjDBAiIepDBFSOd.output.script_queries.package_digest$)."
+                                                }
+                                              ]
+                                            },
+                                            "object_type": "definition_activity"
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "unique_name": "definition_activity_0269DHBF7TYD87IWfPyDb62CPAT4OeaE74Z",
+            "name": "Condition Block",
+            "title": "Started from a playbook task?",
+            "type": "logic.if_else",
+            "base_type": "activity",
+            "properties": {
+              "conditions": null,
+              "continue_on_failure": false,
+              "display_name": "Started from a playbook task?",
+              "skip_execution": false
+            },
+            "object_type": "definition_activity",
+            "blocks": [
+              {
+                "unique_name": "definition_activity_02CI57ZNAC8XEMIPYGWOBZ1343YVmeXunSb",
+                "name": "Condition Branch",
+                "title": "Playbook task: report",
+                "type": "logic.condition_block",
+                "base_type": "activity",
+                "properties": {
+                  "condition": {
+                    "left_operand": "$workflow.definition_workflow_02J4WPMVPTNZG3AOINXFRyyXWm8pCNJMDfF.output.started_by_type$",
+                    "operator": "eq",
+                    "right_operand": "playbook_task"
+                  },
+                  "continue_on_failure": false,
+                  "display_name": "Playbook task: report",
+                  "skip_execution": false
+                },
+                "object_type": "definition_activity",
+                "actions": [
+                  {
+                    "unique_name": "definition_activity_0261WOVOA29RFI0BL0cHw9IDMEYwYdjfJoa",
+                    "name": "For Each",
+                    "title": "For each selected observable: report",
+                    "type": "logic.for_each",
+                    "base_type": "activity",
+                    "properties": {
+                      "continue_on_failure": false,
+                      "display_name": "For each selected observable: report",
+                      "skip_execution": false,
+                      "source_array": "$intent.intent incident_response.input.selected_observables$"
+                    },
+                    "object_type": "definition_activity",
+                    "actions": [
+                      {
+                        "unique_name": "definition_activity_02SZXXS7EEDMNN6K6PjgsH1gksDQSETyvH6",
+                        "name": "Set Variables",
+                        "title": "Set observable result",
+                        "type": "core.set_multiple_variables",
+                        "base_type": "activity",
+                        "properties": {
+                          "continue_on_failure": false,
+                          "display_name": "Set observable result",
+                          "skip_execution": false,
+                          "variables_to_update": [
+                            {
+                              "variable_to_update": "$activity.definition_activity_0261WOVOA29RFI0BL0cHw9IDMEYwYdjfJoa.input.source_array[@].succeeded$",
+                              "variable_value_new": true
+                            },
+                            {
+                              "variable_to_update": "$activity.definition_activity_0261WOVOA29RFI0BL0cHw9IDMEYwYdjfJoa.input.source_array[@].result_message$",
+                              "variable_value_new": "Phishing workflow finished. The outcome is in the incident worklog."
+                            }
+                          ]
+                        },
+                        "object_type": "definition_activity"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "categories": [
+      "category_1BMfMXSnJMyt5Ihqi7rWJr5N8cf"
+    ],
+    "template_type": "template_workflow.incident_response"
+  },
+  "module_targets": [
+    {
+      "module_type": "Cisco XDR",
+      "external_id": "securex:ao:iroh_api",
+      "proxy_endpoint_metadata_id": "platform-apis"
+    }
+  ]
+}

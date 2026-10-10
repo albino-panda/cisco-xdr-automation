@@ -32,6 +32,8 @@ jobs:
         run: python tools/validation/generate_workflow_docs.py --check
       - run: python tools/validation/validate_config.py
       - run: python tools/validation/check_endpoints.py
+      - name: XDR-native workflows are current and pass the approval-gate check
+        run: python tools/xdr_native/build.py --check
       - name: Simulator, bundled incident scenarios (dry run and simulated live)
         run: |
           for scenario in ransomware phishing account_takeover ransomware_domain_controller; do

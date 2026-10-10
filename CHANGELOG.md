@@ -6,6 +6,47 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (XDR-native)
+- Owner requirement: the solution must run strictly inside Cisco XDR. `docs/xdr-native-design.md` maps the
+  lifecycle onto XDR Automation and states what gets weaker than `src/xdr_response/`.
+- `xdr/`: the first workflow that runs entirely inside XDR, `Email Bombing`, built on the incident response
+  template exported from the target org. Investigation and recommendation are automatic, an XDR approval
+  task (elevated for protected mailboxes and large floods) gates the only state-changing step, Dry Run is
+  on by default. Not yet imported into an XDR org (`xdr/README.md` lists the test steps and unknowns).
+- `src/xdr_native/` (generator, embedded Python steps, structure and approval-gate checks),
+  `tools/xdr_native/build.py` and `tests/xdr_native/` (42 tests, 23 approval-bypass attempts).
+- `docs/xdr-catalog/`: the public Cisco XDR Connect catalog (workflow IDs of 579 atomics and 21 built-in
+  workflows, 176 installable workflows, 107 integrations) and the inputs, outputs and requests of 80 Cisco
+  atomics read from exports of the target org.
+- The other 21 attack types as XDR workflows. They share one generated body, the incident response workflow
+  (`src/xdr_native/incident.py`, `incident_scripts.py`, `specs.py`), which calls only the Cisco XDR enrich
+  and response APIs through the platform module target: no vendor target, account key or secret. An
+  indicator is proposed for blocking on its own verdict; an endpoint, account or message when an indicator
+  of the incident is rated high enough or a person chose it. The response action is the one the org's
+  modules offer, matched by title and shown on the decision card. Not yet imported into an XDR org.
+- `validate` proves the approval chain from the exported JSON alone: the decision starts empty and only
+  receives an approval answer; every approval task shows the decision card of an earlier script and
+  offers a way to refuse; the approval is recorded before the gated branch and cleared at the start of
+  every loop pass; what a state-changing request sends is exactly one output of the script that wrote the
+  card. It also pins every script step to this repository's scripts and every HTTP request to a known
+  request on a known target. An independent review found 27 edits the first version accepted; all are
+  rejected now. `tests/xdr_native/`: 404 tests, 76 approval-bypass edits.
+- The script steps treat module responses as untrusted: product text is shown as plain text and cut short,
+  an action is only proposed for an observable the workflow was given, undo actions are never chosen, and
+  the result never reports an action as verified.
+
+- Ready for testing in an org: an *Audit Only* input in all 22 workflows (assessment to the worklog, no
+  approval task); `config/xdr-native.yaml`, whose approver roles, ETD host and org lists (own domain
+  suffixes, protected assets, values never to act on) the generator writes into every workflow; and
+  `xdr/RULES.md`, the generated guide to the incident rules and playbook tasks that start each workflow.
+- Every emitted shape was compared with 92 real exports. Script steps now declare string outputs only and
+  receive variable references only, as real exports do; the validator enforces both.
+
+### Changed (XDR-native)
+- `Email Bombing`: the ETD token request sends the JSON content type, as Cisco's own atomic does.
+- `tools/xdr_native/build.py` generates all 22 workflows and `--check` reports a folder that is no longer
+  generated.
+
 Gap fixes after the Phase 5 review (architecture 14.14) and the known-gaps list (architecture section
 15). The owner rule is unchanged and was tightened: nothing that a failed source or a missing vendor
 capability affects is dropped silently, and the lab no longer claims capabilities production lacks.
