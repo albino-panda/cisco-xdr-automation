@@ -3,10 +3,13 @@ schema: 1
 name: critical-asset-elevated
 workflow: persistence
 description: >-
-  An hourly scheduled task on a production application server (critical asset) launches a
-  malicious agent that is running. Isolation and process termination on the server need ELEVATED
-  approval with a visible warning; an analyst alone cannot approve, the lead does. The hash block
-  stays STANDARD. The manual removal step names the critical asset.
+  An hourly scheduled task on a production application server (critical asset) launches a malicious
+  agent that is running. Isolation and process termination on the server need ELEVATED approval with a
+  visible warning; an analyst alone cannot approve, the lead does. The hash block stays STANDARD. The
+  manual removal step names the critical asset. Production parity: the block_hash and terminate_process
+  recommendations stay UNROUTED (no enabled adapter has a VERIFIED write for them; shown for manual
+  handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by the real
+  adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [critical_asset, true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], virustotal: [intel]}
@@ -61,12 +64,10 @@ analyst: {decision: APPROVE_ALL, approvers: [lead]}
 expect:
   actions:
     - isolate_endpoint:PRD-APP-03
-    - terminate_process:PRD-APP-03/3100
-    - block_hash:5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e
   elevated:
     - isolate_endpoint:PRD-APP-03
-    - terminate_process:PRD-APP-03/3100
+  unrouted: [terminate_process:PRD-APP-03/3100, block_hash:5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e5c4ed01e]
   warnings: [ELEVATED APPROVAL REQUIRED, Production server]
   manual_steps: [remove_persistence:PRD-APP-03/task-updatecheck]
-  containment: CONTAINED
-  controls: 2
+  containment: PARTIALLY_CONTAINED
+  controls: 1

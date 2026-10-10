@@ -3,12 +3,16 @@ schema: 1
 name: edge-proxy-binary-url
 workflow: malicious-powershell
 description: >-
-  Edge case: a signed system binary used as a proxy rather than PowerShell. A browser download led to mshta fetching
-  content from a malicious URL; mshta wrote and started a payload that the vendor detects, and a run-key persistence
-  item for the payload appeared. The package terminates mshta, isolates the endpoint and blocks the payload hash,
-  the malicious URL and its hosting domain (only suspicious on its own, but the process that contacted it retrieved
-  a malicious payload, so the domain is confirmed as a payload host). The persistence item is handed off to the
-  persistence workflow and the payload to the malware workflow.
+  Edge case: a signed system binary used as a proxy rather than PowerShell. A browser download led to
+  mshta fetching content from a malicious URL; mshta wrote and started a payload that the vendor
+  detects, and a run-key persistence item for the payload appeared. The package terminates mshta,
+  isolates the endpoint and blocks the payload hash, the malicious URL and its hosting domain (only
+  suspicious on its own, but the process that contacted it retrieved a malicious payload, so the domain
+  is confirmed as a payload host). The persistence item is handed off to the persistence workflow and
+  the payload to the malware workflow. Production parity: the block_hash and terminate_process
+  recommendations stay UNROUTED (no enabled adapter has a VERIFIED write for them; shown for manual
+  handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by the real
+  adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive, approve_all]
 mode: both
 suite:
@@ -112,7 +116,10 @@ analyst:
   approvers: [analyst]
 expect:
   package: true
-  actions: ['terminate_process:TH-LT-5503/3100', 'isolate_endpoint:TH-LT-5503', 'block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed',
-    'block_url:https://media-cdn.test/view/doc', 'block_domain:media-cdn.test']
+  actions:
+    - isolate_endpoint:TH-LT-5503
+    - block_url:https://media-cdn.test/view/doc
+    - block_domain:media-cdn.test
+  unrouted: [terminate_process:TH-LT-5503/3100, block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed]
   handoffs: ['malware:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed', 'persistence:TH-LT-5503']
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED

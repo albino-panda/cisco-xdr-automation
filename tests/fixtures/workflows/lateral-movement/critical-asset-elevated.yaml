@@ -3,10 +3,13 @@ schema: 1
 name: critical-asset-elevated
 workflow: lateral-movement
 description: >-
-  A compromised workstation copies a tool over an admin share to the domain controller DC-02 and
-  starts it as a service. The domain controller isolation needs ELEVATED approval with a visible
-  warning (never skipped): an analyst alone cannot approve the package and the lead approves. The
-  workstation isolation, the hash block and the session revocation need standard approval.
+  A compromised workstation copies a tool over an admin share to the domain controller DC-02 and starts
+  it as a service. The domain controller isolation needs ELEVATED approval with a visible warning (never
+  skipped): an analyst alone cannot approve the package and the lead approves. The workstation
+  isolation, the hash block and the session revocation need standard approval. Production parity: the
+  block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for
+  manual handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by the
+  real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [critical_asset, true_positive]
 mode: both
 incident:
@@ -71,8 +74,8 @@ expect:
   actions:
     - isolate_endpoint:TH-LT-1047
     - isolate_endpoint:DC-02
-    - block_hash:2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c
     - revoke_sessions:jsmith@example.com
   elevated: [isolate_endpoint:DC-02]
+  unrouted: [block_hash:2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c2c4e6a8b0d1f3e5c]
   warnings: [ELEVATED APPROVAL REQUIRED, Domain controller]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED

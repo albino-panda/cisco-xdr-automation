@@ -2,9 +2,10 @@
 
 A :class:`SimulatedEnvironment` holds vendor-side state ("is TH-LT-1047 isolated?"), indicator
 reputations, investigation findings, health overrides and injected faults. The
-:class:`SimulatedAdapter` family (endpoint, identity, email, DNS/network, intel) implements
-every state-changing :class:`ActionType` across its families, ``current_state`` (idempotency),
-``verify`` (read-back), the rollback action types, enrichment and investigation.
+:class:`SimulatedAdapter` family (endpoint, identity, email, DNS/network, intel) implements the
+state-changing action types its families and the real adapter of the same integration share,
+``current_state`` (idempotency), ``verify`` (read-back where the real adapter has one), the rollback
+action types, enrichment and investigation.
 
 Safety is identical to a real adapter: every state-changing method is ``@state_changing``, so it
 is refused outside an approved authorization context and while dry run is active. Simulated
@@ -14,11 +15,24 @@ Fault injection (:class:`FaultKind`): ``FAIL``, ``UNAVAILABLE``, ``AUTH_FAIL``, 
 ``TIMEOUT``, ``INVALID_TARGET`` raise the matching typed error; ``ALREADY_CONTAINED`` puts the
 target in the desired state first (the action then reports ``ALREADY_CONTAINED``);
 ``NO_EFFECT`` reports success without changing state (verification then says ``NOT_VERIFIED``).
+
+Production parity (architecture 14.14.3). A simulated adapter posing as a real integration never
+does more than the real adapter of that integration: its state-changing actions are the family's
+actions **intersected with** the real manifest's ``supported_actions``
+(``xdr_response.integrations.<name>.manifest.MANIFEST``), and it reads back (``verify``) only what the
+real manifest lists in ``verifiable_actions``. Both are derived from the real manifest at class
+creation, so the lab cannot drift from production: the simulated Secure Endpoint adapter isolates and
+releases but verifies nothing (UNABLE_TO_VERIFY), cannot block hashes or terminate processes (UNROUTED
+unless another enabled adapter, such as Defender for Endpoint, supports them), and the simulated Cisco
+XDR, Defender for Office 365 and Intune adapters verify nothing. Every simulated adapter mirrors a real
+one (a name without a real manifest is refused). Reads (enrichment and investigation atomics) still
+follow the families.
 """
 from __future__ import annotations
 
 from xdr_response import guard as _guard
 
+import importlib
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -92,6 +106,7 @@ __all__ = [
     "SimulatedIntelAdapter",
     "SIMULATED_SUITE",
     "build_simulated_manifest",
+    "production_manifest",
     "simulated_adapter_class",
     "build_simulated_adapters",
     "register_simulated_adapters",
@@ -455,14 +470,35 @@ def _family_union(families: Sequence[str]) -> _Family:
     )
 
 
+def production_manifest(integration: str) -> CapabilityManifest | None:
+    """The real adapter's manifest (``xdr_response.integrations.<integration>.manifest.MANIFEST``), if any."""
+    try:
+        module = importlib.import_module(f"xdr_response.integrations.{integration}.manifest")
+    except ImportError:
+        return None
+    manifest = getattr(module, "MANIFEST", None)
+    return manifest if isinstance(manifest, CapabilityManifest) else None
+
+
 def build_simulated_manifest(integration: str, families: Sequence[str]) -> CapabilityManifest:
-    """Manifest of a simulated adapter posing as ``integration`` with the given families."""
+    """Manifest of a simulated adapter posing as ``integration`` with the given families.
+
+    State-changing actions are the families' actions that the real adapter of ``integration`` supports,
+    and only those the real adapter verifies are verifiable (production parity, 14.14.3). Reads follow
+    the families. ValueError when ``integration`` has no real adapter manifest: a simulated adapter
+    always mirrors one.
+    """
     fam = _family_union(families)
-    ordered = sorted(fam.actions, key=lambda a: a.value)
+    real = production_manifest(integration)
+    if real is None:
+        raise ValueError(f"no real adapter manifest for {integration!r}: a simulated adapter mirrors a real one")
+    actions = frozenset(fam.actions) & real.supported_actions
+    verifiable = actions & real.verifiable_actions
+    ordered = sorted(actions, key=lambda a: a.value)
     ops = [OperationSpec(name=a.value, kind=OperationKind.STATE_CHANGING, status=EndpointStatus.VERIFIED,
                          source=SIMULATOR_SOURCE, action_types=(a,)) for a in ordered]
     ops.append(OperationSpec(name="verify_state", kind=OperationKind.VERIFY, status=EndpointStatus.VERIFIED,
-                             source=SIMULATOR_SOURCE, action_types=tuple(ordered)))
+                             source=SIMULATOR_SOURCE, action_types=tuple(a for a in ordered if a in verifiable)))
     read_actions = {_ENRICH_ACTION[t] for t in fam.enrichment_types if t in _ENRICH_ACTION}
     read_actions |= fam.investigations
     ops.append(OperationSpec(name="enrich", kind=OperationKind.READ, status=EndpointStatus.VERIFIED,
@@ -476,8 +512,8 @@ def build_simulated_manifest(integration: str, families: Sequence[str]) -> Capab
         optional=integration == "splunk",
         enabled_by_default=integration != "splunk",
         native_xdr=integration == "cisco_xdr",
-        supported_actions=frozenset(fam.actions),
-        verifiable_actions=frozenset(fam.actions),
+        supported_actions=actions,
+        verifiable_actions=verifiable,
         read_actions=frozenset(read_actions),
         enrichment_types=fam.enrichment_types,
         operations=tuple(ops),
@@ -727,7 +763,10 @@ _CLASS_LOCK = threading.Lock()
 
 
 def simulated_adapter_class(integration: str, families: Sequence[str]) -> type[SimulatedAdapter]:
-    """A :class:`SimulatedAdapter` subclass posing as ``integration`` (cached per combination)."""
+    """A :class:`SimulatedAdapter` subclass posing as ``integration`` (cached per combination).
+
+    Never does more than the real adapter of ``integration`` (see :func:`build_simulated_manifest`).
+    """
     key = (integration, tuple(sorted(set(families))))
     with _CLASS_LOCK:
         cls = _CLASS_CACHE.get(key)
@@ -744,7 +783,7 @@ def simulated_adapter_class(integration: str, families: Sequence[str]) -> type[S
 
 
 class SimulatedEndpointAdapter(SimulatedAdapter):
-    """EDR/MDM family: isolation, hash blocks, process/file/persistence/app remediation, device lock."""
+    """EDR family as Secure Endpoint: isolate and release only, no read-back (like the real adapter)."""
 
     name = "secure_endpoint"
     families = ("endpoint",)
@@ -752,7 +791,7 @@ class SimulatedEndpointAdapter(SimulatedAdapter):
 
 
 class SimulatedIdentityAdapter(SimulatedAdapter):
-    """Identity family: disable/enable user, sessions, compromise, roles, password/MFA/app credentials."""
+    """Identity family as Entra: disable/enable user, sessions, compromise, roles (like the real adapter)."""
 
     name = "entra"
     families = ("identity",)
@@ -768,7 +807,7 @@ class SimulatedEmailAdapter(SimulatedAdapter):
 
 
 class SimulatedNetworkAdapter(SimulatedAdapter):
-    """DNS/network family: domain, URL, IP and network-client blocks and their removal."""
+    """DNS/network family as Umbrella: domain and URL blocks and their removal (like the real adapter)."""
 
     name = "umbrella"
     families = ("network",)
@@ -783,8 +822,10 @@ class SimulatedIntelAdapter(SimulatedAdapter):
     manifest = build_simulated_manifest("virustotal", ("intel",))
 
 
-#: Integration name -> families. Covers every catalog-routable state-changing action type
-#: (``remove_persistence`` has no catalog integration and is therefore never routed).
+#: Integration name -> families. Each adapter does exactly what its real adapter supports and verifies,
+#: so action types without a VERIFIED write anywhere (terminate_process, quarantine_file,
+#: remove_persistence, reset_password, reset_mfa, revoke_app_credentials, remove_application) are
+#: never routed, as in production.
 SIMULATED_SUITE: Mapping[str, tuple[str, ...]] = {
     "secure_endpoint": ("endpoint",),
     "defender_endpoint": ("endpoint", "network"),

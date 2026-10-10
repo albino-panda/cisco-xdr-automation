@@ -3,12 +3,14 @@ schema: 1
 name: legacy-03-guardrail-skips
 workflow: unauthorized-rmm
 description: >-
-  Migrated legacy scenario 03 (guardrails, aligned with C3). FictiDesk is installed on domain
-  controller DC-01 and a session to its suspicious relay is active. The relay domain block is
-  proposed. DC-01 is a critical asset (domain controller), so its isolation stays in the package with
-  ELEVATED approval and a visible warning, never skipped, and the lead approves. The installer hash is
-  on this tenant's hash allow-list (scenario config), so its block is shown as an excluded target and
-  terminating the allow-listed binary is withheld (ALLOWLISTED, listed as considered).
+  Migrated legacy scenario 03 (guardrails, aligned with C3). FictiDesk is installed on domain controller
+  DC-01 and a session to its suspicious relay is active. The relay domain block is proposed. DC-01 is a
+  critical asset (domain controller), so its isolation stays in the package with ELEVATED approval and a
+  visible warning, never skipped, and the lead approves. The installer hash is on this tenant's hash
+  allow-list (scenario config), so its block is shown as an excluded target and terminating the
+  allow-listed binary is withheld (ALLOWLISTED, listed as considered). Production parity:
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, critical_asset, true_positive, approve_all]
 legacy_source: workflows/unauthorized-rmm/scenarios/03-guardrail-skips.yaml
 mode: both
@@ -70,9 +72,9 @@ expect:
     - block_domain:relay.fictidesk.example
     - isolate_endpoint:DC-01
   elevated: [isolate_endpoint:DC-01]
-  excluded: [block_hash:5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe]
+  excluded: []
   considered: [terminate_process:DC-01/3001, block_ip:198.51.100.23]
   manual_steps: [uninstall fictidesk.exe on DC-01]
   warnings: [ELEVATED APPROVAL REQUIRED, Domain controller]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

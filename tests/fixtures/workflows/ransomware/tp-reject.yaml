@@ -3,8 +3,10 @@ schema: 1
 name: tp-reject
 workflow: ransomware
 description: >-
-  True positive; the analyst rejects the whole package (handled by the incident response team
-  out of band). The incident closes and nothing executes.
+  True positive; the analyst rejects the whole package (handled by the incident response team out of
+  band). The incident closes and nothing executes. Production parity: the block_hash recommendation
+  stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual handling, never
+  executed).
 tags: [true_positive, reject]
 mode: both
 incident:
@@ -48,8 +50,8 @@ analyst: {decision: REJECT, approvers: [analyst], comment: handled by the incide
 expect:
   actions:
     - isolate_endpoint:TH-LT-1047
-    - block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f
     - revoke_sessions:jsmith@example.com
+  unrouted: [block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f]
   decision_state: CLOSED
   controls: 0
   final_state: CLOSED

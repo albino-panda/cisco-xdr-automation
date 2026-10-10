@@ -3,11 +3,12 @@ schema: 1
 name: edge-builtin-tool-misuse
 workflow: credential-dumping
 description: >-
-  A built-in system utility is misused to dump LSASS memory. Secure Endpoint's behaviour detection
-  is MALICIOUS, so credential access is confirmed and the workstation and the exposed account are
-  contained. The utility's own file has a CLEAN reputation and runs on thousands of endpoints:
-  blocking its hash would break it everywhere, so no hash block is proposed and the hash is listed
-  as considered.
+  A built-in system utility is misused to dump LSASS memory. Secure Endpoint's behaviour detection is
+  MALICIOUS, so credential access is confirmed and the workstation and the exposed account are
+  contained. The utility's own file has a CLEAN reputation and runs on thousands of endpoints: blocking
+  its hash would break it everywhere, so no hash block is proposed and the hash is listed as considered.
+  Production parity: isolate_endpoint through secure_endpoint cannot be read back by the real adapter
+  and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive, approve_all]
 mode: both
 incident:
@@ -57,5 +58,5 @@ expect:
   considered: [block_hash:0b5e55ed0b5e55ed0b5e55ed0b5e55ed0b5e55ed0b5e55ed0b5e55ed0b5e55ed]
   manual_steps: [credential-reset:TH-LT-1052]
   handoffs: [account-takeover:mlopez@example.com]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 1

@@ -3,12 +3,15 @@ schema: 1
 name: legacy-03-domain-controller-destination
 workflow: lateral-movement
 description: >-
-  Legacy 03, converted to typed records (C3: protected becomes ELEVATED). A compromised HR
-  workstation copies a binary to a domain controller over the ADMIN$ share and starts it as a
-  service, using an account in Domain Admins. The workstation isolation and the hash block need
-  standard approval. The domain controller matches the domain-controller class and the account the
-  privileged-account class, so the controller isolation, the session revocation and the account
-  disable stay proposed with ELEVATED approval and a visible warning; the lead approves.
+  Legacy 03, converted to typed records (C3: protected becomes ELEVATED). A compromised HR workstation
+  copies a binary to a domain controller over the ADMIN$ share and starts it as a service, using an
+  account in Domain Admins. The workstation isolation and the hash block need standard approval. The
+  domain controller matches the domain-controller class and the account the privileged-account class, so
+  the controller isolation, the session revocation and the account disable stay proposed with ELEVATED
+  approval and a visible warning; the lead approves. Production parity: the block_hash recommendation
+  stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual handling, never
+  executed); isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, critical_asset]
 legacy_source: workflows/lateral-movement/scenarios/03-domain-controller-destination.yaml
 mode: both
@@ -93,11 +96,11 @@ expect:
     - isolate_endpoint:DC-01
     - revoke_sessions:adm.r.lee@example.com
     - disable_user:adm.r.lee@example.com
-    - block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00
   elevated:
     - isolate_endpoint:DC-01
     - revoke_sessions:adm.r.lee@example.com
     - disable_user:adm.r.lee@example.com
+  unrouted: [block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00]
   warnings: [ELEVATED APPROVAL REQUIRED, Domain controller, Privileged account]
   handoffs: ["account-takeover:adm.r.lee@example.com"]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED

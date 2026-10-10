@@ -5,9 +5,10 @@ workflow: lateral-movement
 description: >-
   Edge case: a compromised laptop opens internal SMB sessions to an address that no investigated
   endpoint owns (the related-endpoint search knows no host with it). The laptop is isolated and the
-  account revoked; the unknown peer is never guessed into an isolation target: it is listed as a
-  manual step (identify the host behind the address and investigate it), citing the connection
-  records.
+  account revoked; the unknown peer is never guessed into an isolation target: it is listed as a manual
+  step (identify the host behind the address and investigate it), citing the connection records.
+  Production parity: isolate_endpoint through secure_endpoint cannot be read back by the real adapter
+  and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive]
 mode: both
 incident:
@@ -53,5 +54,5 @@ expect:
   considered: []
   manual_steps: [lateral peer 198.51.100.99]
   handoffs: []
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 1

@@ -8,7 +8,9 @@ description: >-
   malicious detection for it. The hash is on this tenant's allow-list, so its block is shown as an
   excluded target, never executed. DC-01 is a critical asset, so its isolation stays proposed with
   ELEVATED approval and a visible warning (never skipped) and the lead decides. The task's review and
-  removal stay a manual step that names the critical asset.
+  removal stay a manual step that names the critical asset. Production parity: isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [legacy, critical_asset, true_positive, approve_all]
 legacy_source: workflows/persistence/scenarios/03-allowlisted-hash-protected-host.yaml
 mode: both
@@ -65,10 +67,9 @@ expect:
     - isolate_endpoint:DC-01
   elevated:
     - isolate_endpoint:DC-01
-  excluded:
-    - block_hash:3c4d5e6f708192a33c4d5e6f708192a33c4d5e6f708192a33c4d5e6f708192a3
+  excluded: []
   warnings: [ELEVATED APPROVAL REQUIRED, Domain controller]
   manual_steps: [remove_persistence:DC-01/task-example-nightlyinventory]
   considered: []
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 1

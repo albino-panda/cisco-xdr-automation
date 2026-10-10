@@ -3,12 +3,13 @@ schema: 1
 name: edge-admin-jump-host
 workflow: lateral-movement
 description: >-
-  Edge case: admin jump host. An administrator account opens a WinRM session from the sanctioned
-  jump host TH-JMP-0001 to the web server TH-SRV-0412, where a process started by the WinRM
-  provider host is detected as malicious. The web server is isolated and the account's sessions are
-  revoked, but the jump host has no malicious activity of its own: isolating it would cut
-  administration of every server it manages, so it is shown as considered (with its records) for
-  the analyst to review, never silently skipped.
+  Edge case: admin jump host. An administrator account opens a WinRM session from the sanctioned jump
+  host TH-JMP-0001 to the web server TH-SRV-0412, where a process started by the WinRM provider host is
+  detected as malicious. The web server is isolated and the account's sessions are revoked, but the jump
+  host has no malicious activity of its own: isolating it would cut administration of every server it
+  manages, so it is shown as considered (with its records) for the analyst to review, never silently
+  skipped. Production parity: isolate_endpoint through secure_endpoint cannot be read back by the real
+  adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive]
 mode: both
 incident:
@@ -61,5 +62,5 @@ expect:
   considered: [isolate_endpoint:TH-JMP-0001]
   manual_steps: []
   handoffs: []
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 1

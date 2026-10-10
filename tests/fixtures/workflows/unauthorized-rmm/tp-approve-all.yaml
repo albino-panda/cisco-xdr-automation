@@ -6,10 +6,13 @@ description: >-
   True positive on one workstation. After a call from someone posing as the IT help desk, the user
   downloaded AnyDesk from a lure site and a remote session opened to a relay whose IP is rated
   malicious. The tool is not sanctioned (no approved_rmm entry) and Secure Endpoint flags it. The
-  package terminates the running tool, blocks its binary, its relay domain, the lure download domain
-  and the rated peer IP, and isolates the workstation. The analyst approves everything; every action
+  package terminates the running tool, blocks its binary, its relay domain, the lure download domain and
+  the rated peer IP, and isolates the workstation. The analyst approves everything; every routed action
   executes and the reversible ones are registered as controls. Uninstalling the tool stays a manual
-  step.
+  step. Production parity: the block_hash and terminate_process recommendations stay UNROUTED (no
+  enabled adapter has a VERIFIED write for them; shown for manual handling, never executed);
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
@@ -73,15 +76,13 @@ analyst: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
   package: true
   actions:
-    - terminate_process:TH-LT-1047/7311
-    - block_hash:a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0
     - block_domain:relay-01.anydesk-relay.test
     - block_domain:get-remote-support.test
     - block_ip:198.51.100.45
     - isolate_endpoint:TH-LT-1047
   elevated: []
   excluded: []
-  unrouted: []
+  unrouted: [terminate_process:TH-LT-1047/7311, block_hash:a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0]
   below_threshold: []
   degraded_sources: []
   considered: []
@@ -90,6 +91,6 @@ expect:
   risk: {min: 80, max: 100}
   confidence: {min: 70, max: 100}
   evidence_min: 2
-  containment: CONTAINED
-  controls: 5
+  containment: PARTIALLY_CONTAINED
+  controls: 4
   notifications: [incident_note, soc_notification, analyst_summary]

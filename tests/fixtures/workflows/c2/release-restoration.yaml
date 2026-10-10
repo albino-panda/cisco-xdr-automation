@@ -3,9 +3,14 @@ schema: 1
 name: release-restoration
 workflow: c2
 description: >-
-  The analyst approves the package; after remediation a separate human release approval restores
-  every registered control: the endpoint is released and the domain, IP and URL blocks are removed.
-  The process termination is not reversible and registers no control.
+  The analyst approves the package; after remediation a separate human release approval restores every
+  registered control: the endpoint is released and the domain, IP and URL blocks are removed. The
+  process termination is not reversible and registers no control. Production parity: the
+  terminate_process recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown
+  for manual handling, never executed); isolate_endpoint and release_endpoint through secure_endpoint
+  cannot be read back by the real adapters and end UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED, restoration is PARTIALLY_RESTORED and the incident stays
+  AWAITING_RELEASE_APPROVAL.
 tags: [release, true_positive, approve_all]
 mode: live
 suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel]}
@@ -72,8 +77,8 @@ expect:
     - block_ip:198.51.100.45
     - "block_url:https://beacon-gate.test/api/checkin"
     - isolate_endpoint:TH-LT-1047
-    - terminate_process:TH-LT-1047/3120
-  containment: CONTAINED
+  unrouted: [terminate_process:TH-LT-1047/3120]
+  containment: PARTIALLY_CONTAINED
   controls: 4
-  restoration: RESTORED
-  final_state: RESTORED
+  restoration: PARTIALLY_RESTORED
+  final_state: AWAITING_RELEASE_APPROVAL

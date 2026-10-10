@@ -4,18 +4,21 @@ schema: 1
 name: legacy-04-campaign-over-indicator-cap
 workflow: phishing
 description: >-
-  Legacy 04. One campaign message links to several rotating look-alike domains and carries a
-  malicious attachment. The tenant caps indicator blocks at 3 per package (lab override; the default
-  is 50). Four indicator blocks exceed the cap, so every domain and hash block stays proposed with
-  ELEVATED approval and a warning (C5: never skipped); the quarantine is not an indicator and stays
-  STANDARD. The lead approves.
+  Legacy 04. One campaign message links to several rotating look-alike domains and carries a malicious
+  attachment. The tenant caps indicator blocks at 2 per package (lab override; the default is 50). Three
+  domain blocks exceed the cap, so every domain block stays proposed with ELEVATED approval and a
+  warning (C5: never skipped); the quarantine is not an indicator and stays STANDARD. The attachment's
+  hash block is recommended but UNROUTED (no enabled adapter has a VERIFIED hash block; the real Secure
+  Endpoint adapter cannot block hashes), shown for manual handling. The lead approves. Production
+  parity: the block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it;
+  shown for manual handling, never executed).
 tags: [legacy, true_positive]
 legacy_source: workflows/phishing/scenarios/04-campaign-over-indicator-cap.yaml
 mode: both
 suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
         microsoft_cloud: [network]}
 config:
-  thresholds: {blast_radius: {max_indicators: 3}}
+  thresholds: {blast_radius: {max_indicators: 2}}
 incident:
   incident_id: INC-TEST-PH-0004
   title: Shipping-notice phishing campaign across many mailboxes
@@ -61,12 +64,11 @@ expect:
     - block_domain:parcel-notice.test
     - block_domain:parcel-redelivery.test
     - block_domain:parcel-status.test
-    - block_hash:5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a
   elevated:
     - block_domain:parcel-notice.test
     - block_domain:parcel-redelivery.test
     - block_domain:parcel-status.test
-    - block_hash:5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a
+  unrouted: [block_hash:5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a5c5c5c5c0a0a0a0a]
   warnings: [blast-radius cap]
   containment: CONTAINED
-  controls: 5
+  controls: 4

@@ -7,7 +7,9 @@ description: >-
   source rates it and it is not in the DNS tunneling category, but the DNS activity shows all five
   tunnel indicators (volume, subdomain variation, labels up to 57 characters, random-looking labels and
   TXT answers). The behaviour profile confirms the tunnel; the isolation goes through the Defender
-  builder and the termination through Defender, the block through Umbrella.
+  builder and the termination through Defender, the block through Umbrella. Production parity: the
+  terminate_process recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown
+  for manual handling, never executed).
 tags: [edge_case, true_positive, approve_all]
 mode: both
 suite: {defender_endpoint: [endpoint, network], umbrella: [network], virustotal: [intel]}
@@ -57,8 +59,9 @@ environment:
 analyst: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
   package: true
-  actions: [block_domain:node-sync.test, terminate_process:TH-LT-3300/7720, isolate_endpoint:TH-LT-3300]
+  actions: [block_domain:node-sync.test, isolate_endpoint:TH-LT-3300]
   elevated: []
+  unrouted: [terminate_process:TH-LT-3300/7720]
   considered: []
   manual_steps: [remove tunnel client on TH-LT-3300, assess data sent through node-sync.test]
   containment: CONTAINED

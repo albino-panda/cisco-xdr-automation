@@ -7,7 +7,9 @@ description: >-
   verdict but sits in the DNS Tunneling VPN category with high internal volume, so it is blocked and the
   host whose unknown process queried it is isolated. remote-office-vpn.example is in the same category
   and also unknown, but only 40 queries were seen, which fits a VPN client health check: it is not
-  blocked (listed as considered) and the host that only queried it is not isolated.
+  blocked (listed as considered) and the host that only queried it is not isolated. Production parity:
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/dns-tunneling/scenarios/06-new-domain-without-reputation.yaml
 mode: both
@@ -67,5 +69,5 @@ expect:
   elevated: []
   considered: [block_domain:remote-office-vpn.example]
   manual_steps: [remove tunnel client on WS-0388, assess data sent through q7-sync.test]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

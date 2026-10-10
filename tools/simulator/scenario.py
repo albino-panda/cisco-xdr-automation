@@ -161,7 +161,8 @@ class ScenarioRun:
                  settings: Settings | None = None, workflows: Any = None, observers: Sequence[Any] = (),
                  recommender: Any = None) -> None:
         """``workflows`` (a ``WorkflowCatalog``) and ``observers`` are passed to the runtime (14.3.6);
-        ``recommender`` replaces the runtime's recommender (legacy replay, 14.3.8)."""
+        ``recommender`` replaces the runtime's recommender (legacy replay, 14.3.8). Every simulated
+        adapter does exactly what its real adapter supports and verifies (production parity, 14.14.3)."""
         self.scenario = scenario
         self.live = live
         self.clock: Clock = clock or FixedClock(SIM_NOW)

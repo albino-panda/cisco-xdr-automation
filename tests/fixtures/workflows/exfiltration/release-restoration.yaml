@@ -4,9 +4,12 @@ name: release-restoration
 workflow: exfiltration
 description: >-
   Same compromised-account upload as tp-approve-all, approved in full. After the investigation the
-  analyst proposes the release and a human approves it separately: the domain and IP blocks are
-  removed, the laptop is released from isolation and the account is enabled again. Session revocation
-  is not reversible and registers no control.
+  analyst proposes the release and a human approves it separately: the domain and IP blocks are removed,
+  the laptop is released from isolation and the account is enabled again. Session revocation is not
+  reversible and registers no control. Production parity: isolate_endpoint and release_endpoint through
+  secure_endpoint cannot be read back by the real adapters and end UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED, restoration is PARTIALLY_RESTORED and the incident stays
+  AWAITING_RELEASE_APPROVAL.
 tags: [release, true_positive, approve_all]
 mode: live
 suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel], entra: [identity],
@@ -73,7 +76,7 @@ expect:
     - isolate_endpoint:TH-LT-1047
     - revoke_sessions:jsmith@example.com
     - disable_user:jsmith@example.com
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 4
-  restoration: RESTORED
-  final_state: RESTORED
+  restoration: PARTIALLY_RESTORED
+  final_state: AWAITING_RELEASE_APPROVAL

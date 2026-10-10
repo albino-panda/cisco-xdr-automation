@@ -3,9 +3,12 @@ schema: 1
 name: critical-asset-elevated
 workflow: ransomware
 description: >-
-  Ransomware encrypts a domain controller. Its isolation needs ELEVATED approval with a visible
-  warning (never skipped): an analyst alone cannot approve the package and the lead approves.
-  The payload block needs standard approval.
+  Ransomware encrypts a domain controller. Its isolation needs ELEVATED approval with a visible warning
+  (never skipped): an analyst alone cannot approve the package and the lead approves. The payload block
+  needs standard approval. Production parity: the block_hash recommendation stays UNROUTED (no enabled
+  adapter has a VERIFIED write for it; shown for manual handling, never executed); isolate_endpoint
+  through secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so
+  containment is PARTIALLY_CONTAINED.
 tags: [critical_asset, true_positive]
 mode: both
 incident:
@@ -43,7 +46,7 @@ analyst: {decision: APPROVE_ALL, approvers: [lead]}
 expect:
   actions:
     - isolate_endpoint:DC-02
-    - block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f
   elevated: [isolate_endpoint:DC-02]
+  unrouted: [block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f]
   warnings: [ELEVATED APPROVAL REQUIRED, Domain controller]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED

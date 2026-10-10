@@ -5,10 +5,13 @@ workflow: persistence
 description: >-
   Migrated legacy scenario 01 (true positive). A new HKCU Run value on WS-FIN-014 points at a binary
   that Secure Endpoint and VirusTotal rate malicious; the agent reports an active malicious detection
-  and the trajectory shows the binary starting and connecting to cdn-update.test. The package blocks
-  the hash and isolates the host, both behind approval; the trajectory names no hash or pid for the
-  process, so no termination is proposed. Removing the Run value is the manual step. The callback
-  domain is context only (the c2 workflow blocks network indicators).
+  and the trajectory shows the binary starting and connecting to cdn-update.test. The package blocks the
+  hash and isolates the host, both behind approval; the trajectory names no hash or pid for the process,
+  so no termination is proposed. Removing the Run value is the manual step. The callback domain is
+  context only (the c2 workflow blocks network indicators). Production parity: the block_hash
+  recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual
+  handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by the real
+  adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/persistence/scenarios/01-malicious-run-key.yaml
 mode: both
@@ -65,10 +68,10 @@ expect:
   package: true
   actions:
     - isolate_endpoint:WS-FIN-014
-    - block_hash:1f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a7980
   elevated: []
   excluded: []
+  unrouted: [block_hash:1f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a79801f2e3d4c5b6a7980]
   manual_steps: [remove_persistence:WS-FIN-014/run-onedrivesync]
   considered: []
-  containment: CONTAINED
-  controls: 2
+  containment: PARTIALLY_CONTAINED
+  controls: 1

@@ -3,10 +3,12 @@ schema: 1
 name: edge-endpoint-connects-to-prompt-source
 workflow: mfa-fatigue
 description: >-
-  The incident names no endpoint. Investigating the prompt source IP in the SIEM finds a laptop of the user
-  connecting to it after the approval; the endpoint investigation of that laptop (found through the
-  IP investigation, not the incident) shows a suspicious process. Isolating the laptop is
-  recommended alongside revoking the sessions and blocking the IP.
+  The incident names no endpoint. Investigating the prompt source IP in the SIEM finds a laptop of the
+  user connecting to it after the approval; the endpoint investigation of that laptop (found through the
+  IP investigation, not the incident) shows a suspicious process. Isolating the laptop is recommended
+  alongside revoking the sessions and blocking the IP. Production parity: isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive, approve_all]
 mode: both
 suite: {entra: [identity], secure_endpoint: [endpoint], meraki: [network], splunk: [network],
@@ -58,5 +60,5 @@ expect:
     - isolate_endpoint:TH-LT-2210
     - block_ip:203.0.113.80
   elevated: []
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

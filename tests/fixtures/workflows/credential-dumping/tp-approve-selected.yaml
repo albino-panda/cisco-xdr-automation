@@ -3,9 +3,13 @@ schema: 1
 name: tp-approve-selected
 workflow: credential-dumping
 description: >-
-  True positive (same facts as tp-approve-all). The analyst approves only the isolation, the tool
-  hash block and the standard user's session revocation; the help-desk operator's revocation and
-  disable are recorded as rejected by the analyst and never executed.
+  True positive (same facts as tp-approve-all). The analyst approves only the isolation and the standard
+  user's session revocation (the tool hash block is not in the package, see below); the help-desk
+  operator's revocation and disable are recorded as rejected by the analyst and never executed.
+  Production parity: the block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED
+  write for it; shown for manual handling, never executed); isolate_endpoint through secure_endpoint
+  cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [true_positive, approve_selected]
 mode: live
 incident:
@@ -61,7 +65,7 @@ environment:
                groups: [Helpdesk], roles: [Helpdesk Administrator], privileged: true, risk_level: medium,
                risk_state: none, account_enabled: true}
 analyst: {decision: APPROVE_SELECTED, approvers: [analyst],
-          select: [isolate_endpoint:TH-LT-1047, block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed, revoke_sessions:jsmith@example.com],
+          select: [isolate_endpoint:TH-LT-1047, revoke_sessions:jsmith@example.com],
           comment: help-desk account handled with the identity team}
 expect:
   actions:
@@ -69,12 +73,11 @@ expect:
     - revoke_sessions:jsmith@example.com
     - revoke_sessions:it.support@example.com
     - disable_user:it.support@example.com
-    - block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed
+  unrouted: [block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed]
   results:
     isolate_endpoint:TH-LT-1047: SUCCESS
-    block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed: SUCCESS
     revoke_sessions:jsmith@example.com: SUCCESS
     revoke_sessions:it.support@example.com: REJECTED_BY_ANALYST
     disable_user:it.support@example.com: REJECTED_BY_ANALYST
-  containment: CONTAINED
-  controls: 2
+  containment: PARTIALLY_CONTAINED
+  controls: 1

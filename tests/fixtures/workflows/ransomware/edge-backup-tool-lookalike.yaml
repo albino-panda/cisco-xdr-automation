@@ -4,11 +4,12 @@ name: edge-backup-tool-lookalike
 workflow: ransomware
 description: >-
   A binary named like the sanctioned backup agent runs on TH-LT-1088. Unlike the real agent (clean,
-  signed, on thousands of endpoints) this one is unsigned, seen on one endpoint and rated malicious,
-  and the vendor flags its mass file modification together with a backup-catalog deletion by the
-  recovery tool. There is no detection: the encryption-with-recovery-inhibition pattern alone
-  marks the host affected. The host is isolated and the look-alike hash blocked; the real agent's
-  hash, also listed in the incident, is not.
+  signed, on thousands of endpoints) this one is unsigned, seen on one endpoint and rated malicious, and
+  the vendor flags its mass file modification together with a backup-catalog deletion by the recovery
+  tool. There is no detection: the encryption-with-recovery-inhibition pattern alone marks the host
+  affected. The host is isolated and the look-alike hash blocked; the real agent's hash, also listed in
+  the incident, is not. Production parity: the block_hash recommendation stays UNROUTED (no enabled
+  adapter has a VERIFIED write for it; shown for manual handling, never executed).
 tags: [edge_case, true_positive]
 mode: both
 incident:
@@ -68,6 +69,6 @@ expect:
   package: true
   actions:
     - isolate_endpoint:TH-LT-1088
-    - block_hash:8c2e4a6b1d3f5e7a8c2e4a6b1d3f5e7a8c2e4a6b1d3f5e7a8c2e4a6b1d3f5e7a
   elevated: []
+  unrouted: [block_hash:8c2e4a6b1d3f5e7a8c2e4a6b1d3f5e7a8c2e4a6b1d3f5e7a8c2e4a6b1d3f5e7a]
   below_threshold: []

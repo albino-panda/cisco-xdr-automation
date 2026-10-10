@@ -3,12 +3,14 @@ schema: 1
 name: legacy-03-guardrail-skips
 workflow: c2
 description: >-
-  Migrated from legacy scenario 03. The domain controller DC-02 beacons to beacon-relay.test through
-  an internal relay (10.20.30.40). The own-domain host updates.example.com also comes back MALICIOUS
-  with a Command and Control category. The external domain is blocked. The allow-listed domain and
-  the internal relay IP are built and shown as excluded targets with their reasons (never executed,
-  never silently dropped). The domain controller's isolation stays proposed with ELEVATED approval
-  and a visible Domain controller warning; the SOC lead approves.
+  Migrated from legacy scenario 03. The domain controller DC-02 beacons to beacon-relay.test through an
+  internal relay (10.20.30.40). The own-domain host updates.example.com also comes back MALICIOUS with a
+  Command and Control category. The external domain is blocked. The allow-listed domain and the internal
+  relay IP are built and shown as excluded targets with their reasons (never executed, never silently
+  dropped). The domain controller's isolation stays proposed with ELEVATED approval and a visible Domain
+  controller warning; the SOC lead approves. Production parity: isolate_endpoint through secure_endpoint
+  cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, critical_asset, approve_all]
 legacy_source: workflows/c2/scenarios/03-guardrail-skips.yaml
 mode: both
@@ -69,5 +71,5 @@ expect:
     - block_domain:updates.example.com
     - block_ip:10.20.30.40
   warnings: [ELEVATED APPROVAL REQUIRED, Domain controller]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

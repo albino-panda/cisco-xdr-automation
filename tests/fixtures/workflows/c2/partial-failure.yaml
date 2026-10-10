@@ -3,9 +3,12 @@ schema: 1
 name: partial-failure
 workflow: c2
 description: >-
-  The analyst approves everything, but the Umbrella destination-list write fails for the domain
-  block. That action is reported FAILED (never retried silently), the other approved actions succeed
-  and the overall result is PARTIALLY_CONTAINED.
+  The analyst approves everything, but the Umbrella destination-list write fails for the domain block.
+  That action is reported FAILED (never retried silently), the other approved actions succeed and the
+  overall result is PARTIALLY_CONTAINED. Production parity: the terminate_process recommendation stays
+  UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual handling, never executed);
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY.
 tags: [partial_failure, true_positive, approve_all]
 mode: live
 suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel]}
@@ -73,12 +76,11 @@ expect:
     - block_ip:198.51.100.45
     - "block_url:https://beacon-gate.test/api/checkin"
     - isolate_endpoint:TH-LT-1047
-    - terminate_process:TH-LT-1047/3120
+  unrouted: [terminate_process:TH-LT-1047/3120]
   containment: PARTIALLY_CONTAINED
   results:
     block_domain:beacon-gate.test: FAILED
     block_ip:198.51.100.45: SUCCESS
     "block_url:https://beacon-gate.test/api/checkin": SUCCESS
     isolate_endpoint:TH-LT-1047: SUCCESS
-    terminate_process:TH-LT-1047/3120: SUCCESS
   controls: 3

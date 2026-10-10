@@ -5,10 +5,11 @@ workflow: lateral-movement
 description: >-
   Edge case: the quiet source is managed by Microsoft Defender for Endpoint only. TH-LT-2210 has no
   malicious activity of its own but originated the remote desktop session to TH-SRV-0310, where a
-  malicious process runs under the same account. The Secure Endpoint rules do not apply to the
-  laptop; the Defender rule recommends isolating it as the movement source, the server is isolated
-  through Secure Endpoint and the account is revoked. Approved actions execute and verify through
-  their own routes.
+  malicious process runs under the same account. The Secure Endpoint rules do not apply to the laptop;
+  the Defender rule recommends isolating it as the movement source, the server is isolated through
+  Secure Endpoint and the account is revoked. Approved actions execute through their own routes.
+  Production parity: isolate_endpoint through secure_endpoint cannot be read back by the real adapter
+  and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive]
 mode: both
 suite:
@@ -65,5 +66,5 @@ expect:
     - revoke_sessions:kng@example.com
   unrouted: []
   considered: []
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

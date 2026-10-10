@@ -4,8 +4,13 @@ name: release-restoration
 workflow: persistence
 description: >-
   Approve and contain, then a separate human release decision restores every reversible control
-  (isolation and hash block). The process termination is not reversible and registers no control;
-  the persistence item's removal was a manual step and is not part of any release.
+  (isolation and hash block). The process termination is not reversible and registers no control; the
+  persistence item's removal was a manual step and is not part of any release. Production parity: the
+  block_hash and terminate_process recommendations stay UNROUTED (no enabled adapter has a VERIFIED
+  write for them; shown for manual handling, never executed); isolate_endpoint and release_endpoint
+  through secure_endpoint cannot be read back by the real adapters and end UNABLE_TO_VERIFY, so
+  containment is PARTIALLY_CONTAINED, restoration is RESTORATION_FAILED and the incident stays
+  AWAITING_RELEASE_APPROVAL.
 tags: [release, true_positive, approve_all]
 mode: live
 suite: {secure_endpoint: [endpoint], virustotal: [intel]}
@@ -62,9 +67,8 @@ release: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
   actions:
     - isolate_endpoint:TH-LT-1047
-    - terminate_process:TH-LT-1047/4242
-    - block_hash:0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5
-  containment: CONTAINED
-  controls: 2
-  restoration: RESTORED
-  final_state: RESTORED
+  unrouted: [terminate_process:TH-LT-1047/4242, block_hash:0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5]
+  containment: PARTIALLY_CONTAINED
+  controls: 1
+  restoration: RESTORATION_FAILED
+  final_state: AWAITING_RELEASE_APPROVAL

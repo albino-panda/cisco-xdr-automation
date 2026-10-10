@@ -11,12 +11,22 @@ from pathlib import Path
 import pytest
 
 from tools.simulator.workflow_scenario import WorkflowScenario, WorkflowScenarioRun, load_workflow_scenario
+from xdr_response.models import VerificationStatus
+from xdr_response.integrations.simulated import production_manifest
 from xdr_response.atomics.evidence import EvidenceBuilder
 from xdr_response.errors import ApprovalError
 from xdr_response.models import ActionType, ApprovalLevel, IncidentState
 from xdr_response.workflows.runner import RuleOutcomeStatus
 
 SCENARIOS = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "workflows" / "mfa-fatigue"
+
+
+def _readback(result) -> VerificationStatus:
+    """VERIFIED where the real adapter reads the action back, else UNABLE_TO_VERIFY (architecture 14.14.3:
+    the simulated adapters do only what the real ones support and verify)."""
+    real = production_manifest(result.integration)
+    return (VerificationStatus.VERIFIED if real is not None and result.action_type in real.verifiable_actions
+            else VerificationStatus.UNABLE_TO_VERIFY)
 
 
 def scenario(name: str, **update) -> WorkflowScenario:
@@ -74,8 +84,8 @@ def test_ai_and_automation_can_never_approve(alias: str):
 def test_approved_containment_executes_and_verifies_automatically():
     run = WorkflowScenarioRun(scenario("tp-approve-all"), live=True).play()
     report = run.decision.report
-    assert report.overall.value == "CONTAINED"
-    assert {r.verification.status.value for r in report.results} == {"VERIFIED"}
+    assert report.overall.value == "PARTIALLY_CONTAINED"
+    assert all(r.verification.status is _readback(r) for r in report.results)
     assert len(run.environment.state_changing_calls()) == 4
 
 

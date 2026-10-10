@@ -9,7 +9,8 @@ description: >-
   is an internal address (an internal connection), never blocked and listed as considered. The host is a
   domain controller and the account is a Domain Admin, so the isolation, the session revocation and the
   disable stay proposed and need ELEVATED approval with visible warnings (C3, never skipped). The SOC
-  lead approves.
+  lead approves. Production parity: isolate_endpoint through secure_endpoint cannot be read back by the
+  real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, critical_asset, true_positive, approve_all]
 legacy_source: workflows/exfiltration/scenarios/03-guardrail-skips.yaml
 mode: both
@@ -83,5 +84,5 @@ expect:
   considered: [block_ip:192.0.2.40]
   manual_steps: [assess data exposure from DC-02]
   handoffs: ["account-takeover:adm-r.lee@example.com"]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

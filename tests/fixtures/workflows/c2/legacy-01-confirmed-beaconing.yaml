@@ -4,11 +4,13 @@ name: legacy-01-confirmed-beaconing
 workflow: c2
 description: >-
   Migrated from legacy scenario 01. Umbrella flags cdn-update.test as Command and Control and Secure
-  Endpoint shows a malicious beacon detection on WKS-0142, which resolves the domain every 60
-  seconds and connects to its IP (renumbered from the legacy 203.0.113.45, which lies in the lab's
-  production range, to 198.51.100.145). The package blocks the domain and the IP and isolates
-  WKS-0142 (target: host name, connector GUID as a parameter). WKS-0177 queried the domain once and
-  has no detection: it is investigated, not isolated, and listed as considered.
+  Endpoint shows a malicious beacon detection on WKS-0142, which resolves the domain every 60 seconds
+  and connects to its IP (renumbered from the legacy 203.0.113.45, which lies in the lab's production
+  range, to 198.51.100.145). The package blocks the domain and the IP and isolates WKS-0142 (target:
+  host name, connector GUID as a parameter). WKS-0177 queried the domain once and has no detection: it
+  is investigated, not isolated, and listed as considered. Production parity: isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/c2/scenarios/01-confirmed-beaconing.yaml
 mode: both
@@ -74,5 +76,5 @@ expect:
   elevated: []
   considered:
     - isolate_endpoint:WKS-0177
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 3

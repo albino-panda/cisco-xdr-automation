@@ -3,10 +3,14 @@ schema: 1
 name: release-restoration
 workflow: credential-dumping
 description: >-
-  Everything is approved and contained. After the credential reset the analyst proposes the release
-  and a human approves it separately: the isolation, the hash block and the account disable are
-  restored (session revocation is not reversible and registers no control). The privileged
-  account's actions are ELEVATED, so the lead approves the package and the release.
+  Everything is approved and contained. After the credential reset the analyst proposes the release and
+  a human approves it separately: the isolation, the hash block and the account disable are restored
+  (session revocation is not reversible and registers no control). The privileged account's actions are
+  ELEVATED, so the lead approves the package and the release. Production parity: the block_hash
+  recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual
+  handling, never executed); isolate_endpoint and release_endpoint through secure_endpoint cannot be
+  read back by the real adapters and end UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED,
+  restoration is PARTIALLY_RESTORED and the incident stays AWAITING_RELEASE_APPROVAL.
 tags: [release, true_positive, approve_all]
 mode: live
 incident:
@@ -69,8 +73,8 @@ expect:
     - revoke_sessions:jsmith@example.com
     - revoke_sessions:it.support@example.com
     - disable_user:it.support@example.com
-    - block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed
-  containment: CONTAINED
-  controls: 3
-  restoration: RESTORED
-  final_state: RESTORED
+  unrouted: [block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed]
+  containment: PARTIALLY_CONTAINED
+  controls: 2
+  restoration: PARTIALLY_RESTORED
+  final_state: AWAITING_RELEASE_APPROVAL

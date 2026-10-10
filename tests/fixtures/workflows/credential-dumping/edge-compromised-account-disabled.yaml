@@ -5,9 +5,10 @@ workflow: credential-dumping
 description: >-
   The SAM hive is read on TH-LT-1071 by a flagged process (a MALICIOUS process event). The logged-on
   account is not privileged, but Entra already rates it high risk with a risk detection from an
-  unfamiliar location after the exposure: the disable is justified and proposed beside the
-  revocation (citing the risk detection), the endpoint is isolated, and the credential reset of the
-  local accounts is a manual step.
+  unfamiliar location after the exposure: the disable is justified and proposed beside the revocation
+  (citing the risk detection), the endpoint is isolated, and the credential reset of the local accounts
+  is a manual step. Production parity: isolate_endpoint through secure_endpoint cannot be read back by
+  the real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive, approve_all]
 mode: both
 incident:
@@ -53,5 +54,5 @@ expect:
   considered: []
   manual_steps: [credential-reset:TH-LT-1071]
   handoffs: [account-takeover:pwhite@example.com]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

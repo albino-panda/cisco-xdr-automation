@@ -8,7 +8,9 @@ description: >-
   desk ticket; Secure Endpoint rates the session MALICIOUS. Blocking the relay domain or the binary
   would break IT's own remote support fleet-wide, so both are shown as excluded targets
   (allowlists.approved_rmm) and terminating the approved binary is withheld (ALLOWLISTED). The live
-  session by an unverified operator is what matters, so the host is isolated anyway.
+  session by an unverified operator is what matters, so the host is isolated anyway. Production parity:
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/unauthorized-rmm/scenarios/04-sanctioned-tool-unverified-operator.yaml
 mode: both
@@ -90,5 +92,5 @@ expect:
     - block_domain:relay.examplermm.example
   manual_steps: [uninstall examplermm.exe on WS-SALES-031]
   handoffs: []
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 1

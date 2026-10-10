@@ -5,7 +5,8 @@ workflow: c2
 description: >-
   True positive on TH-LT-1047. The analyst rejects the whole package (the endpoint is already being
   rebuilt by the desktop team): the incident closes, nothing changes at any vendor and no control is
-  registered.
+  registered. Production parity: the terminate_process recommendation stays UNROUTED (no enabled adapter
+  has a VERIFIED write for it; shown for manual handling, never executed).
 tags: [true_positive, reject]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel]}
@@ -72,7 +73,7 @@ expect:
     - block_ip:198.51.100.45
     - "block_url:https://beacon-gate.test/api/checkin"
     - isolate_endpoint:TH-LT-1047
-    - terminate_process:TH-LT-1047/3120
+  unrouted: [terminate_process:TH-LT-1047/3120]
   decision_state: CLOSED
   controls: 0
   final_state: CLOSED

@@ -3,8 +3,10 @@ schema: 1
 name: tp-reject
 workflow: credential-dumping
 description: >-
-  True positive (same facts as tp-approve-all). The analyst rejects the package: nothing is
-  executed, no control is registered and the incident is closed.
+  True positive (same facts as tp-approve-all). The analyst rejects the package: nothing is executed, no
+  control is registered and the incident is closed. Production parity: the block_hash recommendation
+  stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual handling, never
+  executed).
 tags: [true_positive, reject]
 mode: both
 incident:
@@ -67,6 +69,6 @@ expect:
     - revoke_sessions:jsmith@example.com
     - revoke_sessions:it.support@example.com
     - disable_user:it.support@example.com
-    - block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed
+  unrouted: [block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed]
   decision_state: CLOSED
   controls: 0

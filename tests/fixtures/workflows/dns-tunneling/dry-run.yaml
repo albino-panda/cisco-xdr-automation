@@ -4,7 +4,9 @@ name: dry-run
 workflow: dns-tunneling
 description: >-
   Dry run: the package is proposed and simulated; nothing changes at any vendor, no control is
-  registered and the DRY RUN report lists every recommended action.
+  registered and the DRY RUN report lists every recommended action. Production parity: the
+  terminate_process recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown
+  for manual handling, never executed).
 tags: [dry_run, true_positive]
 mode: dry_run
 suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
@@ -64,12 +66,11 @@ analyst: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
   actions:
     - block_domain:cdn-update.test
-    - terminate_process:TH-LT-1047/4242
     - isolate_endpoint:TH-LT-1047
+  unrouted: [terminate_process:TH-LT-1047/4242]
   dry_run_lines:
     - DRY RUN
     - "Would block: cdn-update.test"
-    - "Would terminate process: TH-LT-1047/4242"
     - "Would isolate: TH-LT-1047"
     - No containment actions executed.
   notifications: [incident_note, soc_notification, analyst_summary]

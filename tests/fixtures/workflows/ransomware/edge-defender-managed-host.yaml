@@ -3,10 +3,11 @@ schema: 1
 name: edge-defender-managed-host
 workflow: ransomware
 description: >-
-  The affected laptop is managed by Microsoft Defender for Endpoint only (Secure Endpoint does not
-  know it). The Secure Endpoint isolation rule does not apply; the Defender isolation rule
-  recommends isolating it through Defender, and the payload hash is blocked. The approved
-  isolation executes and verifies through the Defender route.
+  The affected laptop is managed by Microsoft Defender for Endpoint only (Secure Endpoint does not know
+  it). The Secure Endpoint isolation rule does not apply; the Defender isolation rule recommends
+  isolating it through Defender, and the payload hash is blocked. The approved isolation executes
+  through the Defender route. Production parity: block_hash through defender_endpoint cannot be read
+  back by the real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive]
 mode: both
 suite:
@@ -51,5 +52,5 @@ expect:
     - isolate_endpoint:TH-LT-2210
     - block_hash:4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a4f6a8c0e2b4d6f8a
   unrouted: []
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

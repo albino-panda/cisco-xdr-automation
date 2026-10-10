@@ -3,9 +3,13 @@ schema: 1
 name: critical-asset-elevated
 workflow: malicious-powershell
 description: >-
-  The same malicious PowerShell activity on a domain controller (critical asset). Terminating the process and isolating
-  the server need ELEVATED approval with a visible warning; an analyst alone cannot approve, the lead does. The
-  hash and network blocks stay STANDARD.
+  The same malicious PowerShell activity on a domain controller (critical asset). Terminating the
+  process and isolating the server need ELEVATED approval with a visible warning; an analyst alone
+  cannot approve, the lead does. The hash and network blocks stay STANDARD. Production parity: the
+  block_hash and terminate_process recommendations stay UNROUTED (no enabled adapter has a VERIFIED
+  write for them; shown for manual handling, never executed); isolate_endpoint through secure_endpoint
+  cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [critical_asset, true_positive, approve_all]
 mode: both
 suite:
@@ -115,9 +119,12 @@ analyst:
   approvers: [lead]
 expect:
   package: true
-  actions: ['terminate_process:TH-DC-02/4242', 'isolate_endpoint:TH-DC-02', 'block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00',
-    'block_domain:cdn-update.test', 'block_ip:198.51.100.77']
-  elevated: ['terminate_process:TH-DC-02/4242', 'isolate_endpoint:TH-DC-02']
+  actions:
+    - isolate_endpoint:TH-DC-02
+    - block_domain:cdn-update.test
+    - block_ip:198.51.100.77
+  elevated: [isolate_endpoint:TH-DC-02]
+  unrouted: [terminate_process:TH-DC-02/4242, block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00]
   warnings: [ELEVATED APPROVAL REQUIRED, Domain controller]
-  containment: CONTAINED
-  controls: 4
+  containment: PARTIALLY_CONTAINED
+  controls: 3

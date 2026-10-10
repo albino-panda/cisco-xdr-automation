@@ -17,6 +17,7 @@ from tools.simulator.workflow_scenario import (
     check_coverage,
     load_workflow_scenario,
 )
+from tools.simulator.workflow_scenario import executable_anywhere
 from xdr_response import guard
 from xdr_response.errors import ApprovalError
 from xdr_response.models import ActionType, ApprovalLevel, IncidentState, OperationKind
@@ -53,13 +54,16 @@ def test_every_scenario_meets_its_expectations(path: Path, live: bool):
 def test_minimum_scenario_set_and_every_rule_proposed():
     scenarios = [load_workflow_scenario(p) for p in PATHS]
     proposed: set[str] = set()
+    unrouted: set[str] = set()
     for scenario in scenarios:
         run = WorkflowScenarioRun(scenario, live=False)
         run.detect()
         proposed |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.PROPOSED)}
+        unrouted |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)}
         guard._reset_for_test_harness()  # one runtime per process: reset between the runs of this test
-    assert proposed == {r.id for r in WORKFLOW.recommendations}
-    assert check_coverage("mail-bombing", scenarios, WORKFLOW, proposed_rules=proposed) == []
+    assert proposed | (unrouted & {r.id for r in WORKFLOW.recommendations
+                                if not executable_anywhere(r.action)}) == {r.id for r in WORKFLOW.recommendations}
+    assert check_coverage("mail-bombing", scenarios, WORKFLOW, proposed_rules=proposed, unrouted_rules=unrouted) == []
     assert len([s for s in scenarios if s.name.startswith("legacy-")]) == 5
 
 

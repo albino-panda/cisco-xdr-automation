@@ -3,8 +3,13 @@ schema: 1
 name: partial-failure
 workflow: ransomware
 description: >-
-  Everything is approved; the hash block fails at the vendor. Containment is partial, the failed
-  action is reported (never retried silently) and the isolation and session revocation stand.
+  Everything is approved; the session revocation fails at the identity provider. Containment is partial,
+  the failed action is reported (never retried silently) and the isolation stands. The hash block has no
+  VERIFIED write on any enabled adapter (the real Secure Endpoint adapter cannot block hashes) and is
+  UNROUTED, shown for manual handling. Production parity: the block_hash recommendation stays UNROUTED
+  (no enabled adapter has a VERIFIED write for it; shown for manual handling, never executed);
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY.
 tags: [partial_failure, true_positive]
 mode: live
 incident:
@@ -45,16 +50,15 @@ environment:
       record: {kind: user_profile, user: jsmith@example.com, department: Finance, groups: [Finance Users],
                risk_level: low, risk_state: none, account_enabled: true}
   faults:
-    - {kind: FAIL, integration: secure_endpoint, operation: block_hash, times: 10}
+    - {kind: FAIL, integration: entra, operation: revoke_sessions, times: 10}
 analyst: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
   actions:
     - isolate_endpoint:TH-LT-1047
-    - block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f
     - revoke_sessions:jsmith@example.com
+  unrouted: [block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f]
   containment: PARTIALLY_CONTAINED
   results:
     isolate_endpoint:TH-LT-1047: SUCCESS
-    block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f: FAILED
-    revoke_sessions:jsmith@example.com: SUCCESS
+    revoke_sessions:jsmith@example.com: FAILED
   controls: 1

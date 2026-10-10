@@ -3,14 +3,17 @@ schema: 1
 name: tp-approve-all
 workflow: c2
 description: >-
-  True positive on one workstation. Secure Endpoint reports an active C2 beacon detection on
-  TH-LT-1047; the process svc_update.exe (pid 3120, still running) beacons every 60 seconds over
-  HTTPS to beacon-gate.test (198.51.100.45). Umbrella categorises the domain as Command and Control;
-  the domain, URL and process hash are rated MALICIOUS by two sources and Secure Endpoint flags the
-  connection to the IP as MALICIOUS. The package blocks
-  the domain, IP and URL, isolates the workstation and terminates the beaconing process; the
-  process hash is handed off to the malware workflow. The analyst approves everything; every action
-  executes and the four reversible ones are registered as controls.
+  True positive on one workstation. Secure Endpoint reports an active C2 beacon detection on TH-LT-1047;
+  the process svc_update.exe (pid 3120, still running) beacons every 60 seconds over HTTPS to
+  beacon-gate.test (198.51.100.45). Umbrella categorises the domain as Command and Control; the domain,
+  URL and process hash are rated MALICIOUS by two sources and Secure Endpoint flags the connection to
+  the IP as MALICIOUS. The package blocks the domain, IP and URL, isolates the workstation and
+  terminates the beaconing process; the process hash is handed off to the malware workflow. The analyst
+  approves everything; every routed action executes and the reversible ones are registered as controls.
+  Production parity: the terminate_process recommendation stays UNROUTED (no enabled adapter has a
+  VERIFIED write for it; shown for manual handling, never executed); isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel]}
@@ -77,10 +80,9 @@ expect:
     - block_ip:198.51.100.45
     - "block_url:https://beacon-gate.test/api/checkin"
     - isolate_endpoint:TH-LT-1047
-    - terminate_process:TH-LT-1047/3120
   elevated: []
   excluded: []
-  unrouted: []
+  unrouted: [terminate_process:TH-LT-1047/3120]
   below_threshold: []
   risk: {min: 80, max: 100}
   confidence: {min: 60, max: 100}
@@ -89,6 +91,6 @@ expect:
   manual_steps: []
   handoffs: ["malware:c2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0dc2be4c0d"]
   evidence_min: 1
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 4
   notifications: [incident_note, soc_notification, analyst_summary]

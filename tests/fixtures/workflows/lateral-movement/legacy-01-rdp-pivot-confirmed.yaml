@@ -3,12 +3,15 @@ schema: 1
 name: legacy-01-rdp-pivot-confirmed
 workflow: lateral-movement
 description: >-
-  Legacy 01, converted to typed records (C1: session revocation needs approval). A finance
-  workstation with a credential theft detection opens remote desktop sessions to an application
-  server, where a malicious service is then created; the tool is on both hosts. Both hosts are
-  isolated, the account loses its sessions and, because Entra rates it high risk with an anomaly,
-  is disabled, and the tool hash is blocked (new: the legacy plan had no hash block). The account
-  is handed off to account-takeover and the workstation to credential-dumping.
+  Legacy 01, converted to typed records (C1: session revocation needs approval). A finance workstation
+  with a credential theft detection opens remote desktop sessions to an application server, where a
+  malicious service is then created; the tool is on both hosts. Both hosts are isolated, the account
+  loses its sessions and, because Entra rates it high risk with an anomaly, is disabled, and the tool
+  hash is blocked (new: the legacy plan had no hash block). The account is handed off to
+  account-takeover and the workstation to credential-dumping. Production parity: the block_hash
+  recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual
+  handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by the real
+  adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, true_positive]
 legacy_source: workflows/lateral-movement/scenarios/01-rdp-pivot-confirmed.yaml
 mode: both
@@ -94,9 +97,9 @@ expect:
     - isolate_endpoint:SRV-APP-02
     - revoke_sessions:j.doe@example.com
     - disable_user:j.doe@example.com
-    - block_hash:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
   elevated: []
+  unrouted: [block_hash:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef]
   considered: []
   handoffs: ["account-takeover:j.doe@example.com", "credential-dumping:WS-FIN-07"]
-  containment: CONTAINED
-  controls: 4
+  containment: PARTIALLY_CONTAINED
+  controls: 3

@@ -3,14 +3,16 @@ schema: 1
 name: tp-approve-all
 workflow: credential-dumping
 description: >-
-  True positive on a finance workstation. Secure Endpoint reports a critical detection of LSASS
-  memory being read by a rare tool that VirusTotal and Secure Endpoint rate malicious. Two directory
-  accounts are logged on: a standard user and a help-desk operator the identity provider marks
-  privileged. The privileged account's revocation and disable are ELEVATED with a privileged-account
-  warning (the identity provider's flag, 14.11.6). The lead approves everything: the isolation, the
-  tool hash block, both session revocations and the disable of the privileged account execute and
-  verify. The credential reset
-  stays a manual step and the exposed accounts are handed off to account-takeover.
+  True positive on a finance workstation. Secure Endpoint reports a critical detection of LSASS memory
+  being read by a rare tool that VirusTotal and Secure Endpoint rate malicious. Two directory accounts
+  are logged on: a standard user and a help-desk operator the identity provider marks privileged. The
+  privileged account's revocation and disable are ELEVATED with a privileged-account warning (the
+  identity provider's flag, 14.11.6). The lead approves everything: the isolation, the tool hash block,
+  both session revocations and the disable of the privileged account execute. The credential reset stays
+  a manual step and the exposed accounts are handed off to account-takeover. Production parity: the
+  block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for
+  manual handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by the
+  real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [true_positive, approve_all]
 mode: both
 incident:
@@ -73,11 +75,10 @@ expect:
     - revoke_sessions:jsmith@example.com
     - revoke_sessions:it.support@example.com
     - disable_user:it.support@example.com
-    - block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed
   elevated: [revoke_sessions:it.support@example.com, disable_user:it.support@example.com]
   warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
   excluded: []
-  unrouted: []
+  unrouted: [block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed]
   below_threshold: []
   risk: {min: 80, max: 100}
   confidence: {min: 50, max: 100}
@@ -86,6 +87,6 @@ expect:
   manual_steps: [credential-reset:TH-LT-1047]
   handoffs: [account-takeover:jsmith@example.com, account-takeover:it.support@example.com]
   evidence_min: 1
-  containment: CONTAINED
-  controls: 3
+  containment: PARTIALLY_CONTAINED
+  controls: 2
   notifications: [incident_note, soc_notification, analyst_summary]

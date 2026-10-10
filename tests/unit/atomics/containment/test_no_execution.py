@@ -166,8 +166,10 @@ def test_simulated_lab_routes(lab):
         "block_domain_umbrella": "umbrella", "block_url": "umbrella", "block_ip": "meraki",
         "block_hash": "defender_endpoint", "revoke_entra_sessions": "entra", "disable_entra_user": "entra",
         "quarantine_email": "secure_email", "delete_malicious_email": "defender_o365",
-        "intune_device_action": "intune", "terminate_process": "defender_endpoint",
-        "quarantine_file": "defender_endpoint", "remove_persistence": None, "remove_privileged_role": "entra",
+        "intune_device_action": "intune",
+        # No real adapter has a VERIFIED write for these, and the simulated adapters mirror the real ones
+        # (production parity, architecture 14.14.3 and 15.2): unrouted, for manual handling.
+        "terminate_process": None, "quarantine_file": None, "remove_persistence": None, "remove_privileged_role": "entra",
     }
 
 

@@ -3,9 +3,12 @@ schema: 1
 name: tp-approve-selected
 workflow: lateral-movement
 description: >-
-  True positive over an admin share: TH-LT-1047 pushes a tool to TH-SRV-0310 and starts it as a
-  service. The analyst approves only the source isolation and the session revocation; the target
-  isolation and the hash block are recorded as rejected by the analyst and never executed.
+  True positive over an admin share: TH-LT-1047 pushes a tool to TH-SRV-0310 and starts it as a service.
+  The analyst approves only the source isolation and the session revocation; the target isolation and
+  the hash block are recorded as rejected by the analyst and never executed. Production parity: the
+  block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for
+  manual handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by the
+  real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [true_positive, approve_selected]
 mode: live
 incident:
@@ -75,12 +78,11 @@ expect:
   actions:
     - isolate_endpoint:TH-LT-1047
     - isolate_endpoint:TH-SRV-0310
-    - block_hash:8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c
     - revoke_sessions:jsmith@example.com
+  unrouted: [block_hash:8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c]
   results:
     isolate_endpoint:TH-LT-1047: SUCCESS
     revoke_sessions:jsmith@example.com: SUCCESS
     isolate_endpoint:TH-SRV-0310: REJECTED_BY_ANALYST
-    block_hash:8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c: REJECTED_BY_ANALYST
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 1

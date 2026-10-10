@@ -110,7 +110,10 @@ def _host(facts: dict[str, Any], host: str) -> dict[str, Any]:
 
 
 def _proposed(run: WorkflowRun) -> set[str]:
-    return {o.selector for o in run.outcomes_with(RuleOutcomeStatus.PROPOSED)}
+    """Recommended actions: proposed, or UNROUTED (the simulated adapters do only what the real ones do,
+    so e.g. a process termination or a Secure Endpoint hash block has no executor; it is still recommended)."""
+    return ({f"{p.action_type.value}:{p.target}" for p in run.proposals}
+            | {o.selector for o in run.outcomes_with(RuleOutcomeStatus.UNROUTED)})
 
 
 def _considered(run: WorkflowRun) -> dict[str, bool]:

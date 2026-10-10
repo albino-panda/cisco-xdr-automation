@@ -3,8 +3,12 @@ schema: 1
 name: tp-approve-selected
 workflow: dns-tunneling
 description: >-
-  The same tunnel. The analyst approves only the process termination and the isolation; the domain block
-  goes through the network change window and is rejected here. Only the selected actions execute.
+  The same tunnel. The analyst approves only the isolation (the process termination is not in the
+  package, see below); the domain block goes through the network change window and is rejected here.
+  Only the selected actions execute. Production parity: the terminate_process recommendation stays
+  UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual handling, never executed);
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [true_positive, approve_selected]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
@@ -60,17 +64,16 @@ environment:
       subject: "d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1"
       record: {kind: hash_prevalence, sha256: "d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1d7c3a9e1",
                file_name: updsvc.exe, prevalence: 1, endpoints: [TH-LT-1047]}
-analyst: {decision: APPROVE_SELECTED, approvers: [analyst], select: [terminate_process:TH-LT-1047/4242, isolate_endpoint:TH-LT-1047],
+analyst: {decision: APPROVE_SELECTED, approvers: [analyst], select: [isolate_endpoint:TH-LT-1047],
           comment: the domain block goes through the network change window}
 expect:
   package: true
   actions:
     - block_domain:cdn-update.test
-    - terminate_process:TH-LT-1047/4242
     - isolate_endpoint:TH-LT-1047
+  unrouted: [terminate_process:TH-LT-1047/4242]
   results:
-    terminate_process:TH-LT-1047/4242: SUCCESS
     isolate_endpoint:TH-LT-1047: SUCCESS
     block_domain:cdn-update.test: REJECTED_BY_ANALYST
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 1

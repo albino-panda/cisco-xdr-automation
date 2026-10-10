@@ -17,6 +17,7 @@ from tools.simulator.workflow_scenario import (
     check_coverage,
     load_workflow_scenario,
 )
+from tools.simulator.workflow_scenario import executable_anywhere
 from xdr_response import guard
 from xdr_response.errors import ApprovalError, ApproverNotAllowedError
 from xdr_response.models import ActionResultStatus, ApprovalLevel, IncidentState
@@ -45,15 +46,18 @@ def test_the_scenario_set_meets_the_minimum_and_every_rule_is_proposed_somewhere
     assert len([n for n in names if n.startswith("edge-")]) >= 2
     scenarios = [load_workflow_scenario(p) for p in _paths()]
     proposed: set[str] = set()
+    unrouted: set[str] = set()
     for scenario in scenarios:
         run = WorkflowScenarioRun(scenario, live=False)
         run.detect()
         assert run.workflow_run is not None, scenario.name
         proposed |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.PROPOSED)}
+        unrouted |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)}
         assert not run.workflow_run.outcomes_with(RuleOutcomeStatus.ERROR), scenario.name
         guard._reset_for_test_harness()  # one runtime per process: reset between the runs of this test
-    assert proposed == {r.id for r in WORKFLOW.recommendations}
-    assert check_coverage("credential-dumping", scenarios, WORKFLOW, proposed_rules=proposed) == []
+    assert proposed | (unrouted & {r.id for r in WORKFLOW.recommendations
+                                if not executable_anywhere(r.action)}) == {r.id for r in WORKFLOW.recommendations}
+    assert check_coverage("credential-dumping", scenarios, WORKFLOW, proposed_rules=proposed, unrouted_rules=unrouted) == []
 
 
 def test_every_legacy_scenario_is_migrated_with_its_source():
@@ -94,9 +98,11 @@ def test_live_nothing_changes_before_the_human_decision_then_approved_actions_ex
     assert set(statuses) == {f"{a.action_type.value}:{a.target}" for a in package.actions}
     assert set(statuses.values()) == {ActionResultStatus.SUCCESS}
     changed = {c.operation for c in run.environment.state_changing_calls()}
-    assert changed == {"isolate_endpoint", "revoke_sessions", "disable_user", "block_hash"}
+    assert changed == {"isolate_endpoint", "revoke_sessions", "disable_user"}
+    # the real Secure Endpoint adapter cannot block hashes: recommended, reported UNROUTED, never executed
+    assert any(s.startswith("block_hash:") for s in {o.selector for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)})
     assert all(r.verification is not None for r in report.results)
-    assert len(run.runtime.registry.list(incident_id=run.incident_id)) == 3  # revocation registers no control
+    assert len(run.runtime.registry.list(incident_id=run.incident_id)) == 2  # revocation registers no control
 
 
 @pytest.mark.parametrize("alias", ["ai", "automation"])
@@ -128,7 +134,8 @@ def test_a_domain_controller_needs_the_lead_and_an_analyst_alone_is_refused():
         run.decide({"decision": "APPROVE_ALL"}, approvers=["analyst"])
     assert run.environment.state_changing_calls() == []
     decision = run.decide({"decision": "APPROVE_ALL"}, approvers=["lead"])
-    assert decision.report is not None and decision.report.overall.value == "CONTAINED"
+    # Secure Endpoint cannot read the isolation back (UNABLE_TO_VERIFY): partial, never CONTAINED
+    assert decision.report is not None and decision.report.overall.value == "PARTIALLY_CONTAINED"
     manual = {c.subject for c in run.workflow_run.considered if c.manual}
     assert manual == {"domain-credential-reset:DC-02"}
 
@@ -149,7 +156,7 @@ def test_restoration_needs_its_own_human_release_approval():
     run.detect()
     run.decide()
     controls = run.runtime.registry.list(incident_id=run.incident_id)
-    assert {c.action_type.value for c in controls} == {"isolate_endpoint", "disable_user", "block_hash"}
+    assert {c.action_type.value for c in controls} == {"isolate_endpoint", "disable_user"}
     calls = len(run.environment.state_changing_calls())
     run.propose_release()
     assert len(run.environment.state_changing_calls()) == calls  # proposing a release changes nothing
@@ -158,8 +165,8 @@ def test_restoration_needs_its_own_human_release_approval():
     assert len(run.environment.state_changing_calls()) == calls
     # the disabled account is privileged (ELEVATED), so its release needs the elevated approver too
     result = run.decide_release({"decision": "APPROVE_ALL"}, approvers=["lead"])
-    assert result.report is not None and result.report.overall.value == "RESTORED"
-    assert run.orchestrator.get_incident(run.incident_id).state is IncidentState.RESTORED
+    assert result.report is not None and result.report.overall.value == "PARTIALLY_RESTORED"
+    assert run.orchestrator.get_incident(run.incident_id).state is IncidentState.AWAITING_RELEASE_APPROVAL
 
 
 def test_rejected_package_closes_without_any_control():

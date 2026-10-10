@@ -51,7 +51,10 @@ def test_a_true_positive_proposes_both_actions_with_cited_evidence(lab):
         assert proposal.evidence and all(e.data["record_id"] in run.index for e in proposal.evidence)
         assert type(proposal.risk_score) is int and type(proposal.confidence_score) is int
         assert "settings " in proposal.rationale  # breakdown.explain() reaches the package
-        assert proposal.params["integration"] == "secure_endpoint"
+    # Isolation is pinned to Secure Endpoint; block_hash routes to Defender for Endpoint, the only adapter
+    # in the lab with a VERIFIED hash-block write (Secure Endpoint has none: production parity, 14.14.3).
+    assert {p.action_type: p.params["integration"] for p in run.proposals} == {
+        ActionType.ISOLATE_ENDPOINT: "secure_endpoint", ActionType.BLOCK_HASH: "defender_endpoint"}
     isolate = next(p for p in run.proposals if p.action_type is ActionType.ISOLATE_ENDPOINT)
     assert isolate.rationale.startswith(f"malicious detection on {HOST}; risk ")
     assert isolate.asset is not None and isolate.asset.groups == ("Workstations",)
@@ -85,7 +88,7 @@ def test_summary_and_raw_results(lab):
     assert summary.risk_score == run.risk_score and summary.confidence_score == run.confidence_score
     assert summary.evidence and all(line.startswith("[rec_") for line in summary.evidence)
     assert HOST in summary.blast_radius.endpoints
-    assert {r.integration for r in run.raw_enrichments()} == {"secure_endpoint", "virustotal"}
+    assert {r.integration for r in run.raw_enrichments()} == {"secure_endpoint", "defender_endpoint", "virustotal"}
     assert {r.action_type for r in run.raw_investigations()} == {ActionType.INVESTIGATE_ENDPOINT}
 
 

@@ -3,9 +3,12 @@ schema: 1
 name: edge-process-already-ended
 workflow: malicious-powershell
 description: >-
-  Edge case: the malicious PowerShell process already exited before the investigation. Termination is not proposed
-  (nothing is running) and is listed as considered; the endpoint is still isolated and the payload hash and download
-  domain are still blocked.
+  Edge case: the malicious PowerShell process already exited before the investigation. Termination is
+  not proposed (nothing is running) and is listed as considered; the endpoint is still isolated and the
+  payload hash and download domain are still blocked. Production parity: the block_hash recommendation
+  stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual handling, never
+  executed); isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive, approve_all]
 mode: both
 suite:
@@ -84,8 +87,10 @@ analyst:
   approvers: [analyst]
 expect:
   package: true
-  actions: ['isolate_endpoint:TH-LT-7705', 'block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00',
-    'block_domain:cdn-update.test']
+  actions:
+    - isolate_endpoint:TH-LT-7705
+    - block_domain:cdn-update.test
+  unrouted: [block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00]
   considered: ['terminate_process:TH-LT-7705/4242']
-  containment: CONTAINED
-  controls: 3
+  containment: PARTIALLY_CONTAINED
+  controls: 2

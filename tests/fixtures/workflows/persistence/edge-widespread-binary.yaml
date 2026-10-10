@@ -4,9 +4,12 @@ name: edge-widespread-binary
 workflow: persistence
 description: >-
   Edge case. A malicious service binary is running on TH-LT-5501, but the estate search sees the same
-  binary on 40 endpoints. The endpoint is isolated and the service process terminated; the hash is
-  not proposed for a fleet-wide block (more than 10 endpoints) and is listed as considered with its
-  prevalence record, so a human decides. Removing the service is the manual step.
+  binary on 40 endpoints. The endpoint is isolated and the service process terminated; the hash is not
+  proposed for a fleet-wide block (more than 10 endpoints) and is listed as considered with its
+  prevalence record, so a human decides. Removing the service is the manual step. Production parity: the
+  terminate_process recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown
+  for manual handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by
+  the real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], virustotal: [intel]}
@@ -59,12 +62,11 @@ expect:
   package: true
   actions:
     - isolate_endpoint:TH-LT-5501
-    - terminate_process:TH-LT-5501/5150
   elevated: []
   excluded: []
-  unrouted: []
+  unrouted: [terminate_process:TH-LT-5501/5150]
   below_threshold: []
   considered: [block_hash:d15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5edd15ea5ed]
   manual_steps: [remove_persistence:TH-LT-5501/svc-wintelemetryhost]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 1

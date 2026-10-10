@@ -3,8 +3,10 @@ schema: 1
 name: dry-run
 workflow: ransomware
 description: >-
-  Dry run: the package is proposed and simulated; nothing changes at any vendor and the incident
-  stays AWAITING_APPROVAL after the (simulated) approval.
+  Dry run: the package is proposed and simulated; nothing changes at any vendor and the incident stays
+  AWAITING_APPROVAL after the (simulated) approval. Production parity: the block_hash recommendation
+  stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual handling, never
+  executed).
 tags: [dry_run, true_positive]
 mode: dry_run
 incident:
@@ -48,12 +50,11 @@ analyst: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
   actions:
     - isolate_endpoint:TH-LT-1047
-    - block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f
     - revoke_sessions:jsmith@example.com
+  unrouted: [block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f]
   dry_run_lines:
     - DRY RUN
     - "Would isolate: TH-LT-1047"
-    - "Would block: 5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f"
     - "Would revoke sessions: jsmith@example.com"
     - No containment actions executed.
   notifications: [incident_note, soc_notification, analyst_summary]

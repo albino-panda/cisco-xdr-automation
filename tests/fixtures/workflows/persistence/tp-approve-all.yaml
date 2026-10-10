@@ -4,10 +4,14 @@ name: tp-approve-all
 workflow: persistence
 description: >-
   True positive on one workstation. A new HKCU Run value launches a binary that Secure Endpoint and
-  VirusTotal rate malicious; the agent reports an active detection and the binary is still running.
-  The package isolates the workstation, terminates the running persisted process and blocks the
-  binary's hash. Removing the Run value has no VERIFIED vendor write and is listed as a manual step.
-  The analyst approves everything; every action executes and the reversible ones are registered.
+  VirusTotal rate malicious; the agent reports an active detection and the binary is still running. The
+  package isolates the workstation, terminates the running persisted process and blocks the binary's
+  hash. Removing the Run value has no VERIFIED vendor write and is listed as a manual step. The analyst
+  approves everything; every routed action executes and the reversible ones are registered. Production
+  parity: the block_hash and terminate_process recommendations stay UNROUTED (no enabled adapter has a
+  VERIFIED write for them; shown for manual handling, never executed); isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], virustotal: [intel]}
@@ -64,11 +68,9 @@ expect:
   package: true
   actions:
     - isolate_endpoint:TH-LT-1047
-    - terminate_process:TH-LT-1047/4242
-    - block_hash:0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5
   elevated: []
   excluded: []
-  unrouted: []
+  unrouted: [terminate_process:TH-LT-1047/4242, block_hash:0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5]
   below_threshold: []
   risk: {min: 80, max: 100}
   confidence: {min: 60, max: 100}
@@ -77,6 +79,6 @@ expect:
   manual_steps: [remove_persistence:TH-LT-1047/run-onedrivesync]
   handoffs: []
   evidence_min: 1
-  containment: CONTAINED
-  controls: 2
+  containment: PARTIALLY_CONTAINED
+  controls: 1
   notifications: [incident_note, soc_notification, analyst_summary]

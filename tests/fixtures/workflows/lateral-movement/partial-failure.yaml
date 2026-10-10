@@ -4,8 +4,11 @@ name: partial-failure
 workflow: lateral-movement
 description: >-
   Everything is approved; the isolation of the target server fails at the vendor. Containment is
-  partial, the failed action is reported (never retried silently), and the source isolation, the
-  hash block and the session revocation stand.
+  partial, the failed action is reported (never retried silently), and the source isolation, the hash
+  block and the session revocation stand. Production parity: the block_hash recommendation stays
+  UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual handling, never executed);
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY.
 tags: [partial_failure, true_positive]
 mode: live
 incident:
@@ -74,12 +77,11 @@ expect:
   actions:
     - isolate_endpoint:TH-LT-1047
     - isolate_endpoint:TH-SRV-0310
-    - block_hash:8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c
     - revoke_sessions:jsmith@example.com
+  unrouted: [block_hash:8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c]
   containment: PARTIALLY_CONTAINED
   results:
     isolate_endpoint:TH-LT-1047: SUCCESS
     isolate_endpoint:TH-SRV-0310: FAILED
-    block_hash:8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c: SUCCESS
     revoke_sessions:jsmith@example.com: SUCCESS
-  controls: 2
+  controls: 1

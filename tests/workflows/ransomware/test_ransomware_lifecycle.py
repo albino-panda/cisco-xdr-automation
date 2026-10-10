@@ -71,7 +71,7 @@ def test_an_analyst_alone_cannot_approve_a_domain_controller_isolation():
         run.decide({"decision": "APPROVE_ALL"}, approvers=["analyst"])
     assert _writes(run) == []
     decision = run.decide({"decision": "APPROVE_ALL"}, approvers=["lead"])
-    assert decision.report is not None and decision.report.overall.value == "CONTAINED"
+    assert decision.report is not None and decision.report.overall.value == "PARTIALLY_CONTAINED"
 
 
 def test_approved_containment_executes_and_verifies_automatically():
@@ -98,7 +98,7 @@ def test_restoration_needs_its_own_human_release_approval():
     run.detect()
     run.decide()
     controls = run.runtime.registry.list(incident_id=run.incident_id)
-    assert len(controls) == 2
+    assert len(controls) == 1  # the isolation; the hash block has no executor (UNROUTED)
     writes_after_containment = len(_writes(run))
     release = run.propose_release()
     assert _writes(run)[writes_after_containment:] == []  # proposing a release changes nothing
@@ -106,8 +106,10 @@ def test_restoration_needs_its_own_human_release_approval():
         run.decide_release({"decision": "APPROVE_ALL"}, approvers=["ai"])
     assert _writes(run)[writes_after_containment:] == []
     result = run.decide_release({"decision": "APPROVE_ALL"}, approvers=["analyst"])
-    assert release is not None and result.report is not None and result.report.overall.value == "RESTORED"
-    assert run.orchestrator.get_incident(run.incident_id).state is IncidentState.RESTORED
+    assert release is not None and result.report is not None
+    # only a Secure Endpoint release, not read back: the control waits for a human (never RESTORED)
+    assert result.report.overall.value == "RESTORATION_FAILED"
+    assert run.orchestrator.get_incident(run.incident_id).state is IncidentState.AWAITING_RELEASE_APPROVAL
 
 
 def test_live_and_dry_run_score_identically():

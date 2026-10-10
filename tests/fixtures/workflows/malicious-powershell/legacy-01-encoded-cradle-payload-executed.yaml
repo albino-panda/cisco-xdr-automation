@@ -3,11 +3,15 @@ schema: 1
 name: legacy-01-encoded-cradle-payload-executed
 workflow: malicious-powershell
 description: >-
-  Migrated legacy scenario 01 (true positive). An Office application started PowerShell (the vendor reports encoded
-  content); it downloaded a file from a newly seen malicious domain and ran it. The payload hash is malicious and
-  seen only on this host. The PowerShell process had already exited. The package blocks the download domain and
-  isolates the host (as in the legacy plan) and, per the brief's package, blocks the payload hash; each behind approval.
-  The payload is handed off to the malware workflow.
+  Migrated legacy scenario 01 (true positive). An Office application started PowerShell (the vendor
+  reports encoded content); it downloaded a file from a newly seen malicious domain and ran it. The
+  payload hash is malicious and seen only on this host. The PowerShell process had already exited. The
+  package blocks the download domain and isolates the host (as in the legacy plan) and, per the brief's
+  package, blocks the payload hash; each behind approval. The payload is handed off to the malware
+  workflow. Production parity: the block_hash recommendation stays UNROUTED (no enabled adapter has a
+  VERIFIED write for it; shown for manual handling, never executed); isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/malicious-powershell/scenarios/01-encoded-cradle-payload-executed.yaml
 mode: both
@@ -102,9 +106,10 @@ analyst:
   approvers: [analyst]
 expect:
   package: true
-  actions: ['block_domain:cdn-update.test', 'isolate_endpoint:WS-FIN-014', 'block_hash:aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11']
+  actions: [block_domain:cdn-update.test, isolate_endpoint:WS-FIN-014]
   elevated: []
+  unrouted: [block_hash:aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11]
   considered: ['terminate_process:WS-FIN-014/2400']
   handoffs: ['malware:aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11']
-  containment: CONTAINED
-  controls: 3
+  containment: PARTIALLY_CONTAINED
+  controls: 2

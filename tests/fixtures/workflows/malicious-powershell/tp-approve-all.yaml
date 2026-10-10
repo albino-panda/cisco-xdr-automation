@@ -3,12 +3,16 @@ schema: 1
 name: tp-approve-all
 workflow: malicious-powershell
 description: >-
-  True positive on one workstation. A document editor started PowerShell; Secure Endpoint flags the PowerShell process
-  as a malicious script downloader. The process wrote a payload whose origin is a malicious domain, started it,
-  and keeps calling back to a malicious IP. The payload is rare (one endpoint). The package terminates the PowerShell
-  process, isolates the workstation, blocks the payload hash, the download domain and the callback IP. The analyst
-  approves everything; every action executes and the reversible ones are registered as controls. The payload file
-  is handed off to the malware workflow.
+  True positive on one workstation. A document editor started PowerShell; Secure Endpoint flags the
+  PowerShell process as a malicious script downloader. The process wrote a payload whose origin is a
+  malicious domain, started it, and keeps calling back to a malicious IP. The payload is rare (one
+  endpoint). The package terminates the PowerShell process, isolates the workstation, blocks the payload
+  hash, the download domain and the callback IP. The analyst approves everything; every routed action
+  executes and the reversible ones are registered as controls. The payload file is handed off to the
+  malware workflow. Production parity: the block_hash and terminate_process recommendations stay
+  UNROUTED (no enabled adapter has a VERIFIED write for them; shown for manual handling, never
+  executed); isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [true_positive, approve_all]
 mode: both
 suite:
@@ -118,11 +122,13 @@ analyst:
   approvers: [analyst]
 expect:
   package: true
-  actions: ['terminate_process:TH-LT-1047/4242', 'isolate_endpoint:TH-LT-1047', 'block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00',
-    'block_domain:cdn-update.test', 'block_ip:198.51.100.77']
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - block_domain:cdn-update.test
+    - block_ip:198.51.100.77
   elevated: []
   excluded: []
-  unrouted: []
+  unrouted: [terminate_process:TH-LT-1047/4242, block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00]
   below_threshold: []
   risk: {min: 80, max: 100}
   confidence: {min: 60, max: 100}
@@ -131,6 +137,6 @@ expect:
   manual_steps: []
   handoffs: ['malware:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00']
   evidence_min: 1
-  containment: CONTAINED
-  controls: 4
+  containment: PARTIALLY_CONTAINED
+  controls: 3
   notifications: [incident_note, soc_notification, analyst_summary]

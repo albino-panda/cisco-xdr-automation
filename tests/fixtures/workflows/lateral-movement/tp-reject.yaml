@@ -3,8 +3,10 @@ schema: 1
 name: tp-reject
 workflow: lateral-movement
 description: >-
-  True positive over an admin share; the analyst rejects the whole package (the incident response
-  team contains the segment out of band). The incident closes and nothing executes.
+  True positive over an admin share; the analyst rejects the whole package (the incident response team
+  contains the segment out of band). The incident closes and nothing executes. Production parity: the
+  block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for
+  manual handling, never executed).
 tags: [true_positive, reject]
 mode: both
 incident:
@@ -71,8 +73,8 @@ expect:
   actions:
     - isolate_endpoint:TH-LT-1047
     - isolate_endpoint:TH-SRV-0310
-    - block_hash:8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c
     - revoke_sessions:jsmith@example.com
+  unrouted: [block_hash:8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c]
   decision_state: CLOSED
   controls: 0
   final_state: CLOSED

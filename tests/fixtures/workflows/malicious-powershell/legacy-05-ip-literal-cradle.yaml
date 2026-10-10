@@ -3,13 +3,15 @@ schema: 1
 name: legacy-05-ip-literal-cradle
 workflow: malicious-powershell
 description: >-
-  Migrated legacy scenario 05 (PowerShell-specific edge case). PowerShell downloaded straight from an external IP
-  address, so there is no domain to block and the dropped file's hash is not known. The host has a malicious Secure
-  Endpoint detection after the download, and the IP is malicious (Secure Endpoint flags the connection and Cisco
-  XDR reports a Talos verdict), so the endpoint is isolated (legacy executed-payload rule). The brief's package
-  now also blocks the C2 IP (the legacy spec left IP blocks to the c2 workflow). The legacy address 203.0.113.45
-  lies in the lab's production-server CIDR, so the migrated scenario uses 198.51.100.45 to keep the C2 block STANDARD.
-  The PowerShell process had exited.
+  Migrated legacy scenario 05 (PowerShell-specific edge case). PowerShell downloaded straight from an
+  external IP address, so there is no domain to block and the dropped file's hash is not known. The host
+  has a malicious Secure Endpoint detection after the download, and the IP is malicious (Secure Endpoint
+  flags the connection and Cisco XDR reports a Talos verdict), so the endpoint is isolated (legacy
+  executed-payload rule). The brief's package now also blocks the C2 IP (the legacy spec left IP blocks
+  to the c2 workflow). The legacy address 203.0.113.45 lies in the lab's production-server CIDR, so the
+  migrated scenario uses 198.51.100.45 to keep the C2 block STANDARD. The PowerShell process had exited.
+  Production parity: isolate_endpoint through secure_endpoint cannot be read back by the real adapter
+  and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/malicious-powershell/scenarios/05-ip-literal-cradle.yaml
 mode: both
@@ -84,5 +86,5 @@ expect:
   actions: ['isolate_endpoint:WS-HR-007', 'block_ip:198.51.100.45']
   elevated: []
   considered: ['terminate_process:WS-HR-007/6600']
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

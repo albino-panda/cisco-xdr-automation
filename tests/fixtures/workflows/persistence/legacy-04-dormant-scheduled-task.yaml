@@ -5,11 +5,14 @@ workflow: persistence
 description: >-
   Migrated legacy scenario 04 (edge case). A malicious binary was registered as a weekly scheduled task
   but has not run yet, so the host has only a suspicious detection. A second incident binary has no
-  verdict (the lookup returned nothing). The package blocks only the malicious hash so the task cannot
-  launch it; the host without active malicious execution is not isolated (listed as considered:
-  dormant) and the unknown binary is left to the analyst (listed as considered). Deleting the task is
-  the manual step.
-tags: [legacy, true_positive, approve_all]
+  verdict (the lookup returned nothing). Only a block of the malicious hash is recommended, so the task
+  cannot launch it, and that block is UNROUTED: no enabled adapter has a VERIFIED hash block (the real
+  Secure Endpoint adapter cannot block hashes), so it is shown for manual handling and no package is
+  proposed. The host without active malicious execution is not isolated (listed as considered: dormant)
+  and the unknown binary is left to the analyst (listed as considered). Deleting the task is the manual
+  step. Production parity: the block_hash recommendation stays UNROUTED (no enabled adapter has a
+  VERIFIED write for it; shown for manual handling, never executed).
+tags: [legacy, true_positive]
 legacy_source: workflows/persistence/scenarios/04-dormant-scheduled-task.yaml
 mode: both
 suite: {secure_endpoint: [endpoint], virustotal: [intel]}
@@ -59,14 +62,11 @@ environment:
       atomic: search_hash_enterprise
       subject: 5e6f708192a3b4c55e6f708192a3b4c55e6f708192a3b4c55e6f708192a3b4c5
       record: {kind: hash_prevalence, sha256: 5e6f708192a3b4c55e6f708192a3b4c55e6f708192a3b4c55e6f708192a3b4c5, prevalence: 0}
-analyst: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
-  package: true
-  actions:
-    - block_hash:4d5e6f708192a3b44d5e6f708192a3b44d5e6f708192a3b44d5e6f708192a3b4
+  package: false
+  actions: []
   elevated: []
   excluded: []
+  unrouted: [block_hash:4d5e6f708192a3b44d5e6f708192a3b44d5e6f708192a3b44d5e6f708192a3b4]
   considered: [isolate_endpoint:WS-HR-033, block_hash:5e6f708192a3b4c55e6f708192a3b4c55e6f708192a3b4c55e6f708192a3b4c5]
   manual_steps: [remove_persistence:WS-HR-033/task-updatecheckweekly]
-  containment: CONTAINED
-  controls: 1

@@ -3,10 +3,13 @@ schema: 1
 name: degraded-source
 workflow: ransomware
 description: >-
-  Entra (an expected source) is unavailable while the user is investigated. The run notes the
-  degraded source and lowers confidence, and still recommends the isolation, the hash block and
-  the session revocation from the Secure Endpoint evidence that places the account on the
-  encrypting host. No account disable is proposed: nothing confirms the account compromised.
+  Entra (an expected source) is unavailable while the user is investigated. The run notes the degraded
+  source and lowers confidence, and still recommends the isolation, the hash block and the session
+  revocation from the Secure Endpoint evidence that places the account on the encrypting host. No
+  account disable is proposed: nothing confirms the account compromised. Production parity: the
+  block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for
+  manual handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by the
+  real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [degraded_source, true_positive]
 mode: both
 incident:
@@ -53,7 +56,7 @@ expect:
   package: true
   actions:
     - isolate_endpoint:TH-LT-1047
-    - block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f
     - revoke_sessions:jsmith@example.com
+  unrouted: [block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f]
   degraded_sources: [entra]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED

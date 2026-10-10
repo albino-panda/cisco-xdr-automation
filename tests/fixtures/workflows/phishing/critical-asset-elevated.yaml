@@ -5,7 +5,10 @@ workflow: phishing
 description: >-
   The recipient who clicked and then signed in from an unfamiliar location holds the Global
   Administrator role. Revoking the sessions and disabling the account need ELEVATED approval with a
-  visible privileged-account warning; an analyst alone cannot approve, the lead does.
+  visible privileged-account warning; an analyst alone cannot approve, the lead does. Production parity:
+  the block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown
+  for manual handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by
+  the real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [critical_asset, true_positive]
 mode: both
 suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
@@ -102,10 +105,10 @@ expect:
     - "quarantine_email:<20260115.0900.4471@invoice-portal.example>"
     - "quarantine_email:<20260115.0902.4472@invoice-portal.example>"
     - block_domain:invoice-portal.example
-    - block_hash:1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b
     - revoke_sessions:jdoe@example.com
     - disable_user:jdoe@example.com
     - isolate_endpoint:TH-LT-1047
   elevated: [revoke_sessions:jdoe@example.com, disable_user:jdoe@example.com]
+  unrouted: [block_hash:1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b]
   warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED

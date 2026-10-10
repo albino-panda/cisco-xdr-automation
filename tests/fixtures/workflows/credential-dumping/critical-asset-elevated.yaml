@@ -3,11 +3,14 @@ schema: 1
 name: critical-asset-elevated
 workflow: credential-dumping
 description: >-
-  LSASS memory is read on an operations workstation where a member of Domain Admins is logged on
-  next to a standard user. The revocation and disable of the Domain Admins member need ELEVATED
-  approval with a visible privileged-account warning (never skipped): an analyst alone cannot
-  approve the package and the lead approves. The workstation isolation, the standard user's
-  revocation and the tool hash block need standard approval.
+  LSASS memory is read on an operations workstation where a member of Domain Admins is logged on next to
+  a standard user. The revocation and disable of the Domain Admins member need ELEVATED approval with a
+  visible privileged-account warning (never skipped): an analyst alone cannot approve the package and
+  the lead approves. The workstation isolation, the standard user's revocation and the tool hash block
+  need standard approval. Production parity: the block_hash recommendation stays UNROUTED (no enabled
+  adapter has a VERIFIED write for it; shown for manual handling, never executed); isolate_endpoint
+  through secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so
+  containment is PARTIALLY_CONTAINED.
 tags: [critical_asset, true_positive, approve_all]
 mode: both
 incident:
@@ -60,10 +63,10 @@ expect:
     - revoke_sessions:ops.lead@example.com
     - revoke_sessions:dokafor@example.com
     - disable_user:ops.lead@example.com
-    - block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed
   elevated: [revoke_sessions:ops.lead@example.com, disable_user:ops.lead@example.com]
+  unrouted: [block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed]
   warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
   manual_steps: [credential-reset:TH-LT-3388]
   handoffs: [account-takeover:ops.lead@example.com, account-takeover:dokafor@example.com]
-  containment: CONTAINED
-  controls: 3
+  containment: PARTIALLY_CONTAINED
+  controls: 2

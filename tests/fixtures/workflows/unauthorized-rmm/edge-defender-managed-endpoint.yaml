@@ -6,9 +6,13 @@ description: >-
   Edge case: the endpoint is managed by Defender for Endpoint only (machine id, no Secure Endpoint
   connector), and the RustDesk client talks directly to a self-hosted relay IP that Defender's own
   network telemetry rates MALICIOUS (no relay domain). Isolation is proposed through Defender (the
-  Secure Endpoint rule does not apply); the process termination, the binary block and the peer IP
-  block land on Defender too. Secure Endpoint and Umbrella (both required) are not enabled in this
-  tenant: the run notes it and confidence drops, but the recommendation stands on the other evidence.
+  Secure Endpoint rule does not apply); the process termination, the binary block and the peer IP block
+  land on Defender too. Secure Endpoint and Umbrella (both required) are not enabled in this tenant: the
+  run notes it and confidence drops, but the recommendation stands on the other evidence. Production
+  parity: the terminate_process recommendation stays UNROUTED (no enabled adapter has a VERIFIED write
+  for it; shown for manual handling, never executed); block_hash and block_ip through defender_endpoint
+  cannot be read back by the real adapters and end UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive, approve_all]
 mode: both
 suite: {defender_endpoint: [endpoint, network], virustotal: [intel], entra: [identity]}
@@ -59,14 +63,13 @@ analyst: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
   package: true
   actions:
-    - terminate_process:TH-LT-3301/6610
     - block_hash:7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d
     - block_ip:198.51.100.140
     - isolate_endpoint:TH-LT-3301
   elevated: []
   excluded: []
-  unrouted: []
+  unrouted: [terminate_process:TH-LT-3301/6610]
   considered: []
   manual_steps: [uninstall RustDesk on TH-LT-3301]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 3

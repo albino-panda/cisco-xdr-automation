@@ -5,7 +5,10 @@ workflow: dns-tunneling
 description: >-
   The same tunnel, everything approved, but Umbrella refuses the destination-list write: the domain
   block FAILS while the termination and the isolation succeed. The overall result is PARTIALLY_CONTAINED
-  and the failed block is reported, never retried silently.
+  and the failed block is reported, never retried silently. Production parity: the terminate_process
+  recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual
+  handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by the real
+  adapter and ends UNABLE_TO_VERIFY.
 tags: [partial_failure, true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
@@ -68,11 +71,10 @@ expect:
   package: true
   actions:
     - block_domain:cdn-update.test
-    - terminate_process:TH-LT-1047/4242
     - isolate_endpoint:TH-LT-1047
+  unrouted: [terminate_process:TH-LT-1047/4242]
   containment: PARTIALLY_CONTAINED
   results:
     block_domain:cdn-update.test: FAILED
-    terminate_process:TH-LT-1047/4242: SUCCESS
     isolate_endpoint:TH-LT-1047: SUCCESS
   controls: 1

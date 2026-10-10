@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 
 from tools.simulator.workflow_scenario import WorkflowScenarioRun, check_coverage, load_workflow_scenario
+from tools.simulator.workflow_scenario import executable_anywhere
+from xdr_response.integrations.simulated import production_manifest
 from xdr_response import guard
 from xdr_response.errors import ApprovalError, ApproverNotAllowedError
 from xdr_response.models import (
@@ -31,6 +33,14 @@ SCENARIOS = Path(__file__).resolve().parents[2] / "fixtures" / "workflows" / "be
 USER = "jsmith@example.com"
 
 
+def _readback(result) -> VerificationStatus:
+    """VERIFIED where the real adapter reads the action back, else UNABLE_TO_VERIFY (architecture 14.14.3:
+    the simulated adapters do only what the real ones support and verify)."""
+    real = production_manifest(result.integration)
+    return (VerificationStatus.VERIFIED if real is not None and result.action_type in real.verifiable_actions
+            else VerificationStatus.UNABLE_TO_VERIFY)
+
+
 def _run(name: str, *, live: bool) -> WorkflowScenarioRun:
     return WorkflowScenarioRun(load_workflow_scenario(SCENARIOS / f"{name}.yaml"), live=live)
 
@@ -42,14 +52,17 @@ def _approve_all(run: WorkflowScenarioRun, *approvers: str):
 def test_minimum_scenario_set_and_every_rule_proposed_somewhere():
     scenarios = [load_workflow_scenario(p) for p in sorted(SCENARIOS.glob("*.yaml"))]
     proposed: set[str] = set()
+    unrouted: set[str] = set()
     for scenario in scenarios:
         run = WorkflowScenarioRun(scenario, live=False)
         run.detect()
         assert run.workflow_run is not None, scenario.name
         proposed |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.PROPOSED)}
+        unrouted |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)}
         guard._reset_for_test_harness()  # one runtime per process: reset between the runs of this test
-    assert check_coverage("bec", scenarios, WORKFLOW, proposed_rules=proposed) == []
-    assert proposed == {r.id for r in WORKFLOW.recommendations}
+    assert check_coverage("bec", scenarios, WORKFLOW, proposed_rules=proposed, unrouted_rules=unrouted) == []
+    assert proposed | (unrouted & {r.id for r in WORKFLOW.recommendations
+                                if not executable_anywhere(r.action)}) == {r.id for r in WORKFLOW.recommendations}
 
 
 @pytest.mark.parametrize("live", [False, True])
@@ -109,10 +122,9 @@ def test_live_approval_executes_verifies_and_release_needs_its_own_human_approva
     assert run.environment.state_changing_calls() == []
     result = _approve_all(run, "analyst")
     report = result.report
-    assert report is not None and not report.dry_run and report.overall is ContainmentOverall.CONTAINED
+    assert report is not None and not report.dry_run and report.overall is ContainmentOverall.PARTIALLY_CONTAINED
     assert {r.status for r in report.results} == {ActionResultStatus.SUCCESS}
-    assert all(r.verification is not None and r.verification.status is VerificationStatus.VERIFIED
-               for r in report.results)
+    assert all(r.verification is not None and r.verification.status is _readback(r) for r in report.results)
     assert len(run.environment.state_changing_calls()) == 4
     controls = run.runtime.registry.list(incident_id=run.incident_id)
     assert {c.action_type for c in controls} == {ActionType.DISABLE_USER, ActionType.QUARANTINE_EMAIL,
@@ -125,7 +137,7 @@ def test_live_approval_executes_verifies_and_release_needs_its_own_human_approva
         run.decide_release({"decision": "APPROVE_ALL"}, approvers=["ai"])
     calls_before_release = len(run.environment.state_changing_calls())
     release = run.decide_release({"decision": "APPROVE_ALL"}, approvers=["analyst"])
-    assert release.report is not None and release.report.overall is RestorationOverall.RESTORED
+    assert release.report is not None and release.report.overall is RestorationOverall.PARTIALLY_RESTORED
     assert len(run.environment.state_changing_calls()) == calls_before_release + 3
     assert run.environment.state_for(ActionType.DISABLE_USER, USER) is False
 

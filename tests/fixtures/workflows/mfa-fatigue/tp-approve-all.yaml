@@ -3,11 +3,12 @@ schema: 1
 name: tp-approve-all
 workflow: mfa-fatigue
 description: >-
-  Six rejected push prompts from one public IP, then an approved prompt and a successful sign-in
-  from the same IP. After the approval the session creates an external forwarding rule and the
-  user's laptop raises a malicious detection. The full package is recommended (revoke sessions,
-  disable the account, isolate the laptop, block the prompt source IP); the analyst approves
-  everything, the actions execute and verify.
+  Six rejected push prompts from one public IP, then an approved prompt and a successful sign-in from
+  the same IP. After the approval the session creates an external forwarding rule and the user's laptop
+  raises a malicious detection. The full package is recommended (revoke sessions, disable the account,
+  isolate the laptop, block the prompt source IP); the analyst approves everything, the routed actions
+  execute. Production parity: isolate_endpoint through secure_endpoint cannot be read back by the real
+  adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [true_positive, approve_all]
 mode: both
 suite: {entra: [identity], secure_endpoint: [endpoint], meraki: [network], virustotal: [intel]}
@@ -86,6 +87,6 @@ expect:
   confidence: {min: 50, max: 100}
   degraded_sources: []
   evidence_min: 1
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 3
   notifications: [incident_note, soc_notification, analyst_summary]

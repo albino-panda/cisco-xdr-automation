@@ -9,7 +9,9 @@ description: >-
   indicator cap (2 in this override), so they stay proposed and need ELEVATED approval with a
   blast-radius warning (C5). The isolation and the compromised account (identity risk medium with two
   anomalies) stay proposed. The SOC lead approves. The destination IPs moved from 203.0.113.10-12 to
-  203.0.113.70-72, outside the lab's production_server range, so only the cap elevates them.
+  203.0.113.70-72, outside the lab's production_server range, so only the cap elevates them. Production
+  parity: isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/exfiltration/scenarios/06-spread-destinations-over-limit.yaml
 mode: both
@@ -116,5 +118,5 @@ expect:
   considered: [block_ip:198.51.100.200]
   manual_steps: [assess data exposure from ENG-WS-03]
   handoffs: ["account-takeover:c.park@example.com"]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 5

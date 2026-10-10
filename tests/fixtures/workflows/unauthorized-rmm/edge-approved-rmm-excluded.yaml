@@ -9,7 +9,9 @@ description: >-
   and relay domain blocks are built and shown as excluded targets with the approved_rmm reason, and
   terminating the approved binary is withheld (ALLOWLISTED, shown as considered). The session is what
   matters, so the workstation isolation is proposed; the analyst approves it. The unrated relay IP is
-  shared vendor infrastructure and is not blocked.
+  shared vendor infrastructure and is not blocked. Production parity: isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
@@ -61,11 +63,10 @@ expect:
   package: true
   actions: [isolate_endpoint:TH-LT-3105]
   excluded:
-    - block_hash:1111111111111111111111111111111111111111111111111111111111111111
     - block_domain:rmm.example.net
   elevated: []
   considered: [terminate_process:TH-LT-3105/4410, block_ip:198.51.100.121]
   manual_steps: [uninstall examplermmagent.exe on TH-LT-3105]
   handoffs: []
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 1

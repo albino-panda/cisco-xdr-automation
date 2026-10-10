@@ -3,12 +3,15 @@ schema: 1
 name: tp-approve-all
 workflow: ransomware
 description: >-
-  True positive on a finance workstation. Secure Endpoint reports a critical ransomware detection,
-  mass file modification and flagged recovery inhibition on TH-LT-1047; the payload (prevalence 2)
-  is also staged on TH-LT-1052, which has no detection yet. The workstation contacted a domain and
-  an IP rated malicious, and Entra rates the logged-on account high risk with a risk detection.
-  The analyst approves everything: both isolations, the hash, domain and IP blocks, the session
-  revocation and the account disable execute and verify.
+  True positive on a finance workstation. Secure Endpoint reports a critical ransomware detection, mass
+  file modification and flagged recovery inhibition on TH-LT-1047; the payload (prevalence 2) is also
+  staged on TH-LT-1052, which has no detection yet. The workstation contacted a domain and an IP rated
+  malicious, and Entra rates the logged-on account high risk with a risk detection. The analyst approves
+  everything: both isolations, the hash, domain and IP blocks, the session revocation and the account
+  disable execute. Production parity: the block_hash recommendation stays UNROUTED (no enabled adapter
+  has a VERIFIED write for it; shown for manual handling, never executed); isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [true_positive, approve_all]
 mode: both
 incident:
@@ -90,19 +93,18 @@ expect:
   actions:
     - isolate_endpoint:TH-LT-1047
     - isolate_endpoint:TH-LT-1052
-    - block_hash:3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c
     - block_domain:cdn-update.test
     - block_ip:203.0.113.80
     - revoke_sessions:jsmith@example.com
     - disable_user:jsmith@example.com
   elevated: []
   excluded: []
-  unrouted: []
+  unrouted: [block_hash:3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c3c7a9e0d5b1f4a6c]
   below_threshold: []
   risk: {min: 80, max: 100}
   confidence: {min: 50, max: 100}
   degraded_sources: []
   evidence_min: 1
-  containment: CONTAINED
-  controls: 6
+  containment: PARTIALLY_CONTAINED
+  controls: 5
   notifications: [incident_note, soc_notification, analyst_summary]

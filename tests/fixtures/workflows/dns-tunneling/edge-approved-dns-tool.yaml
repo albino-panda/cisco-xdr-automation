@@ -9,7 +9,10 @@ description: >-
   hash), another a new build known only by the approved signer. In the same incident a real tunnel
   client queries q9-relay.test. The vendor domain is built and shown as excluded (never executed); the
   isolations and terminations that rest only on the approved tool are withheld and shown as considered;
-  the real tunnel is contained.
+  the real tunnel is contained. Production parity: the terminate_process recommendation stays UNROUTED
+  (no enabled adapter has a VERIFIED write for it; shown for manual handling, never executed);
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
@@ -100,9 +103,10 @@ environment:
 analyst: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
   package: true
-  actions: [block_domain:q9-relay.test, terminate_process:TH-LT-2051/3301, isolate_endpoint:TH-LT-2051]
+  actions: [block_domain:q9-relay.test, isolate_endpoint:TH-LT-2051]
   excluded: [block_domain:dnstools.example.net]
   elevated: []
+  unrouted: [terminate_process:TH-LT-2051/3301]
   considered:
     - terminate_process:TH-LT-2050/5120
     - terminate_process:TH-LT-2052/5188
@@ -114,5 +118,5 @@ expect:
     - remove tunnel client on TH-LT-2052
     - assess data sent through dnstools.example.net
     - assess data sent through q9-relay.test
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

@@ -6,8 +6,12 @@ description: >-
   Edge case. The endpoint source reports a browser extension (mechanism other, extension path) whose
   package file two vendors rate malicious. Nothing executed it and no detection is active, so the
   endpoint is not isolated (listed as considered: dormant) while the extension file's hash block is
-  proposed. Removing the extension (and blocking it by browser policy) is the manual step.
-tags: [edge_case, true_positive, approve_all]
+  recommended. No enabled adapter has a VERIFIED hash block (the real Secure Endpoint adapter cannot
+  block hashes), so the block is UNROUTED, shown for manual handling, and no package is proposed.
+  Removing the extension (and blocking it by browser policy) is the manual step. Production parity: the
+  block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for
+  manual handling, never executed).
+tags: [edge_case, true_positive]
 mode: both
 suite: {secure_endpoint: [endpoint], virustotal: [intel]}
 incident:
@@ -44,16 +48,12 @@ environment:
       subject: e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1
       record: {kind: hash_prevalence, sha256: e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1,
                file_name: pdfhelper.crx, prevalence: 1, endpoints: [TH-LT-4402]}
-analyst: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
-  package: true
-  actions:
-    - block_hash:e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1
+  package: false
+  actions: []
   elevated: []
   excluded: []
-  unrouted: []
+  unrouted: [block_hash:e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1e7e7a0b1]
   below_threshold: []
   considered: [isolate_endpoint:TH-LT-4402]
   manual_steps: [remove_persistence:TH-LT-4402/ext-pdfhelper]
-  containment: CONTAINED
-  controls: 1

@@ -6,10 +6,12 @@ description: >-
   True positive on one finance laptop. An archive of invoices is written and then uploaded, still
   running, to a file drop that no reputation source knows yet (4.5 GiB over two hours). The account
   signed in has identity risk high with an unfamiliar-location anomaly. The package blocks the drop
-  domain and its IP, isolates the laptop while the upload runs, and revokes the sessions of and
-  disables the compromised account. The analyst approves everything; every action executes, and the
+  domain and its IP, isolates the laptop while the upload runs, and revokes the sessions of and disables
+  the compromised account. The analyst approves everything; every routed action executes, and the
   reversible ones are registered as controls. The data impact assessment stays a manual step and the
-  account is handed off to account-takeover.
+  account is handed off to account-takeover. Production parity: isolate_endpoint through secure_endpoint
+  cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel], entra: [identity],
@@ -86,6 +88,6 @@ expect:
   risk: {min: 60, max: 100}
   confidence: {min: 50, max: 100}
   evidence_min: 1
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 4
   notifications: [incident_note, soc_notification, analyst_summary]

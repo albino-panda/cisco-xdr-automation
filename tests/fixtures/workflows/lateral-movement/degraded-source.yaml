@@ -4,9 +4,12 @@ name: degraded-source
 workflow: lateral-movement
 description: >-
   Entra (an expected source) is unavailable while the account is investigated. The run notes the
-  degraded source and lowers confidence, and still recommends both isolations, the hash block and
-  the session revocation from the Secure Endpoint records that show the account on the movement.
-  No account disable is proposed: nothing confirms the account compromised.
+  degraded source and lowers confidence, and still recommends both isolations, the hash block and the
+  session revocation from the Secure Endpoint records that show the account on the movement. No account
+  disable is proposed: nothing confirms the account compromised. Production parity: the block_hash
+  recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual
+  handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by the real
+  adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [degraded_source, true_positive]
 mode: both
 incident:
@@ -76,7 +79,7 @@ expect:
   actions:
     - isolate_endpoint:TH-LT-1047
     - isolate_endpoint:TH-SRV-0310
-    - block_hash:8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c
     - revoke_sessions:jsmith@example.com
+  unrouted: [block_hash:8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c]
   degraded_sources: [entra]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED

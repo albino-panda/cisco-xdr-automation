@@ -5,9 +5,11 @@ workflow: persistence
 description: >-
   Edge case. A scheduled task that the endpoint source rates malicious starts a legitimate, widely
   deployed system scripting host with hostile arguments, and the agent reports an active malicious
-  detection on the host. The endpoint is isolated, but the binary's hash is never blocked (it is
-  rated clean and present on thousands of endpoints) and its process is not terminated: blocking a
-  system tool would break the estate. Deleting the task is the manual step.
+  detection on the host. The endpoint is isolated, but the binary's hash is never blocked (it is rated
+  clean and present on thousands of endpoints) and its process is not terminated: blocking a system tool
+  would break the estate. Deleting the task is the manual step. Production parity: isolate_endpoint
+  through secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so
+  containment is PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], virustotal: [intel]}
@@ -68,5 +70,5 @@ expect:
   below_threshold: []
   considered: []
   manual_steps: [remove_persistence:TH-LT-3301/task-syncprofile]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 1

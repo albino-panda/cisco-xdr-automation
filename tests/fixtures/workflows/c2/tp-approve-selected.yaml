@@ -5,8 +5,11 @@ workflow: c2
 description: >-
   True positive on TH-LT-1047 (same beacon as tp-approve-all). The analyst approves only the domain
   block, the IP block and the isolation; the URL block and the process termination are rejected (the
-  endpoint is isolated, so the process cannot reach the C2 server). Only the selected actions
-  execute; the others are reported REJECTED_BY_ANALYST and nothing else changes.
+  endpoint is isolated, so the process cannot reach the C2 server). Only the selected actions execute;
+  the others are reported REJECTED_BY_ANALYST and nothing else changes. Production parity: the
+  terminate_process recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown
+  for manual handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by
+  the real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [true_positive, approve_selected]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel]}
@@ -74,12 +77,11 @@ expect:
     - block_ip:198.51.100.45
     - "block_url:https://beacon-gate.test/api/checkin"
     - isolate_endpoint:TH-LT-1047
-    - terminate_process:TH-LT-1047/3120
+  unrouted: [terminate_process:TH-LT-1047/3120]
   results:
     block_domain:beacon-gate.test: SUCCESS
     block_ip:198.51.100.45: SUCCESS
     isolate_endpoint:TH-LT-1047: SUCCESS
     "block_url:https://beacon-gate.test/api/checkin": REJECTED_BY_ANALYST
-    terminate_process:TH-LT-1047/3120: REJECTED_BY_ANALYST
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 3

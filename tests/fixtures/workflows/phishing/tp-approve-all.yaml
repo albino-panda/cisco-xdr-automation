@@ -3,11 +3,13 @@ schema: 1
 name: tp-approve-all
 workflow: phishing
 description: >-
-  Credential phishing campaign: two delivered copies of a message with a credential link on a
-  malicious look-alike domain and a malicious attachment. The recipient on TH-LT-1047 resolved the
-  domain after delivery, signed in from an unfamiliar location right after the click, and the
-  endpoint detected the attachment. The analyst approves the whole package; every action executes
-  and verifies.
+  Credential phishing campaign: two delivered copies of a message with a credential link on a malicious
+  look-alike domain and a malicious attachment. The recipient on TH-LT-1047 resolved the domain after
+  delivery, signed in from an unfamiliar location right after the click, and the endpoint detected the
+  attachment. The analyst approves the whole package; every routed action executes. Production parity:
+  the block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown
+  for manual handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by
+  the real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [true_positive, approve_all]
 mode: both
 suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
@@ -104,21 +106,20 @@ expect:
     - "quarantine_email:<20260115.0900.4471@invoice-portal.example>"
     - "quarantine_email:<20260115.0902.4472@invoice-portal.example>"
     - block_domain:invoice-portal.example
-    - block_hash:1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b
     - revoke_sessions:ap-clerk-01@example.com
     - disable_user:ap-clerk-01@example.com
     - isolate_endpoint:TH-LT-1047
   elevated: []
   excluded: []
-  unrouted: []
+  unrouted: [block_hash:1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b]
   below_threshold: []
   risk: {min: 80, max: 100}
   confidence: {min: 70, max: 100}
   degraded_sources: []
   evidence_min: 2
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   results:
     revoke_sessions:ap-clerk-01@example.com: SUCCESS
     isolate_endpoint:TH-LT-1047: SUCCESS
-  controls: 6
+  controls: 5
   notifications: [incident_note, soc_notification, analyst_summary]

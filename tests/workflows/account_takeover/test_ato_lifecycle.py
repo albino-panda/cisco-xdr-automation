@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from tools.simulator.workflow_scenario import WorkflowScenarioRun, load_workflow_scenario
+from xdr_response.integrations.simulated import production_manifest
 from xdr_response.errors import ApprovalError, ApproverNotAllowedError
 from xdr_response.models import (
     ActionResultStatus,
@@ -25,6 +26,14 @@ from xdr_response.workflows.account_takeover import WORKFLOW
 
 SCENARIOS = Path(__file__).resolve().parents[2] / "fixtures" / "workflows" / "account-takeover"
 USER = "jsmith@example.com"
+
+
+def _readback(result) -> VerificationStatus:
+    """VERIFIED where the real adapter reads the action back, else UNABLE_TO_VERIFY (architecture 14.14.3:
+    the simulated adapters do only what the real ones support and verify)."""
+    real = production_manifest(result.integration)
+    return (VerificationStatus.VERIFIED if real is not None and result.action_type in real.verifiable_actions
+            else VerificationStatus.UNABLE_TO_VERIFY)
 
 
 def _run(name: str, *, live: bool) -> WorkflowScenarioRun:
@@ -77,12 +86,12 @@ def test_live_approval_executes_and_verifies_automatically():
     run.detect()
     result = _approve_all(run, "analyst")
     report = result.report
-    assert report is not None and not report.dry_run and report.overall is ContainmentOverall.CONTAINED
+    assert report is not None and not report.dry_run and report.overall is ContainmentOverall.PARTIALLY_CONTAINED
     by_type = {r.action_type: r for r in report.results}
     assert by_type[ActionType.REVOKE_SESSIONS].status is ActionResultStatus.SUCCESS
     for result_ in report.results:
         assert result_.verification is not None
-        assert result_.verification.status is VerificationStatus.VERIFIED
+        assert result_.verification.status is _readback(result_)
     assert not by_type[ActionType.REVOKE_SESSIONS].control_registered, "session revocation is not reversible"
     controls = {(c.action_type, c.target) for c in run.runtime.registry.list(incident_id=run.incident_id)}
     assert controls == {(ActionType.ISOLATE_ENDPOINT, "TH-LT-1047"), (ActionType.BLOCK_IP, "203.0.113.145")}

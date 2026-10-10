@@ -3,12 +3,16 @@ schema: 1
 name: legacy-03-protected-host-allowlisted-domain
 workflow: malicious-powershell
 description: >-
-  Migrated legacy scenario 03 (guardrails, aligned with C3). PowerShell on domain controller DC-02 (the vendor reports
-  obfuscated content) downloaded a malicious payload from the organisation's own web share files.example.com. The
-  suspicious domain is confirmed as the payload host, but it is allow-listed: its block is shown as an excluded
-  target, never executed. The domain controller is a critical asset, so its isolation is proposed with ELEVATED
-  approval and a visible warning (never skipped) and the lead approves. The payload hash block (new in the brief's
-  package) is STANDARD.
+  Migrated legacy scenario 03 (guardrails, aligned with C3). PowerShell on domain controller DC-02 (the
+  vendor reports obfuscated content) downloaded a malicious payload from the organisation's own web
+  share files.example.com. The suspicious domain is confirmed as the payload host, but it is
+  allow-listed: its block is shown as an excluded target, never executed. The domain controller is a
+  critical asset, so its isolation is proposed with ELEVATED approval and a visible warning (never
+  skipped) and the lead approves. The payload hash block (new in the brief's package) is STANDARD.
+  Production parity: the block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED
+  write for it; shown for manual handling, never executed); isolate_endpoint through secure_endpoint
+  cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [legacy, critical_asset, true_positive, approve_all]
 legacy_source: workflows/malicious-powershell/scenarios/03-protected-host-allowlisted-domain.yaml
 mode: both
@@ -107,9 +111,10 @@ analyst:
   approvers: [lead]
 expect:
   package: true
-  actions: ['isolate_endpoint:DC-02', 'block_hash:cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33']
+  actions: [isolate_endpoint:DC-02]
   elevated: ['isolate_endpoint:DC-02']
   excluded: ['block_domain:files.example.com']
+  unrouted: [block_hash:cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33cc33]
   warnings: [ELEVATED APPROVAL REQUIRED, Domain controller]
-  containment: CONTAINED
-  controls: 2
+  containment: PARTIALLY_CONTAINED
+  controls: 1

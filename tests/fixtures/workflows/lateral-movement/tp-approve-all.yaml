@@ -3,13 +3,16 @@ schema: 1
 name: tp-approve-all
 workflow: lateral-movement
 description: >-
-  True positive. A finance laptop with a credential-access detection opens a remote desktop session
-  to the application server TH-SRV-0310, which the peer lookup resolves by its address; a service
-  started there runs the same tool, rated malicious. The account used for the session signed in from
-  an address rated malicious and Entra rates it high risk with a risk detection. The analyst
-  approves everything: both isolations, the tool hash block, the address block, the session
-  revocation and the account disable execute and verify. The run hands the account off to
-  account-takeover and the laptop to credential-dumping.
+  True positive. A finance laptop with a credential-access detection opens a remote desktop session to
+  the application server TH-SRV-0310, which the peer lookup resolves by its address; a service started
+  there runs the same tool, rated malicious. The account used for the session signed in from an address
+  rated malicious and Entra rates it high risk with a risk detection. The analyst approves everything:
+  both isolations, the tool hash block, the address block, the session revocation and the account
+  disable execute. The run hands the account off to account-takeover and the laptop to
+  credential-dumping. Production parity: the block_hash recommendation stays UNROUTED (no enabled
+  adapter has a VERIFIED write for it; shown for manual handling, never executed); isolate_endpoint
+  through secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so
+  containment is PARTIALLY_CONTAINED.
 tags: [true_positive, approve_all]
 mode: both
 incident:
@@ -98,13 +101,12 @@ expect:
   actions:
     - isolate_endpoint:TH-LT-1047
     - isolate_endpoint:TH-SRV-0310
-    - block_hash:6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e
     - block_ip:203.0.113.80
     - revoke_sessions:jsmith@example.com
     - disable_user:jsmith@example.com
   elevated: []
   excluded: []
-  unrouted: []
+  unrouted: [block_hash:6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e6d1e4b7a9c2f5d8e]
   below_threshold: []
   risk: {min: 80, max: 100}
   confidence: {min: 50, max: 100}
@@ -113,6 +115,6 @@ expect:
   manual_steps: []
   handoffs: ["account-takeover:jsmith@example.com", "credential-dumping:TH-LT-1047"]
   evidence_min: 1
-  containment: CONTAINED
-  controls: 5
+  containment: PARTIALLY_CONTAINED
+  controls: 4
   notifications: [incident_note, soc_notification, analyst_summary]

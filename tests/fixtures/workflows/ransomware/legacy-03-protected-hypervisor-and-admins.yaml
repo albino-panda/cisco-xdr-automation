@@ -6,11 +6,14 @@ description: >-
   Legacy 03, converted to typed records (C3: protected becomes ELEVATED). Encryption is detected on
   HV-ESX-02, DC-01, an OT controller named by its address in the production range and one ordinary
   workstation. The investigation does not mark the infrastructure hosts as protected, so the
-  critical-asset policy's own host patterns and address ranges must catch them. The accounts on
-  those hosts are a break-glass account and a Domain Admins member; both are high risk with risk
-  detections. Every action on the three infrastructure hosts and the two privileged accounts stays
-  proposed with ELEVATED approval and a warning; the workstation isolation and the payload block
-  need standard approval. A lead approves.
+  critical-asset policy's own host patterns and address ranges must catch them. The accounts on those
+  hosts are a break-glass account and a Domain Admins member; both are high risk with risk detections.
+  Every action on the three infrastructure hosts and the two privileged accounts stays proposed with
+  ELEVATED approval and a warning; the workstation isolation and the payload block need standard
+  approval. A lead approves. Production parity: the block_hash recommendation stays UNROUTED (no enabled
+  adapter has a VERIFIED write for it; shown for manual handling, never executed); isolate_endpoint
+  through secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so
+  containment is PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, critical_asset]
 legacy_source: workflows/ransomware/scenarios/03-protected-hypervisor-and-admins.yaml
 mode: both
@@ -112,7 +115,6 @@ expect:
     - isolate_endpoint:DC-01
     - isolate_endpoint:203.0.113.25
     - isolate_endpoint:WS-ENG-031
-    - block_hash:6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f
     - revoke_sessions:breakglass-01@example.com
     - revoke_sessions:infra.admin@example.com
     - disable_user:breakglass-01@example.com
@@ -125,5 +127,6 @@ expect:
     - revoke_sessions:infra.admin@example.com
     - disable_user:breakglass-01@example.com
     - disable_user:infra.admin@example.com
+  unrouted: [block_hash:6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f6a2c8e4f0b1d3a5c7e9f2b4d6a8c0e1f]
   warnings: [ELEVATED APPROVAL REQUIRED, Hypervisor, Domain controller, Production server, Privileged account]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED

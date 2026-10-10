@@ -4,6 +4,13 @@ Each test plays a fixture incident from ``tests/fixtures/incidents`` through
 ``xdr_response.lifecycle``: automatic investigation and recommendation, human approval (HMAC tokens
 for authenticated HUMAN lab principals), automatic execution and verification, and the separate
 release approval and automatic restoration.
+
+The simulated adapters do exactly what the real ones support and verify (architecture 14.14.3): the
+Secure Endpoint isolation and release cannot be read back (UNABLE_TO_VERIFY), so a run that isolates
+an endpoint is PARTIALLY_CONTAINED and its release keeps the control RELEASE_FAILED until a human
+verifies it; a hash block has no enabled executor in the default lab and is reported, never executed.
+The fully verified happy path is played with the account-takeover and phishing incidents (Entra,
+Meraki, Secure Email and Umbrella read their writes back).
 """
 from __future__ import annotations
 
@@ -53,42 +60,71 @@ def _result(report, action: ActionType):
 
 
 # --------------------------------------------------------------- approve all --
+RANSOMWARE_ACTIONS = {"isolate_endpoint:TH-LT-1047", "block_domain:c2.ransom-ops.example", "block_ip:198.51.100.23"}
+RANSOMWARE_HASH = "5c1d7e0b9a8f6e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d"
+
+
 def test_ransomware_full_approve_all_lifecycle():
+    """Production outcome: the hash block is reported (no executor), the isolation cannot be read back."""
     run = _run("ransomware")
     detection = run.detect()
     package = detection.package
     assert detection.incident.state is S.AWAITING_APPROVAL
-    assert set(package.keys) == set(run.keys(package, run.scenario.expect["actions"]))
+    assert set(package.keys) == set(run.keys(package, RANSOMWARE_ACTIONS))
+    assert any("block_hash" in n and RANSOMWARE_HASH in n for n in detection.notes)  # shown, never dropped
     assert all(a.evidence and a.risk_score and a.confidence_score for a in package.actions)
     assert run.environment.state_changing_calls() == []  # nothing executed before the human decision
 
     decision = run.decide()
     assert decision.outcome.token is not None and decision.outcome.decision.analyst_identity == \
         LAB_PRINCIPALS["analyst"][0]
-    assert decision.report.overall is ContainmentOverall.CONTAINED
-    assert decision.incident.state is S.CONTAINED
+    assert decision.report.overall is ContainmentOverall.PARTIALLY_CONTAINED
+    assert decision.incident.state is S.PARTIALLY_CONTAINED
     assert all(r.status is ActionResultStatus.SUCCESS for r in decision.report.results)
-    assert all(r.verification.status is VerificationStatus.VERIFIED for r in decision.report.results)
+    isolation = _result(decision.report, ActionType.ISOLATE_ENDPOINT)
+    assert isolation.verification.status is VerificationStatus.UNABLE_TO_VERIFY and isolation.requires_attention
+    assert all(r.verification.status is VerificationStatus.VERIFIED for r in decision.report.results
+               if r.action_type is not ActionType.ISOLATE_ENDPOINT)
     assert run.environment.in_desired_state(ActionType.ISOLATE_ENDPOINT, "TH-LT-1047")
     controls = run.runtime.registry.list(incident_id=run.incident_id)
-    assert len(controls) == 4 and {c.status for c in controls} == {ControlStatus.ACTIVE}
+    assert len(controls) == 3 and {c.status for c in controls} == {ControlStatus.ACTIVE}
 
     release = run.propose_release()
     assert run.orchestrator.get_incident(run.incident_id).state is S.AWAITING_RELEASE_APPROVAL
-    assert {a.action_type for a in release.actions} == {ActionType.RELEASE_ENDPOINT, ActionType.UNBLOCK_HASH,
-                                                        ActionType.UNBLOCK_DOMAIN, ActionType.UNBLOCK_IP}
+    assert {a.action_type for a in release.actions} == {ActionType.RELEASE_ENDPOINT, ActionType.UNBLOCK_DOMAIN,
+                                                        ActionType.UNBLOCK_IP}
     restored = run.decide_release()
-    assert restored.report.overall is RestorationOverall.RESTORED
-    assert restored.incident.state is S.RESTORED
+    assert restored.report.overall is RestorationOverall.PARTIALLY_RESTORED
+    assert restored.incident.state is S.AWAITING_RELEASE_APPROVAL  # a human verifies the release first
     assert not run.environment.in_desired_state(ActionType.ISOLATE_ENDPOINT, "TH-LT-1047")
-    assert {c.status for c in run.runtime.registry.list(incident_id=run.incident_id)} == {ControlStatus.RELEASED}
+    statuses = {c.action_type: c.status for c in run.runtime.registry.list(incident_id=run.incident_id)}
+    assert statuses == {ActionType.ISOLATE_ENDPOINT: ControlStatus.RELEASE_FAILED,
+                        ActionType.BLOCK_DOMAIN: ControlStatus.RELEASED, ActionType.BLOCK_IP: ControlStatus.RELEASED}
+    assert _states(run) == [S.AWAITING_APPROVAL, S.APPROVED, S.CONTAINMENT_RUNNING, S.PARTIALLY_CONTAINED,
+                            S.AWAITING_RELEASE_APPROVAL, S.RESTORATION_RUNNING, S.AWAITING_RELEASE_APPROVAL]
+    approved = [t for t in run.orchestrator.get_incident(run.incident_id).history
+                if t.to_state in (S.APPROVED, S.RESTORATION_RUNNING)]
+    assert all(t.token_id and t.actor == LAB_PRINCIPALS["analyst"][0] for t in approved)
 
+
+def test_verified_full_lifecycle_contains_restores_and_closes():
+    """Every routed action of the account-takeover incident is read back: CONTAINED, RESTORED, CLOSED."""
+    run = _run("account_takeover")
+    package = run.detect().package
+    assert run.environment.state_changing_calls() == []
+    decision = run.decide()
+    assert decision.report.overall is ContainmentOverall.CONTAINED and decision.incident.state is S.CONTAINED
+    assert all(r.verification.status is VerificationStatus.VERIFIED for r in decision.report.results)
+    assert len(package.actions) == 3
+    release = run.propose_release()
+    assert {a.action_type for a in release.actions} == {ActionType.ENABLE_USER}
+    restored = run.decide_release()
+    assert restored.report.overall is RestorationOverall.RESTORED and restored.incident.state is S.RESTORED
+    assert {c.status for c in run.runtime.registry.list(incident_id=run.incident_id)} == {ControlStatus.RELEASED}
     closed = run.orchestrator.close(run.incident_id, actor=LAB_PRINCIPALS["analyst"][0], reason="resolved")
     assert closed.state is S.CLOSED
     assert _states(run) == [S.AWAITING_APPROVAL, S.APPROVED, S.CONTAINMENT_RUNNING, S.CONTAINED,
                             S.AWAITING_RELEASE_APPROVAL, S.RESTORATION_RUNNING, S.RESTORED, S.CLOSED]
-    approved = [t for t in closed.history if t.to_state in (S.APPROVED, S.RESTORATION_RUNNING)]
-    assert all(t.token_id and t.actor == LAB_PRINCIPALS["analyst"][0] for t in approved)
 
 
 def test_every_lifecycle_step_is_audited_in_order_and_the_chain_verifies():
@@ -110,7 +146,8 @@ def test_every_lifecycle_step_is_audited_in_order_and_the_chain_verifies():
     assert run.runtime.audit.verify().ok
     summary = run.orchestrator.audit_summary(run.incident_id)
     assert summary.analyst_identity == LAB_PRINCIPALS["analyst"][0]
-    assert len(summary.approved_actions) == 4 and summary.containment_results and summary.restoration_results
+    assert len(summary.approved_actions) == len(RANSOMWARE_ACTIONS)
+    assert summary.containment_results and summary.restoration_results
 
 
 def test_audit_never_contains_credentials_or_token_signatures():
@@ -167,7 +204,7 @@ def test_request_more_investigation_returns_to_not_started_and_reproposes():
                                          run.credentials("analyst"))
     again = run.orchestrator.investigate_and_propose(run.incident_id)
     assert again.incident.state is S.AWAITING_APPROVAL and again.package.package_id != first.package_id
-    assert run.decide().incident.state is S.CONTAINED
+    assert run.decide().incident.state is S.PARTIALLY_CONTAINED  # the isolation cannot be read back
 
 
 # ----------------------------------------------------------- partial failure --
@@ -181,7 +218,7 @@ def test_partial_failure_gives_partially_contained_and_other_actions_still_run()
     assert failed.status is ActionResultStatus.FAILED and failed.requires_attention
     assert report.overall is ContainmentOverall.PARTIALLY_CONTAINED
     assert decision.incident.state is S.PARTIALLY_CONTAINED
-    assert sum(r.status is ActionResultStatus.SUCCESS for r in report.results) == 3
+    assert sum(r.status is ActionResultStatus.SUCCESS for r in report.results) == 2
     assert any("block_domain" in line for line in report.attention)
     # transient failure: the recommendation is a new package for a new human approval, never a silent retry
     assert decision.recommended_next_state is S.AWAITING_APPROVAL
@@ -190,8 +227,8 @@ def test_partial_failure_gives_partially_contained_and_other_actions_still_run()
     assert [a.action_type for a in retry.actions] == [ActionType.BLOCK_DOMAIN]
     assert run.orchestrator.get_incident(run.incident_id).state is S.AWAITING_APPROVAL
     second = run.decide()
-    assert second.report.overall is ContainmentOverall.CONTAINED and second.incident.state is S.CONTAINED
-    assert len(run.runtime.registry.list(incident_id=run.incident_id)) == 4
+    assert second.report.overall is ContainmentOverall.CONTAINED  # the retried block is read back
+    assert len(run.runtime.registry.list(incident_id=run.incident_id)) == 3
 
 
 def test_control_not_in_effect_requires_remediation():
@@ -263,7 +300,7 @@ def test_domain_controller_needs_elevated_approval_and_is_never_silently_blocked
     assert run.environment.state_changing_calls() == []
 
     decision = run.decide(approvers=["lead"])
-    assert decision.report.overall is ContainmentOverall.CONTAINED
+    assert decision.report.overall is ContainmentOverall.PARTIALLY_CONTAINED  # isolation is not read back
     assert run.environment.in_desired_state(ActionType.ISOLATE_ENDPOINT, "TH-DC-02")
     assert not run.environment.in_desired_state(ActionType.ISOLATE_ENDPOINT, "TH-DC-01")
 
@@ -271,7 +308,11 @@ def test_domain_controller_needs_elevated_approval_and_is_never_silently_blocked
     assert any(a.approval_level.value == "ELEVATED" for a in release.actions)
     with pytest.raises(ApproverNotAllowedError):
         run.decide_release(approvers=["analyst"])
-    assert run.decide_release(approvers=["lead"]).incident.state is S.RESTORED
+    released = run.decide_release(approvers=["lead"])
+    assert not run.environment.in_desired_state(ActionType.ISOLATE_ENDPOINT, "TH-DC-02")
+    # neither release can be read back: the controls stay for a human to verify
+    assert released.incident.state is S.AWAITING_RELEASE_APPROVAL
+    assert {c.status for c in run.runtime.registry.list(incident_id=run.incident_id)} == {ControlStatus.RELEASE_FAILED}
 
 
 def test_analyst_may_approve_only_the_standard_action_selected():
@@ -279,7 +320,8 @@ def test_analyst_may_approve_only_the_standard_action_selected():
     run.detect()
     decision = run.decide({"decision": "APPROVE_SELECTED", "select": ["isolate_endpoint:TH-LT-1047"]},
                           approvers=["analyst"])
-    assert decision.incident.state is S.CONTAINED
+    assert decision.incident.state is S.PARTIALLY_CONTAINED  # executed, not read back
+    assert run.environment.in_desired_state(ActionType.ISOLATE_ENDPOINT, "TH-LT-1047")
     assert not run.environment.in_desired_state(ActionType.ISOLATE_ENDPOINT, "TH-DC-02")
 
 
@@ -325,23 +367,40 @@ def test_rejected_release_keeps_controls_active_and_requires_remediation():
 
 
 def test_partial_release_then_second_approval_restores_the_rest():
-    run = _run("ransomware")
+    run = _run("phishing")
     run.detect()
     run.decide()
     controls = run.runtime.registry.list(incident_id=run.incident_id)
-    endpoint_key = next(c.control_key for c in controls if c.action_type is ActionType.ISOLATE_ENDPOINT)
-    run.propose_release([endpoint_key])
+    domain_key = next(c.control_key for c in controls if c.action_type is ActionType.BLOCK_DOMAIN)
+    run.propose_release([domain_key])
     first = run.decide_release()
     assert first.report.overall is RestorationOverall.RESTORED and first.incident.state is S.RESTORED
-    assert len(run.orchestrator.outstanding_controls(run.incident_id)) == 3
+    assert len(run.orchestrator.outstanding_controls(run.incident_id)) == 2
     run.release_package = None
     run.propose_release()
     assert run.decide_release().incident.state is S.RESTORED
     assert run.orchestrator.outstanding_controls(run.incident_id) == []
 
 
-def test_failed_release_goes_back_to_awaiting_release_approval():
+def test_an_unverifiable_release_keeps_the_control_for_a_human():
+    """Secure Endpoint cannot read a release back: the control is RELEASE_FAILED (still listed), never RELEASED."""
     run = _run("ransomware")
+    run.detect()
+    run.decide()
+    controls = run.runtime.registry.list(incident_id=run.incident_id)
+    endpoint_key = next(c.control_key for c in controls if c.action_type is ActionType.ISOLATE_ENDPOINT)
+    run.propose_release([endpoint_key])
+    result = run.decide_release()
+    assert result.report.overall is not RestorationOverall.RESTORED
+    assert result.incident.state is S.AWAITING_RELEASE_APPROVAL
+    assert not run.environment.in_desired_state(ActionType.ISOLATE_ENDPOINT, "TH-LT-1047")  # it did run
+    statuses = {c.action_type: c.status for c in run.runtime.registry.list(incident_id=run.incident_id)}
+    assert statuses[ActionType.ISOLATE_ENDPOINT] is ControlStatus.RELEASE_FAILED
+    assert endpoint_key in {c.control_key for c in run.orchestrator.outstanding_controls(run.incident_id)}
+
+
+def test_failed_release_goes_back_to_awaiting_release_approval():
+    run = _run("phishing")
     run.detect()
     run.decide()
     run.environment.inject(FaultKind.UNAVAILABLE, integration="umbrella", operation="unblock_domain", times=None)

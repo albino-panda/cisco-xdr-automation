@@ -5,7 +5,11 @@ workflow: unauthorized-rmm
 description: >-
   Approve and contain, then a separate human release decision restores every reversible control
   (isolation, hash, domain and IP blocks). The process termination is not reversible and registers no
-  control.
+  control. Production parity: the block_hash and terminate_process recommendations stay UNROUTED (no
+  enabled adapter has a VERIFIED write for them; shown for manual handling, never executed);
+  isolate_endpoint and release_endpoint through secure_endpoint cannot be read back by the real adapters
+  and end UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED, restoration is PARTIALLY_RESTORED and
+  the incident stays AWAITING_RELEASE_APPROVAL.
 tags: [release, true_positive, approve_all]
 mode: live
 suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
@@ -69,13 +73,12 @@ analyst: {decision: APPROVE_ALL, approvers: [analyst]}
 release: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
   actions:
-    - terminate_process:TH-LT-1047/7311
-    - block_hash:a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0
     - block_domain:relay-01.anydesk-relay.test
     - block_domain:get-remote-support.test
     - block_ip:198.51.100.45
     - isolate_endpoint:TH-LT-1047
-  containment: CONTAINED
-  controls: 5
-  restoration: RESTORED
-  final_state: RESTORED
+  unrouted: [terminate_process:TH-LT-1047/7311, block_hash:a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0]
+  containment: PARTIALLY_CONTAINED
+  controls: 4
+  restoration: PARTIALLY_RESTORED
+  final_state: AWAITING_RELEASE_APPROVAL

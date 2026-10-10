@@ -41,6 +41,9 @@ release:
   decision: APPROVE_ALL
   approvers: [lead]
 
+# Production parity (architecture 14.14.3, 15.1): Secure Endpoint isolation and release run but cannot be
+# verified automatically (UNABLE_TO_VERIFY, ATTENTION). Containment is PARTIALLY_CONTAINED and, with
+# no verified release, restoration is RESTORATION_FAILED until an analyst confirms both endpoints by hand.
 expect:
   actions:
     - isolate_endpoint:TH-LT-1047
@@ -49,6 +52,6 @@ expect:
     - isolate_endpoint:TH-DC-02
   excluded:
     - isolate_endpoint:TH-DC-01
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2
-  restoration: RESTORED
+  restoration: RESTORATION_FAILED

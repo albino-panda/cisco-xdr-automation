@@ -66,12 +66,15 @@ def test_the_sample_workflow_proposes_every_rule_somewhere():
     workflow = SAMPLE.get("sample-malware")
     scenarios = [load_workflow_scenario(p) for p in SAMPLE_SCENARIOS["sample-malware"]]
     proposed: set[str] = set()
+    unrouted: set[str] = set()
     for scenario in scenarios:
         run = WorkflowScenarioRun(scenario, live=False, catalog=SAMPLE)
         run.detect()
         proposed |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.PROPOSED)}
+        unrouted |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)}
         guard._reset_for_test_harness()  # one runtime per process: reset between the runs of this test
-    assert check_coverage("sample-malware", scenarios, workflow.definition, proposed_rules=proposed) == []
+    assert check_coverage("sample-malware", scenarios, workflow.definition, proposed_rules=proposed,
+                          unrouted_rules=unrouted) == []
 
 
 def test_the_sample_covers_every_scenario_category():

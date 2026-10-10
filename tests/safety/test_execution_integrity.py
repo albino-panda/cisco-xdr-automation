@@ -22,13 +22,14 @@ import httpx
 import pytest
 
 from tests.fixtures.guard_helpers import install_fake_verifier, make_token
+from tests.fixtures.verified_lab import VERIFIED_EDR, load_verifiable_scenario
 from tests.unit.execution.execution_harness import (
     bind_token,
     make_harness,
     make_package,
     make_recommendation,
 )
-from tools.simulator.scenario import LAB_PRINCIPALS, ScenarioRun, load_scenario
+from tools.simulator.scenario import LAB_PRINCIPALS, ScenarioRun
 from xdr_response import guard
 from xdr_response.approval.ledger import JsonlTokenUseLedger
 from xdr_response.errors import (
@@ -68,7 +69,10 @@ ISOLATE_KEY = "XDR-RW-1047:isolate_endpoint:TH-LT-1047"
 
 # ------------------------------------------------------------------ helpers --
 def _run(name: str = "ransomware", *, live: bool = True) -> ScenarioRun:
-    return ScenarioRun(load_scenario(name), live=live)
+    """The bundled scenario in the verifiable lab (tests/fixtures/verified_lab.py): every proposed action
+    has a VERIFIED read-back, so the verification gates under attack here can really open. Isolation
+    runs through Defender for Endpoint (``VERIFIED_EDR``)."""
+    return ScenarioRun(load_verifiable_scenario(name), live=live)
 
 
 def _writes(run: ScenarioRun, operation: str | None = None) -> list:
@@ -203,7 +207,7 @@ def test_retry_after_partial_failure_never_resends_actions_that_succeeded():
     retry = run.orchestrator.propose_retry(run.incident_id)
     assert [a.action_type for a in retry.actions] == [ActionType.BLOCK_DOMAIN]
     run.decide()
-    for op in ("isolate_endpoint", "block_hash", "block_ip"):
+    for op in ("isolate_endpoint", "block_ip"):
         assert len(_writes(run, op)) == 1, op
     # the failed attempt plus exactly one successful retry
     assert [c.result for c in _writes(run, "block_domain")][-1] == ActionResultStatus.SUCCESS.value
@@ -391,7 +395,7 @@ def test_target_contained_by_someone_else_is_not_written_and_never_registered():
 
 def test_write_reporting_already_contained_registers_no_control():
     run = _run()
-    run.environment.inject(FaultKind.ALREADY_CONTAINED, integration="secure_endpoint",
+    run.environment.inject(FaultKind.ALREADY_CONTAINED, integration=VERIFIED_EDR,
                            operation="isolate_endpoint")
     run.detect()
     decision = run.decide()
@@ -405,7 +409,7 @@ def test_write_reporting_already_contained_registers_no_control():
 # =============================================================================
 def test_one_failure_is_partial_never_contained_and_never_stops_the_others():
     run = _run()
-    run.environment.inject(FaultKind.AUTH_FAIL, integration="secure_endpoint", operation="isolate_endpoint",
+    run.environment.inject(FaultKind.AUTH_FAIL, integration=VERIFIED_EDR, operation="isolate_endpoint",
                            times=None)
     run.detect()
     decision = run.decide()
@@ -430,7 +434,7 @@ def test_executed_but_not_in_effect_is_never_contained():
 
 def test_unverifiable_success_is_partial_by_default():
     run = _run()
-    run.environment.inject(FaultKind.FAIL, integration="secure_endpoint", operation="verify", times=None)
+    run.environment.inject(FaultKind.FAIL, integration=VERIFIED_EDR, operation="verify", times=None)
     run.detect()
     decision = run.decide()
     iso = next(r for r in decision.report.results if r.idempotency_key == ISOLATE_KEY)
@@ -893,7 +897,7 @@ def test_r2_retry_after_unverified_write_tracks_the_control_the_retry_created():
     of the retry claims ``control_registered=True``. A release would delete the wrong vendor object.
     """
     run = _run()
-    run.environment.inject(FaultKind.NO_EFFECT, integration="secure_endpoint", operation="isolate_endpoint")
+    run.environment.inject(FaultKind.NO_EFFECT, integration=VERIFIED_EDR, operation="isolate_endpoint")
     run.detect()
     first = run.decide()
     iso1 = next(r for r in first.report.results if r.idempotency_key == ISOLATE_KEY)
@@ -975,9 +979,9 @@ def test_r2_someone_elses_control_is_not_adopted_after_failed_precheck_and_write
     """
     run = _run()
     run.environment.force_desired_state(ActionType.ISOLATE_ENDPOINT, "TH-LT-1047")  # someone else's
-    run.environment.inject(FaultKind.UNAVAILABLE, integration="secure_endpoint", operation="current_state",
+    run.environment.inject(FaultKind.UNAVAILABLE, integration=VERIFIED_EDR, operation="current_state",
                            target="TH-LT-1047")
-    run.environment.inject(FaultKind.TIMEOUT, integration="secure_endpoint", operation="isolate_endpoint",
+    run.environment.inject(FaultKind.TIMEOUT, integration=VERIFIED_EDR, operation="isolate_endpoint",
                            target="TH-LT-1047")
     run.detect()
     decision = run.decide()

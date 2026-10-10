@@ -4,8 +4,9 @@ name: dry-run
 workflow: credential-dumping
 description: >-
   Dry run: the package is proposed and simulated; nothing changes at any vendor, no control is
-  registered and the DRY RUN report lists every recommended action. The privileged help-desk
-  account's actions are ELEVATED, so the lead approves.
+  registered and the DRY RUN report lists every recommended action. The privileged help-desk account's
+  actions are ELEVATED, so the lead approves. Production parity: the block_hash recommendation stays
+  UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual handling, never executed).
 tags: [dry_run, true_positive]
 mode: dry_run
 incident:
@@ -67,14 +68,13 @@ expect:
     - revoke_sessions:jsmith@example.com
     - revoke_sessions:it.support@example.com
     - disable_user:it.support@example.com
-    - block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed
+  unrouted: [block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed]
   dry_run_lines:
     - DRY RUN
     - "Would isolate: TH-LT-1047"
     - "Would revoke sessions: it.support@example.com"
     - "Would revoke sessions: jsmith@example.com"
     - "Would disable user: it.support@example.com"
-    - "Would block: d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed"
     - No containment actions executed.
   manual_steps: [credential-reset:TH-LT-1047]
   notifications: [incident_note, soc_notification, analyst_summary]

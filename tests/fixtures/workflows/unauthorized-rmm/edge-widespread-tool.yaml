@@ -5,9 +5,12 @@ workflow: unauthorized-rmm
 description: >-
   Edge case: Secure Endpoint flags a ScreenConnect client that runs on 180 endpoints, which looks like
   an unlisted corporate deployment. No fleet-wide block is proposed for it: the binary and the relay
-  domain are listed as considered with the prevalence record, and a human decides. On this
-  workstation the session reaches a peer IP rated malicious, so the per-host containment still
-  follows the evidence: terminate the client, block the rated peer IP and isolate the workstation.
+  domain are listed as considered with the prevalence record, and a human decides. On this workstation
+  the session reaches a peer IP rated malicious, so the per-host containment still follows the evidence:
+  terminate the client, block the rated peer IP and isolate the workstation. Production parity: the
+  terminate_process recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown
+  for manual handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by
+  the real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
@@ -65,15 +68,15 @@ analyst: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
   package: true
   actions:
-    - terminate_process:TH-LT-4420/9120
     - block_ip:198.51.100.130
     - isolate_endpoint:TH-LT-4420
   elevated: []
   excluded: []
+  unrouted: [terminate_process:TH-LT-4420/9120]
   considered:
     - block_hash:5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c
     - block_domain:instance-77.screenconnect-relay.test
   manual_steps: [uninstall ScreenConnect on TH-LT-4420]
   handoffs: []
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

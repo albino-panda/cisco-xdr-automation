@@ -4,7 +4,9 @@ name: dry-run
 workflow: c2
 description: >-
   Dry run: the package is proposed and simulated; nothing changes at any vendor, no control is
-  registered and the DRY RUN report lists every recommended action.
+  registered and the DRY RUN report lists every recommended action. Production parity: the
+  terminate_process recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown
+  for manual handling, never executed).
 tags: [dry_run, true_positive]
 mode: dry_run
 suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel]}
@@ -70,13 +72,12 @@ expect:
     - block_ip:198.51.100.45
     - "block_url:https://beacon-gate.test/api/checkin"
     - isolate_endpoint:TH-LT-1047
-    - terminate_process:TH-LT-1047/3120
+  unrouted: [terminate_process:TH-LT-1047/3120]
   dry_run_lines:
     - DRY RUN
     - "Would block: beacon-gate.test"
     - "Would block: 198.51.100.45"
     - "Would block: https://beacon-gate.test/api/checkin"
     - "Would isolate: TH-LT-1047"
-    - "Would terminate process: TH-LT-1047/3120"
     - No containment actions executed.
   notifications: [incident_note, soc_notification, analyst_summary]

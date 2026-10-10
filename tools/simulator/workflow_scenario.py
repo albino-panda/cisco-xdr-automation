@@ -45,7 +45,7 @@ from xdr_response.config import Settings
 from xdr_response.config.loader import FORBIDDEN_KEYS
 from xdr_response.dryrun import render_dry_run
 from xdr_response.errors import ApprovalError
-from xdr_response.integrations.simulated import FAMILIES
+from xdr_response.integrations.simulated import FAMILIES, production_manifest
 from xdr_response.lifecycle import DecisionResult, DetectionResult
 from xdr_response.lifecycle.workflow_adapter import WorkflowInvestigationReport
 from xdr_response.models import (
@@ -674,12 +674,16 @@ class WorkflowScenarioRun(ScenarioRun):
 
 # ------------------------------------------------------------------ coverage --
 def check_coverage(workflow_id: str, scenarios: Sequence[WorkflowScenario], definition: WorkflowDefinition, *,
-                   proposed_rules: Iterable[str] | None = None,
+                   proposed_rules: Iterable[str] | None = None, unrouted_rules: Iterable[str] = (),
                    legacy_root: Path = LEGACY_WORKFLOWS_DIR) -> list[str]:
     """Problems with the minimum scenario set of 14.5.3 (empty list: covered).
 
     ``proposed_rules`` are the rule ids that were PROPOSED in played runs; without it a rule counts
-    as covered when its action type appears in some scenario's expected actions.
+    as covered when its action type appears in some scenario's expected actions. A rule whose action no
+    real adapter can execute (no VERIFIED write anywhere, e.g. ``terminate_process``) can never be
+    proposed: it counts as covered when a scenario expects it UNROUTED (``unrouted_rules`` with
+    ``proposed_rules``). An executable action must be proposed somewhere: a scenario whose suite routes
+    it (for example through Defender for Endpoint) shows the approved path.
     """
     problems: list[str] = []
     by_name = {s.name: s for s in scenarios}
@@ -700,20 +704,40 @@ def check_coverage(workflow_id: str, scenarios: Sequence[WorkflowScenario], defi
         problems.append(f"{workflow_id}: no scenario carries tags {missing_tags}")
     if not any("benign" in s.tags or s.expect.below_threshold for s in scenarios):
         problems.append(f"{workflow_id}: needs a benign or below-threshold scenario")
-    problems += _rule_coverage(workflow_id, scenarios, definition, proposed_rules)
+    problems += _rule_coverage(workflow_id, scenarios, definition, proposed_rules, unrouted_rules)
     problems += _legacy_coverage(workflow_id, scenarios, definition, legacy_root)
     return problems
 
 
+def executable_anywhere(action: ActionType) -> bool:
+    """True when some real adapter has a VERIFIED write for ``action`` (its manifest supports it)."""
+    for name in INTEGRATION_NAMES:
+        real = production_manifest(name)
+        if real is not None and action in real.supported_actions:
+            return True
+    return False
+
+
 def _rule_coverage(workflow_id: str, scenarios: Sequence[WorkflowScenario], definition: WorkflowDefinition,
-                   proposed_rules: Iterable[str] | None) -> list[str]:
+                   proposed_rules: Iterable[str] | None, unrouted_rules: Iterable[str] = ()) -> list[str]:
     if proposed_rules is not None:
         covered = set(proposed_rules)
+        unrouted = set(unrouted_rules)
         return [f"{workflow_id}: rule {r.id} is PROPOSED in no scenario" for r in definition.recommendations
-                if r.id not in covered]
+                if r.id not in covered and not (r.id in unrouted and not executable_anywhere(r.action))]
     expected = {str(a).partition(":")[0] for s in scenarios for a in (s.expect.actions or ())}
-    return [f"{workflow_id}: rule {r.id} ({r.action.value}) is expected in no scenario"
-            for r in definition.recommendations if r.action.value not in expected]
+    unrouted_expected = {str(a).partition(":")[0] for s in scenarios for a in (s.expect.unrouted or ())}
+    problems = []
+    for rule in definition.recommendations:
+        action = rule.action.value
+        if action in expected:
+            continue
+        if action in unrouted_expected and not executable_anywhere(rule.action):
+            continue  # no real adapter can execute it: reported for manual handling is the covered outcome
+        problems.append(f"{workflow_id}: rule {rule.id} ({action}) is expected in no scenario"
+                        + (" (only UNROUTED, although a real adapter can execute it: add a scenario whose suite "
+                           "routes it)" if action in unrouted_expected else ""))
+    return problems
 
 
 def _legacy_coverage(workflow_id: str, scenarios: Sequence[WorkflowScenario], definition: WorkflowDefinition,

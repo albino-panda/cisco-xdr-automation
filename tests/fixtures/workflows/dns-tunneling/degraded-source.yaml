@@ -6,7 +6,10 @@ description: >-
   The same tunnel while Umbrella is unavailable: its categorization fails, so only VirusTotal rates the
   domain (one vendor alone is SUSPICIOUS, never MALICIOUS). The resolver logs still show the DNS
   tunneling category, the volume and the long random labels, so the package is unchanged; Umbrella is
-  listed as degraded and confidence drops.
+  listed as degraded and confidence drops. Production parity: the terminate_process recommendation stays
+  UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual handling, never executed);
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [degraded_source, true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
@@ -69,10 +72,10 @@ expect:
   package: true
   actions:
     - block_domain:cdn-update.test
-    - terminate_process:TH-LT-1047/4242
     - isolate_endpoint:TH-LT-1047
+  unrouted: [terminate_process:TH-LT-1047/4242]
   degraded_sources: [umbrella]
   considered: []
   manual_steps: [remove tunnel client on TH-LT-1047, assess data sent through cdn-update.test]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

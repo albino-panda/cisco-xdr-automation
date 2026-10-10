@@ -6,7 +6,9 @@ description: >-
   Migrated legacy 05. Umbrella attributes the tunnel queries to the internal resolver NS-02 because it
   forwards every client query; the resolver's own log (Splunk) names the real client WS-0217, which the
   workflow investigates next. The resolver's dns.exe only forwards queries and is never isolated (listed
-  as considered); only the client is isolated, and the many subdomains still give one block.
+  as considered); only the client is isolated, and the many subdomains still give one block. Production
+  parity: isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/dns-tunneling/scenarios/05-internal-resolver-forwarding.yaml
 mode: both
@@ -80,5 +82,5 @@ expect:
   elevated: []
   considered: [isolate_endpoint:NS-02]
   manual_steps: [remove tunnel client on WS-0217, assess data sent through img-cache.test]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

@@ -3,10 +3,14 @@ schema: 1
 name: legacy-04-fleet-wide-payload-over-limit
 workflow: malicious-powershell
 description: >-
-  Migrated legacy scenario 04 (blast radius, aligned with C5). A logon script started the same PowerShell download
-  on six workstations and the malicious payload landed on all of them. Six endpoints is more than the max_endpoints
-  cap of 5, so every isolation stays proposed with ELEVATED approval and a blast-radius warning, and the lead approves.
-  The download domain and the payload hash (six endpoints, below the fleet-wide block limit) are STANDARD.
+  Migrated legacy scenario 04 (blast radius, aligned with C5). A logon script started the same
+  PowerShell download on six workstations and the malicious payload landed on all of them. Six endpoints
+  is more than the max_endpoints cap of 5, so every isolation stays proposed with ELEVATED approval and
+  a blast-radius warning, and the lead approves. The download domain and the payload hash (six
+  endpoints, below the fleet-wide block limit) are STANDARD. Production parity: the block_hash
+  recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual
+  handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by the real
+  adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/malicious-powershell/scenarios/04-fleet-wide-payload-over-limit.yaml
 mode: both
@@ -233,11 +237,17 @@ analyst:
   approvers: [lead]
 expect:
   package: true
-  actions: ['block_domain:update-check.test', 'block_hash:dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44',
-    'isolate_endpoint:WS-OPS-101', 'isolate_endpoint:WS-OPS-102', 'isolate_endpoint:WS-OPS-103', 'isolate_endpoint:WS-OPS-104',
-    'isolate_endpoint:WS-OPS-105', 'isolate_endpoint:WS-OPS-106']
+  actions:
+    - block_domain:update-check.test
+    - isolate_endpoint:WS-OPS-101
+    - isolate_endpoint:WS-OPS-102
+    - isolate_endpoint:WS-OPS-103
+    - isolate_endpoint:WS-OPS-104
+    - isolate_endpoint:WS-OPS-105
+    - isolate_endpoint:WS-OPS-106
   elevated: ['isolate_endpoint:WS-OPS-101', 'isolate_endpoint:WS-OPS-102', 'isolate_endpoint:WS-OPS-103', 'isolate_endpoint:WS-OPS-104',
     'isolate_endpoint:WS-OPS-105', 'isolate_endpoint:WS-OPS-106']
+  unrouted: [block_hash:dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44dd44]
   warnings: [ELEVATED APPROVAL REQUIRED]
-  containment: CONTAINED
-  controls: 8
+  containment: PARTIALLY_CONTAINED
+  controls: 7

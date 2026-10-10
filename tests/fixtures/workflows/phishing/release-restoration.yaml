@@ -5,7 +5,12 @@ workflow: phishing
 description: >-
   Same credential phishing campaign as tp-approve-all. After containment a separate human release
   decision restores every reversible control (messages released, blocks removed, account enabled,
-  endpoint released); the session revocation is not reversible and has no control to release.
+  endpoint released); the session revocation is not reversible and has no control to release. Production
+  parity: the block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it;
+  shown for manual handling, never executed); isolate_endpoint and release_endpoint through
+  secure_endpoint cannot be read back by the real adapters and end UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED, restoration is PARTIALLY_RESTORED and the incident stays
+  AWAITING_RELEASE_APPROVAL.
 tags: [release, true_positive, approve_all]
 mode: live
 suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
@@ -103,11 +108,11 @@ expect:
     - "quarantine_email:<20260115.0900.4471@invoice-portal.example>"
     - "quarantine_email:<20260115.0902.4472@invoice-portal.example>"
     - block_domain:invoice-portal.example
-    - block_hash:1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b
     - revoke_sessions:ap-clerk-01@example.com
     - disable_user:ap-clerk-01@example.com
     - isolate_endpoint:TH-LT-1047
-  containment: CONTAINED
-  controls: 6
-  restoration: RESTORED
-  final_state: RESTORED
+  unrouted: [block_hash:1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b]
+  containment: PARTIALLY_CONTAINED
+  controls: 5
+  restoration: PARTIALLY_RESTORED
+  final_state: AWAITING_RELEASE_APPROVAL

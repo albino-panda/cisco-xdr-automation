@@ -4,10 +4,14 @@ name: edge-defender-wmi-subscription
 workflow: persistence
 description: >-
   Edge case. A WMI event subscription on an endpoint managed by Defender for Endpoint (no Secure
-  Endpoint connector) launches a malicious consumer binary that is running. Isolation goes through
-  the Defender builder, the hash block and the termination route to Defender too. Secure Endpoint
-  (a required integration) is not enabled in this tenant: the run notes it and still recommends from
-  the Defender and VirusTotal evidence. Removing the filter, consumer and binding is a manual step.
+  Endpoint connector) launches a malicious consumer binary that is running. Isolation goes through the
+  Defender builder, the hash block and the termination route to Defender too. Secure Endpoint (a
+  required integration) is not enabled in this tenant: the run notes it and still recommends from the
+  Defender and VirusTotal evidence. Removing the filter, consumer and binding is a manual step.
+  Production parity: the terminate_process recommendation stays UNROUTED (no enabled adapter has a
+  VERIFIED write for it; shown for manual handling, never executed); block_hash through
+  defender_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive, approve_all]
 mode: both
 suite: {defender_endpoint: [endpoint, network], virustotal: [intel]}
@@ -55,12 +59,11 @@ expect:
   package: true
   actions:
     - isolate_endpoint:TH-LT-2210
-    - terminate_process:TH-LT-2210/7310
     - block_hash:3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e3a1f0b5e
   elevated: []
   excluded: []
-  unrouted: []
+  unrouted: [terminate_process:TH-LT-2210/7310]
   manual_steps: [remove_persistence:TH-LT-2210/wmi-updconsumer]
   considered: []
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

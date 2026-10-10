@@ -3,13 +3,14 @@ schema: 1
 name: legacy-01-workstation-encryption
 workflow: ransomware
 description: >-
-  Legacy 01, converted to typed records. Secure Endpoint flags the encrypting process and a shadow
-  copy deletion on WS-FIN-014; the payload hash is malicious with prevalence 2 and was also dropped
-  on WS-FIN-022, which has no detection yet. Both hosts are isolated (the second through the
-  payload rule), the hash is blocked, the account on the affected host loses its sessions and,
-  because Entra rates it high risk with a risk detection, is disabled. New in the migrated
-  workflow: the incident domain rated malicious, which WS-FIN-014 queried, is blocked too. Every
-  action needs human approval (C1); nothing is ELEVATED.
+  Legacy 01, converted to typed records. Secure Endpoint flags the encrypting process and a shadow copy
+  deletion on WS-FIN-014; the payload hash is malicious with prevalence 2 and was also dropped on
+  WS-FIN-022, which has no detection yet. Both hosts are isolated (the second through the payload rule),
+  the hash is blocked, the account on the affected host loses its sessions and, because Entra rates it
+  high risk with a risk detection, is disabled. New in the migrated workflow: the incident domain rated
+  malicious, which WS-FIN-014 queried, is blocked too. Every action needs human approval (C1); nothing
+  is ELEVATED. Production parity: the block_hash recommendation stays UNROUTED (no enabled adapter has a
+  VERIFIED write for it; shown for manual handling, never executed).
 tags: [legacy, true_positive]
 legacy_source: workflows/ransomware/scenarios/01-workstation-encryption.yaml
 mode: both
@@ -85,10 +86,9 @@ expect:
   actions:
     - isolate_endpoint:WS-FIN-014
     - isolate_endpoint:WS-FIN-022
-    - block_hash:3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d
     - block_domain:cdn-update.test
     - revoke_sessions:fin.analyst01@example.com
     - disable_user:fin.analyst01@example.com
   elevated: []
   excluded: []
-  unrouted: []
+  unrouted: [block_hash:3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d3c7a9e0d5b1f4a6c8e2d0b9f7a5c3e1d]

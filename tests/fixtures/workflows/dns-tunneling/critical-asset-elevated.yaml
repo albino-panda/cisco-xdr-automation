@@ -5,7 +5,10 @@ workflow: dns-tunneling
 description: >-
   The tunnel client is a production application server (critical asset). The process termination and the
   isolation on it need ELEVATED approval with a visible warning; an analyst alone cannot approve, the
-  lead does. The domain block stays STANDARD.
+  lead does. The domain block stays STANDARD. Production parity: the terminate_process recommendation
+  stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual handling, never
+  executed); isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [critical_asset, true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
@@ -57,8 +60,9 @@ environment:
 analyst: {decision: APPROVE_ALL, approvers: [lead]}
 expect:
   package: true
-  actions: [block_domain:sync-relay.test, terminate_process:PRD-APP-07/6120, isolate_endpoint:PRD-APP-07]
-  elevated: [terminate_process:PRD-APP-07/6120, isolate_endpoint:PRD-APP-07]
+  actions: [block_domain:sync-relay.test, isolate_endpoint:PRD-APP-07]
+  elevated: [isolate_endpoint:PRD-APP-07]
+  unrouted: [terminate_process:PRD-APP-07/6120]
   warnings: [Production server]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

@@ -24,7 +24,8 @@ from datetime import timedelta
 
 import pytest
 
-from tools.simulator.scenario import LAB_PRINCIPALS, SIM_NOW, ScenarioRun, load_scenario
+from tests.fixtures.verified_lab import VERIFIED_EDR, load_verifiable_scenario
+from tools.simulator.scenario import LAB_PRINCIPALS, SIM_NOW, ScenarioRun
 from xdr_response import guard
 from xdr_response.errors import (
     ApprovalError,
@@ -80,7 +81,10 @@ REFUSALS = (ApprovalError, RegistryError)
 
 # ------------------------------------------------------------------ helpers --
 def _run(name: str = "ransomware") -> ScenarioRun:
-    return ScenarioRun(load_scenario(name), live=True)
+    """The bundled scenario in the verifiable lab (tests/fixtures/verified_lab.py): containment and release
+    of every control have a VERIFIED read-back, so RELEASED / RESTORED can really be reached and the
+    refusals tested here are not hidden behind UNABLE_TO_VERIFY. Isolation runs through ``VERIFIED_EDR``."""
+    return ScenarioRun(load_verifiable_scenario(name), live=True)
 
 
 def _contained(name: str = "ransomware", **decide_kwargs) -> ScenarioRun:
@@ -408,7 +412,7 @@ def test_release_token_cannot_be_replayed_after_the_target_was_contained_again()
 def test_direct_rollback_adapter_call_outside_the_guard_is_refused():
     run = _contained()
     release = run.propose_release([ENDPOINT_KEY])
-    adapter = run.runtime.adapters.get("secure_endpoint")
+    adapter = run.runtime.adapters.get(VERIFIED_EDR)
     with pytest.raises(ApprovalRequiredError):
         adapter.release_endpoint(ActionRequest.from_recommendation(release.actions[0]))
     assert run.environment.in_desired_state(ActionType.ISOLATE_ENDPOINT, HOST)
@@ -567,7 +571,7 @@ def test_refused_release_attempt_is_audited():
 
 def test_unverified_release_keeps_control_in_force():
     run = _contained()
-    run.environment.inject(FaultKind.NO_EFFECT, integration="secure_endpoint", operation="release_endpoint",
+    run.environment.inject(FaultKind.NO_EFFECT, integration=VERIFIED_EDR, operation="release_endpoint",
                            times=None)
     run.propose_release([ENDPOINT_KEY])
     result = run.decide_release()
@@ -869,7 +873,7 @@ def test_r2_rollback_smuggled_into_a_containment_package_cannot_release():
 
 
 def _two_elevated_quorum_run() -> tuple[ScenarioRun, list[ApproverCredential]]:
-    scenario = load_scenario("ransomware_domain_controller")
+    scenario = load_verifiable_scenario("ransomware_domain_controller")
     data = simulation_settings(dry_run=False, suite=scenario.suite).model_dump()
     data["thresholds"]["approval"]["elevated_min_approvers"] = 2
     run = ScenarioRun(scenario, live=True, settings=Settings.model_validate(data))

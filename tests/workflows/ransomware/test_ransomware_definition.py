@@ -14,6 +14,7 @@ from tools.simulator.workflow_scenario import (
     load_workflow_scenario,
 )
 from tools.validation import check_workflow_readmes as readme_checker
+from tools.simulator.workflow_scenario import executable_anywhere
 from xdr_response import guard
 from xdr_response.models import ActionType, Incident, Observable, ObservableType, Severity
 from xdr_response.workflows.definition import WorkflowDefinition
@@ -127,11 +128,14 @@ def test_the_legacy_spec_is_migrated():
 def test_every_rule_is_proposed_in_some_scenario_and_the_minimum_set_is_met():
     scenarios = [load_workflow_scenario(p) for p in SCENARIOS]
     proposed: set[str] = set()
+    unrouted: set[str] = set()
     for scenario in scenarios:
         run = WorkflowScenarioRun(scenario, live=False)
         run.detect()
         assert run.workflow_run is not None, scenario.name
         proposed |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.PROPOSED)}
+        unrouted |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)}
         guard._reset_for_test_harness()  # one runtime per process: reset between the runs of this test
-    assert check_coverage("ransomware", scenarios, WORKFLOW, proposed_rules=proposed) == []
-    assert proposed == {r.id for r in WORKFLOW.recommendations}
+    assert check_coverage("ransomware", scenarios, WORKFLOW, proposed_rules=proposed, unrouted_rules=unrouted) == []
+    assert proposed | (unrouted & {r.id for r in WORKFLOW.recommendations
+                                if not executable_anywhere(r.action)}) == {r.id for r in WORKFLOW.recommendations}

@@ -7,9 +7,12 @@ description: >-
   reputation sources rate it malicious, and the resolver logs show thousands of TXT queries with long
   random labels under it. The workstation trajectory shows the unknown process updsvc.exe issuing them
   (a browser querying the intranet is ignored). The package blocks the parent domain once, terminates
-  the querying process and isolates the workstation. The analyst approves everything; every action
-  executes and the reversible ones are registered as controls. Removing the binary and assessing what
-  left through the tunnel stay manual steps.
+  the querying process and isolates the workstation. The analyst approves everything; every routed
+  action executes and the reversible ones are registered as controls. Removing the binary and assessing
+  what left through the tunnel stay manual steps. Production parity: the terminate_process
+  recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual
+  handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by the real
+  adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
@@ -70,11 +73,10 @@ expect:
   package: true
   actions:
     - block_domain:cdn-update.test
-    - terminate_process:TH-LT-1047/4242
     - isolate_endpoint:TH-LT-1047
   elevated: []
   excluded: []
-  unrouted: []
+  unrouted: [terminate_process:TH-LT-1047/4242]
   below_threshold: []
   degraded_sources: []
   considered: []
@@ -83,6 +85,6 @@ expect:
   risk: {min: 60, max: 79}
   confidence: {min: 65, max: 90}
   evidence_min: 3
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2
   notifications: [incident_note, soc_notification, analyst_summary]

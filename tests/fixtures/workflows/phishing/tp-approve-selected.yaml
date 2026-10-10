@@ -3,9 +3,10 @@ schema: 1
 name: tp-approve-selected
 workflow: phishing
 description: >-
-  Same credential phishing campaign as tp-approve-all. The analyst approves only the two
-  quarantines and the domain block; every other action is recorded as rejected by the analyst and
-  never executed.
+  Same credential phishing campaign as tp-approve-all. The analyst approves only the two quarantines and
+  the domain block; every other action is recorded as rejected by the analyst and never executed.
+  Production parity: the block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED
+  write for it; shown for manual handling, never executed).
 tags: [true_positive, approve_selected]
 mode: live
 suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
@@ -108,16 +109,15 @@ expect:
     - "quarantine_email:<20260115.0900.4471@invoice-portal.example>"
     - "quarantine_email:<20260115.0902.4472@invoice-portal.example>"
     - block_domain:invoice-portal.example
-    - block_hash:1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b
     - revoke_sessions:ap-clerk-01@example.com
     - disable_user:ap-clerk-01@example.com
     - isolate_endpoint:TH-LT-1047
+  unrouted: [block_hash:1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b]
   containment: CONTAINED
   results:
-    quarantine_email:<20260115.0900.4471@invoice-portal.example>: SUCCESS
-    quarantine_email:<20260115.0902.4472@invoice-portal.example>: SUCCESS
+    "quarantine_email:<20260115.0900.4471@invoice-portal.example>": SUCCESS
+    "quarantine_email:<20260115.0902.4472@invoice-portal.example>": SUCCESS
     block_domain:invoice-portal.example: SUCCESS
-    block_hash:1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b: REJECTED_BY_ANALYST
     revoke_sessions:ap-clerk-01@example.com: REJECTED_BY_ANALYST
     disable_user:ap-clerk-01@example.com: REJECTED_BY_ANALYST
     isolate_endpoint:TH-LT-1047: REJECTED_BY_ANALYST

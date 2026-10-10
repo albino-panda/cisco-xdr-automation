@@ -4,10 +4,13 @@ name: legacy-05-fleet-wide-service
 workflow: persistence
 description: >-
   Migrated legacy scenario 05 (blast radius, aligned with C5). The same malicious service binary was
-  installed and is running on six workstations within minutes, which points at a compromised
-  deployment channel. Six endpoints exceed the max_endpoints cap (5), so every isolation stays proposed
-  with ELEVATED approval and a blast-radius warning, and the lead approves. The single hash block
-  (prevalence 6) is proposed behind normal approval. Removing the service is a manual step per host.
+  installed and is running on six workstations within minutes, which points at a compromised deployment
+  channel. Six endpoints exceed the max_endpoints cap (5), so every isolation stays proposed with
+  ELEVATED approval and a blast-radius warning, and the lead approves. The single hash block (prevalence
+  6) is proposed behind normal approval. Removing the service is a manual step per host. Production
+  parity: the block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it;
+  shown for manual handling, never executed); isolate_endpoint through secure_endpoint cannot be read
+  back by the real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/persistence/scenarios/05-fleet-wide-service.yaml
 mode: both
@@ -132,7 +135,6 @@ analyst: {decision: APPROVE_ALL, approvers: [lead]}
 expect:
   package: true
   actions:
-    - block_hash:6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6
     - isolate_endpoint:WS-OPS-101
     - isolate_endpoint:WS-OPS-102
     - isolate_endpoint:WS-OPS-103
@@ -147,6 +149,7 @@ expect:
     - isolate_endpoint:WS-OPS-105
     - isolate_endpoint:WS-OPS-106
   excluded: []
+  unrouted: [block_hash:6f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d66f708192a3b4c5d6]
   warnings: [ELEVATED APPROVAL REQUIRED, exceeds the blast-radius cap of 5]
   manual_steps:
     - remove_persistence:WS-OPS-101/svc-wintelemetryhost
@@ -156,5 +159,5 @@ expect:
     - remove_persistence:WS-OPS-105/svc-wintelemetryhost
     - remove_persistence:WS-OPS-106/svc-wintelemetryhost
   considered: []
-  containment: CONTAINED
-  controls: 7
+  containment: PARTIALLY_CONTAINED
+  controls: 6

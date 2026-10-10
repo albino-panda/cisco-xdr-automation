@@ -11,7 +11,7 @@ from xdr_response.models.scoring import SignalCategory
 from xdr_response.workflows.hooks import RunView
 from xdr_response.workflows.ransomware import HOOKS, WORKFLOW
 from xdr_response.workflows.ransomware.hooks import MASS_FILE_EVENTS, WIDESPREAD_PREVALENCE
-from xdr_response.workflows.runner import WorkflowRun
+from xdr_response.workflows.runner import RuleOutcomeStatus, WorkflowRun
 from tools.simulator.scenario import SIM_NOW
 
 SUITE = {"secure_endpoint": ("endpoint",), "entra": ("identity",), "umbrella": ("network",),
@@ -70,7 +70,10 @@ def _run(lab: Lab, incident: Incident | None = None) -> tuple[WorkflowRun, dict[
 
 
 def _proposed(run: WorkflowRun) -> set[str]:
-    return {f"{p.action_type.value}:{p.target}" for p in run.proposals}
+    """Recommended actions: proposed, or UNROUTED (the simulated adapters do only what the real ones do,
+    so e.g. a process termination or a Secure Endpoint hash block has no executor; it is still recommended)."""
+    return ({f"{p.action_type.value}:{p.target}" for p in run.proposals}
+            | {o.selector for o in run.outcomes_with(RuleOutcomeStatus.UNROUTED)})
 
 
 # ------------------------------------------------------------- affected hosts --
@@ -180,7 +183,7 @@ def test_a_hash_without_a_reputation_verdict_is_not_blocked_but_its_host_is_isol
 
 
 def test_unknown_prevalence_still_blocks_and_says_so():
-    lab = _lab()
+    lab = make_lab({**SUITE, "defender_endpoint": ("endpoint",)})  # a hash-capable executor
     _endpoint(lab)
     _detection(lab, sha256=PAYLOAD)
     _rep(lab, _O.SHA256, PAYLOAD)

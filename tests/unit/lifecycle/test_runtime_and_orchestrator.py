@@ -165,7 +165,10 @@ def test_expired_package_cannot_be_approved_and_is_replaced_by_reinvestigation()
                                            reason="package expired")
     assert fresh.package.package_id != expired.package_id and fresh.incident.state is S.AWAITING_APPROVAL
     assert [t.to_state for t in fresh.incident.history][-2:] == [S.NOT_STARTED, S.AWAITING_APPROVAL]
-    assert run.decide().incident.state is S.CONTAINED
+    # The fresh package executes; Secure Endpoint isolation cannot be verified automatically (UNABLE_TO_VERIFY,
+    # production parity 14.14.3), so the ransomware run ends PARTIALLY_CONTAINED rather than CONTAINED.
+    assert run.decide().incident.state is S.PARTIALLY_CONTAINED
+    assert run.environment.state_changing_calls()
 
 
 def test_audit_outage_at_decision_time_issues_no_token_and_executes_nothing():

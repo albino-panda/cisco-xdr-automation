@@ -3,8 +3,13 @@ schema: 1
 name: tp-approve-selected
 workflow: malicious-powershell
 description: >-
-  True positive; the analyst approves only the process termination and the isolation (the network team handles the
-  blocks). The unselected actions are REJECTED_BY_ANALYST and never execute; only the isolation registers a control.
+  True positive; the analyst approves only the isolation (the network team handles the blocks; the
+  process termination and the payload hash block are not in the package, see below). The unselected
+  actions are REJECTED_BY_ANALYST and never execute; only the isolation registers a control. Production
+  parity: the block_hash and terminate_process recommendations stay UNROUTED (no enabled adapter has a
+  VERIFIED write for them; shown for manual handling, never executed); isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [true_positive, approve_selected]
 mode: both
 suite:
@@ -112,13 +117,18 @@ environment:
 analyst:
   decision: APPROVE_SELECTED
   approvers: [analyst]
-  select: ['terminate_process:TH-LT-1047/4242', 'isolate_endpoint:TH-LT-1047']
+  select: [isolate_endpoint:TH-LT-1047]
   comment: network team handles the blocks
 expect:
   package: true
-  actions: ['terminate_process:TH-LT-1047/4242', 'isolate_endpoint:TH-LT-1047', 'block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00',
-    'block_domain:cdn-update.test', 'block_ip:198.51.100.77']
-  results: {'terminate_process:TH-LT-1047/4242': SUCCESS, 'isolate_endpoint:TH-LT-1047': SUCCESS, 'block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00': REJECTED_BY_ANALYST,
-    'block_domain:cdn-update.test': REJECTED_BY_ANALYST, 'block_ip:198.51.100.77': REJECTED_BY_ANALYST}
-  containment: CONTAINED
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - block_domain:cdn-update.test
+    - block_ip:198.51.100.77
+  unrouted: [terminate_process:TH-LT-1047/4242, block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00]
+  results:
+    isolate_endpoint:TH-LT-1047: SUCCESS
+    block_domain:cdn-update.test: REJECTED_BY_ANALYST
+    block_ip:198.51.100.77: REJECTED_BY_ANALYST
+  containment: PARTIALLY_CONTAINED
   controls: 1

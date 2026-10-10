@@ -3,9 +3,13 @@ schema: 1
 name: degraded-source
 workflow: malicious-powershell
 description: >-
-  VirusTotal is unavailable for the whole run. The payload, domain and IP verdicts from the other sources and the
-  Secure Endpoint detection still back the full package; VirusTotal is listed as a degraded source and confidence
-  drops, but nothing is blocked by the outage.
+  VirusTotal is unavailable for the whole run. The payload, domain and IP verdicts from the other
+  sources and the Secure Endpoint detection still back the full package; VirusTotal is listed as a
+  degraded source and confidence drops, but nothing is blocked by the outage. Production parity: the
+  block_hash and terminate_process recommendations stay UNROUTED (no enabled adapter has a VERIFIED
+  write for them; shown for manual handling, never executed); isolate_endpoint through secure_endpoint
+  cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [degraded_source, true_positive, approve_all]
 mode: both
 suite:
@@ -110,8 +114,11 @@ analyst:
   approvers: [analyst]
 expect:
   package: true
-  actions: ['terminate_process:TH-LT-1047/4242', 'isolate_endpoint:TH-LT-1047', 'block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00',
-    'block_domain:cdn-update.test', 'block_ip:198.51.100.77']
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - block_domain:cdn-update.test
+    - block_ip:198.51.100.77
+  unrouted: [terminate_process:TH-LT-1047/4242, block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00]
   degraded_sources: [virustotal]
-  containment: CONTAINED
-  controls: 4
+  containment: PARTIALLY_CONTAINED
+  controls: 3

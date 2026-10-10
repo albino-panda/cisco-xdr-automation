@@ -4,7 +4,10 @@ name: partial-failure
 workflow: unauthorized-rmm
 description: >-
   Everything is approved; the Meraki block of the peer IP fails at the vendor. Containment is partial,
-  the failed action is reported FAILED (never retried silently) and the other actions stand.
+  the failed action is reported FAILED (never retried silently) and the other actions stand. Production
+  parity: the block_hash and terminate_process recommendations stay UNROUTED (no enabled adapter has a
+  VERIFIED write for them; shown for manual handling, never executed); isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY.
 tags: [partial_failure, true_positive, approve_all]
 mode: live
 suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
@@ -69,18 +72,15 @@ environment:
 analyst: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
   actions:
-    - terminate_process:TH-LT-1047/7311
-    - block_hash:a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0
     - block_domain:relay-01.anydesk-relay.test
     - block_domain:get-remote-support.test
     - block_ip:198.51.100.45
     - isolate_endpoint:TH-LT-1047
+  unrouted: [terminate_process:TH-LT-1047/7311, block_hash:a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0]
   containment: PARTIALLY_CONTAINED
   results:
-    terminate_process:TH-LT-1047/7311: SUCCESS
-    block_hash:a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0: SUCCESS
     block_domain:relay-01.anydesk-relay.test: SUCCESS
     block_domain:get-remote-support.test: SUCCESS
     block_ip:198.51.100.45: FAILED
     isolate_endpoint:TH-LT-1047: SUCCESS
-  controls: 4
+  controls: 3

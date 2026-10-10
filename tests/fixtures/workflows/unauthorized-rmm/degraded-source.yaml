@@ -4,11 +4,12 @@ name: degraded-source
 workflow: unauthorized-rmm
 description: >-
   Umbrella (a required source) is unavailable for every enrichment. The run lists it as a degraded
-  source and still recommends what the remaining evidence backs: the Secure Endpoint detection flags
-  the tool (terminate, binary and relay domain blocks) and VirusTotal still rates the lure domain.
-  Only Umbrella rated the session peer IP, so the IP block and the isolation lose their backing: they
-  are not proposed but listed as considered with their records, never dropped silently. Confidence
-  drops.
+  source and still recommends what the remaining evidence backs: the Secure Endpoint detection flags the
+  tool (terminate, binary and relay domain blocks) and VirusTotal still rates the lure domain. Only
+  Umbrella rated the session peer IP, so the IP block and the isolation lose their backing: they are not
+  proposed but listed as considered with their records, never dropped silently. Confidence drops.
+  Production parity: the block_hash and terminate_process recommendations stay UNROUTED (no enabled
+  adapter has a VERIFIED write for them; shown for manual handling, never executed).
 tags: [degraded_source, true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
@@ -74,12 +75,11 @@ analyst: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
   package: true
   actions:
-    - terminate_process:TH-LT-1047/7311
-    - block_hash:a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0
     - block_domain:relay-01.anydesk-relay.test
     - block_domain:get-remote-support.test
+  unrouted: [terminate_process:TH-LT-1047/7311, block_hash:a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0]
   degraded_sources: [umbrella]
   considered: [isolate_endpoint:TH-LT-1047, block_ip:198.51.100.45]
   manual_steps: [uninstall AnyDesk on TH-LT-1047]
   containment: CONTAINED
-  controls: 3
+  controls: 2

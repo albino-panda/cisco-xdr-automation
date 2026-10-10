@@ -5,10 +5,12 @@ workflow: mail-bombing
 description: >-
   True positive: the mail-bomb detector reports a subscription bomb against jsmith@example.com. The
   flood buries a "password was changed" notice and a malicious DocuSign lure; inside the window a
-  high-risk sign-in succeeds after denied MFA prompts, a hiding mailbox rule appears and the
-  endpoint later shows remote-access tooling. The analyst approves the whole package: the flood and
-  the lure are quarantined, sessions revoked, the account disabled, the endpoint isolated and the
-  lure domain blocked. The buried notice stays in the mailbox for the analyst.
+  high-risk sign-in succeeds after denied MFA prompts, a hiding mailbox rule appears and the endpoint
+  later shows remote-access tooling. The analyst approves the whole package: the flood and the lure are
+  quarantined, sessions revoked, the account disabled, the endpoint isolated and the lure domain
+  blocked. The buried notice stays in the mailbox for the analyst. Production parity: isolate_endpoint
+  through secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so
+  containment is PARTIALLY_CONTAINED.
 tags: [true_positive, approve_all]
 mode: both
 incident:
@@ -132,6 +134,6 @@ expect:
   below_threshold: []
   degraded_sources: []
   evidence_min: 1
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 7
   notifications: [incident_note, soc_notification, analyst_summary]

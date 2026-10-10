@@ -6,7 +6,8 @@ description: >-
   Migrated legacy 04. Six workstations run the same unknown process that tunnels through one malicious
   parent domain, more than the blast-radius cap of 5 endpoints. The domain block stays STANDARD; every
   isolation stays proposed with ELEVATED approval and a blast-radius warning (never split or dropped),
-  so the lead approves.
+  so the lead approves. Production parity: isolate_endpoint through secure_endpoint cannot be read back
+  by the real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/dns-tunneling/scenarios/04-blast-radius.yaml
 mode: both
@@ -151,5 +152,5 @@ expect:
     - isolate_endpoint:WS-0504
     - isolate_endpoint:WS-0505
     - isolate_endpoint:WS-0506
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 7

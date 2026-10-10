@@ -3,8 +3,13 @@ schema: 1
 name: partial-failure
 workflow: malicious-powershell
 description: >-
-  The analyst approves everything, but the hash block fails at the vendor. The other actions succeed; the hash block
-  is FAILED (never retried silently) and the containment is PARTIALLY_CONTAINED.
+  The analyst approves everything, but the Umbrella write for the download-domain block fails at the
+  vendor. The other routed actions succeed; the domain block is FAILED (never retried silently) and the
+  containment is PARTIALLY_CONTAINED. The process termination and the payload hash block have no
+  VERIFIED write on any enabled adapter and are UNROUTED (shown for manual handling). Production parity:
+  the block_hash and terminate_process recommendations stay UNROUTED (no enabled adapter has a VERIFIED
+  write for them; shown for manual handling, never executed); isolate_endpoint through secure_endpoint
+  cannot be read back by the real adapter and ends UNABLE_TO_VERIFY.
 tags: [partial_failure, true_positive, approve_all]
 mode: live
 suite:
@@ -110,15 +115,20 @@ environment:
       prevalence: 1
       endpoints: [TH-LT-1047]
   faults:
-  - {kind: FAIL, integration: secure_endpoint, operation: block_hash, times: 10}
+  - {kind: FAIL, integration: umbrella, operation: block_domain, times: 10}
 analyst:
   decision: APPROVE_ALL
   approvers: [analyst]
 expect:
   package: true
-  actions: ['terminate_process:TH-LT-1047/4242', 'isolate_endpoint:TH-LT-1047', 'block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00',
-    'block_domain:cdn-update.test', 'block_ip:198.51.100.77']
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - block_domain:cdn-update.test
+    - block_ip:198.51.100.77
+  unrouted: [terminate_process:TH-LT-1047/4242, block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00]
   containment: PARTIALLY_CONTAINED
-  results: {'terminate_process:TH-LT-1047/4242': SUCCESS, 'isolate_endpoint:TH-LT-1047': SUCCESS, 'block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00': FAILED,
-    'block_domain:cdn-update.test': SUCCESS, 'block_ip:198.51.100.77': SUCCESS}
-  controls: 3
+  results:
+    isolate_endpoint:TH-LT-1047: SUCCESS
+    block_domain:cdn-update.test: FAILED
+    block_ip:198.51.100.77: SUCCESS
+  controls: 2

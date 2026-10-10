@@ -3,10 +3,13 @@ schema: 1
 name: degraded-source
 workflow: phishing
 description: >-
-  Same credential phishing campaign as tp-approve-all, but Umbrella (an expected source) is
-  unavailable during enrichment. The run reports the degraded source and lower confidence, and still
-  recommends the full package from the gateway verdict, VirusTotal, the click, the sign-in and the
-  endpoint detection.
+  Same credential phishing campaign as tp-approve-all, but Umbrella (an expected source) is unavailable
+  during enrichment. The run reports the degraded source and lower confidence, and still recommends the
+  full package from the gateway verdict, VirusTotal, the click, the sign-in and the endpoint detection.
+  Production parity: the block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED
+  write for it; shown for manual handling, never executed); isolate_endpoint through secure_endpoint
+  cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [degraded_source, true_positive]
 mode: both
 suite: {secure_email: [email], entra: [identity], umbrella: [network], virustotal: [intel], secure_endpoint: [endpoint],
@@ -105,9 +108,9 @@ expect:
     - "quarantine_email:<20260115.0900.4471@invoice-portal.example>"
     - "quarantine_email:<20260115.0902.4472@invoice-portal.example>"
     - block_domain:invoice-portal.example
-    - block_hash:1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b
     - revoke_sessions:ap-clerk-01@example.com
     - disable_user:ap-clerk-01@example.com
     - isolate_endpoint:TH-LT-1047
+  unrouted: [block_hash:1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d1a2b]
   degraded_sources: [umbrella]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED

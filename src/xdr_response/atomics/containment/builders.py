@@ -236,7 +236,8 @@ def build_containment(ctx: "AtomicContext", action_type: ActionType, target: str
     the scores are out of range, the rationale is empty or the target cannot be normalized.
     The proposal params are the caller's params plus the route params (the route wins).
     An unroutable action is still returned (``proposal=None`` with ``unrouted_reason``) so it is
-    reported for manual handling instead of being dropped.
+    reported for manual handling instead of being dropped; when the allow-list excludes its target the
+    reason says so (never to be done by hand).
     """
     spec = _containment_spec(action_type)
     drafts = _check_evidence(evidence)
@@ -257,9 +258,12 @@ def build_containment(ctx: "AtomicContext", action_type: ActionType, target: str
         proposal = ProposedAction(action_type=spec.action_type, target=normalized, target_kind=spec.target_kind,
                                   params={**caller_params, **route.params}, evidence=drafts, risk_score=risk,
                                   confidence_score=confidence, rationale=text, asset=asset)
+    unrouted = None
+    if proposal is None:
+        # An allow-listed target without an execution path must not read as "do it by hand".
+        unrouted = route.reason if not excluded else f"{route.reason}; allow-listed, never block it by hand: {excluded}"
     return BuiltRecommendation(action_type=spec.action_type, target=normalized, proposal=proposal, route=route,
-                               warnings=warnings, excluded_reason=excluded,
-                               unrouted_reason=None if proposal is not None else route.reason)
+                               warnings=warnings, excluded_reason=excluded, unrouted_reason=unrouted)
 
 
 # ---------------------------------------------------------- named builders --

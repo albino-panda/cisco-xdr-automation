@@ -3,8 +3,12 @@ schema: 1
 name: tp-approve-selected
 workflow: ransomware
 description: >-
-  True positive on one workstation. The analyst approves the isolation and the hash block only:
-  the session revocation is recorded as rejected by the analyst and never executed.
+  True positive on one workstation. The analyst approves the isolation only (the hash block is not in
+  the package, see below): the session revocation is recorded as rejected by the analyst and never
+  executed. Production parity: the block_hash recommendation stays UNROUTED (no enabled adapter has a
+  VERIFIED write for it; shown for manual handling, never executed); isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [true_positive, approve_selected]
 mode: live
 incident:
@@ -47,15 +51,14 @@ environment:
 analyst:
   decision: APPROVE_SELECTED
   approvers: [analyst]
-  select: [isolate_endpoint:TH-LT-1047, "block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f"]
+  select: [isolate_endpoint:TH-LT-1047]
 expect:
   actions:
     - isolate_endpoint:TH-LT-1047
-    - block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f
     - revoke_sessions:jsmith@example.com
+  unrouted: ["block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f"]
   results:
     isolate_endpoint:TH-LT-1047: SUCCESS
-    block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f: SUCCESS
     revoke_sessions:jsmith@example.com: REJECTED_BY_ANALYST
-  containment: CONTAINED
-  controls: 2
+  containment: PARTIALLY_CONTAINED
+  controls: 1

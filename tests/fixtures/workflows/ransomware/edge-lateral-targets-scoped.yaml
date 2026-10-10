@@ -3,10 +3,12 @@ schema: 1
 name: edge-lateral-targets-scoped
 workflow: ransomware
 description: >-
-  Lateral scope. TH-LT-1047 encrypts files; the related-endpoint search finds two endpoints it
-  reached. TH-LT-1061 has a malicious detection of its own (a fresh payload with no reputation
-  yet), so it is isolated too; TH-LT-1060 shows no ransomware activity and is only scoped for the
-  analyst (listed in the workflow facts), never isolated on that basis.
+  Lateral scope. TH-LT-1047 encrypts files; the related-endpoint search finds two endpoints it reached.
+  TH-LT-1061 has a malicious detection of its own (a fresh payload with no reputation yet), so it is
+  isolated too; TH-LT-1060 shows no ransomware activity and is only scoped for the analyst (listed in
+  the workflow facts), never isolated on that basis. Production parity: isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive]
 mode: both
 incident:
@@ -64,5 +66,5 @@ expect:
     - isolate_endpoint:TH-LT-1047
     - isolate_endpoint:TH-LT-1061
   elevated: []
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

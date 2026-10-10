@@ -17,6 +17,7 @@ from tools.simulator.workflow_scenario import (
     check_coverage,
     load_workflow_scenario,
 )
+from tools.simulator.workflow_scenario import executable_anywhere
 from xdr_response import guard
 from xdr_response.errors import ApprovalError, ApproverNotAllowedError
 from xdr_response.models import ActionResultStatus, ApprovalLevel, IncidentState
@@ -54,15 +55,18 @@ def _selectors(actions) -> set[str]:
 def test_the_scenario_set_meets_the_minimum_and_every_rule_is_proposed_somewhere():
     scenarios = [load_workflow_scenario(p) for p in _paths()]
     proposed: set[str] = set()
+    unrouted: set[str] = set()
     for scenario in scenarios:
         run = WorkflowScenarioRun(scenario, live=False)
         run.detect()
         assert run.workflow_run is not None, scenario.name
         proposed |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.PROPOSED)}
+        unrouted |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)}
         assert not run.workflow_run.outcomes_with(RuleOutcomeStatus.ERROR), scenario.name
         guard._reset_for_test_harness()
-    assert proposed == {r.id for r in WORKFLOW.recommendations}
-    assert check_coverage("c2", scenarios, WORKFLOW, proposed_rules=proposed) == []
+    assert proposed | (unrouted & {r.id for r in WORKFLOW.recommendations
+                                if not executable_anywhere(r.action)}) == {r.id for r in WORKFLOW.recommendations}
+    assert check_coverage("c2", scenarios, WORKFLOW, proposed_rules=proposed, unrouted_rules=unrouted) == []
     assert len([s for s in scenarios if s.name.startswith("edge-")]) >= 2
 
 
@@ -119,13 +123,16 @@ def test_a_critical_asset_needs_the_lead_and_an_analyst_alone_is_refused():
     run = _run("critical-asset-elevated", live=True)
     detection = run.detect()
     elevated = [a for a in detection.package.actions if a.approval_level is ApprovalLevel.ELEVATED]
-    assert _selectors(elevated) == {"isolate_endpoint:PRD-APP-03", "terminate_process:PRD-APP-03/3120"}
+    assert _selectors(elevated) == {"isolate_endpoint:PRD-APP-03"}
+    # the termination is recommended but has no VERIFIED write anywhere: reported UNROUTED, never dropped
+    assert "terminate_process:PRD-APP-03/3120" in {o.selector for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)}
     assert all(a.warnings for a in elevated)
     with pytest.raises(ApproverNotAllowedError):
         run.decide({"decision": "APPROVE_ALL"}, approvers=["analyst"])
     assert run.environment.state_changing_calls() == []
     decision = run.decide({"decision": "APPROVE_ALL"}, approvers=["lead"])
-    assert decision.report is not None and decision.report.overall.value == "CONTAINED"
+    # Secure Endpoint cannot read the isolation back (UNABLE_TO_VERIFY): partial, never CONTAINED
+    assert decision.report is not None and decision.report.overall.value == "PARTIALLY_CONTAINED"
 
 
 def test_a_protected_domain_controller_is_elevated_and_allow_listed_targets_are_shown_not_executed():
@@ -163,8 +170,11 @@ def test_restoration_needs_its_own_human_release_approval():
         run.decide_release({"decision": "APPROVE_ALL"}, approvers=["ai"])
     assert len(run.environment.state_changing_calls()) == calls
     result = run.decide_release({"decision": "APPROVE_ALL"}, approvers=["analyst"])
-    assert result.report is not None and result.report.overall.value == "RESTORED"
-    assert run.orchestrator.get_incident(run.incident_id).state is IncidentState.RESTORED
+    # the blocks are read back; the Secure Endpoint release is not, so its control waits for a human
+    assert result.report is not None and result.report.overall.value == "PARTIALLY_RESTORED"
+    assert run.orchestrator.get_incident(run.incident_id).state is IncidentState.AWAITING_RELEASE_APPROVAL
+    statuses = {c.action_type.value: c.status.value for c in run.runtime.registry.list(incident_id=run.incident_id)}
+    assert statuses.pop("isolate_endpoint") == "RELEASE_FAILED" and set(statuses.values()) == {"RELEASED"}
 
 
 def test_rejected_package_closes_without_any_control():
@@ -179,7 +189,8 @@ def test_a_degraded_source_does_not_block_the_recommendation():
     workflow_run = run.workflow_run
     assert workflow_run.degraded_sources() == ("umbrella",)
     assert any("degraded source: umbrella" in note for note in workflow_run.notes)
-    assert run.detection.package is not None and len(run.detection.package.actions) == 5
+    assert run.detection.package is not None and len(run.detection.package.actions) == 4
+    assert "terminate_process:TH-LT-1047/3120" in {o.selector for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)}
     assert run.check() == []
 
 

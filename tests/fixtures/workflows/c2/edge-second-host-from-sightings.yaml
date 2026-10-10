@@ -5,9 +5,11 @@ workflow: c2
 description: >-
   Finding the other endpoints that talk to the C2 domain. The incident names TH-LT-1047 and beacon-
   gate.test; the Defender XDR enterprise search finds TH-LT-2210 and TH-LT-2211 resolving the same
-  domain. The workflow investigates both: TH-LT-2210 has an active malicious detection and is
-  isolated with TH-LT-1047, while TH-LT-2211 has no malicious activity of its own and is listed as
-  considered (the domain block cuts its channel).
+  domain. The workflow investigates both: TH-LT-2210 has an active malicious detection and is isolated
+  with TH-LT-1047, while TH-LT-2211 has no malicious activity of its own and is listed as considered
+  (the domain block cuts its channel). Production parity: isolate_endpoint through secure_endpoint
+  cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], microsoft_cloud: [network]}
@@ -76,5 +78,5 @@ expect:
     - isolate_endpoint:TH-LT-2210
   considered:
     - isolate_endpoint:TH-LT-2211
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 3

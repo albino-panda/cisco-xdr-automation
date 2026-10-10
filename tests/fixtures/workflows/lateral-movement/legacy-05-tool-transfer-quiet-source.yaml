@@ -3,14 +3,17 @@ schema: 1
 name: legacy-05-tool-transfer-quiet-source
 workflow: lateral-movement
 description: >-
-  Legacy 05, converted to typed records (T1570). A tool is copied over an admin share to a file
-  server but has not run yet, so neither host has a detection. The tool is rated malicious and the
-  enterprise search lists the file server, so the destination is isolated. The source used only
-  built-in tools and has no detection of its own, but the connection records show it originated
-  the copy, so it is isolated too instead of being left active (the legacy spec needed the
-  detection's source_hosts list for this). A third clean host in the incident is untouched. The
-  account is not flagged by Entra: its sessions are revoked but it is not disabled. The tool hash
-  is blocked (new: the legacy plan had no hash block).
+  Legacy 05, converted to typed records (T1570). A tool is copied over an admin share to a file server
+  but has not run yet, so neither host has a detection. The tool is rated malicious and the enterprise
+  search lists the file server, so the destination is isolated. The source used only built-in tools and
+  has no detection of its own, but the connection records show it originated the copy, so it is isolated
+  too instead of being left active (the legacy spec needed the detection's source_hosts list for this).
+  A third clean host in the incident is untouched. The account is not flagged by Entra: its sessions are
+  revoked but it is not disabled. The tool hash is blocked (new: the legacy plan had no hash block).
+  Production parity: the block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED
+  write for it; shown for manual handling, never executed); isolate_endpoint through secure_endpoint
+  cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, edge_case]
 legacy_source: workflows/lateral-movement/scenarios/05-tool-transfer-quiet-source.yaml
 mode: both
@@ -84,10 +87,10 @@ expect:
     - isolate_endpoint:SRV-FILE-01
     - isolate_endpoint:WS-ENG-12
     - revoke_sessions:k.ng@example.com
-    - block_hash:deadbeef0000111122223333444455556666777788889999aaaabbbbccccdddd
   elevated: []
+  unrouted: [block_hash:deadbeef0000111122223333444455556666777788889999aaaabbbbccccdddd]
   considered: []
   manual_steps: []
   handoffs: []
-  containment: CONTAINED
-  controls: 3
+  containment: PARTIALLY_CONTAINED
+  controls: 2

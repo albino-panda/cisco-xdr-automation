@@ -4,7 +4,9 @@ name: tp-reject
 workflow: dns-tunneling
 description: >-
   The same tunnel. The analyst rejects the package (the desktop team reimages the workstation); the
-  incident closes and nothing changes at any vendor.
+  incident closes and nothing changes at any vendor. Production parity: the terminate_process
+  recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual
+  handling, never executed).
 tags: [true_positive, reject]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], splunk: [network], virustotal: [intel]}
@@ -65,8 +67,8 @@ expect:
   package: true
   actions:
     - block_domain:cdn-update.test
-    - terminate_process:TH-LT-1047/4242
     - isolate_endpoint:TH-LT-1047
+  unrouted: [terminate_process:TH-LT-1047/4242]
   decision_state: CLOSED
   controls: 0
   final_state: CLOSED

@@ -17,6 +17,7 @@ from tools.simulator.workflow_scenario import (
     check_coverage,
     load_workflow_scenario,
 )
+from tools.simulator.workflow_scenario import executable_anywhere
 from xdr_response import guard
 from xdr_response.errors import ApprovalError, ApproverNotAllowedError
 from xdr_response.models import ActionResultStatus, ApprovalLevel, IncidentState
@@ -54,15 +55,18 @@ def _selectors(actions) -> set[str]:
 def test_the_scenario_set_meets_the_minimum_and_every_rule_is_proposed_somewhere():
     scenarios = [load_workflow_scenario(p) for p in _paths()]
     proposed: set[str] = set()
+    unrouted: set[str] = set()
     for scenario in scenarios:
         run = WorkflowScenarioRun(scenario, live=False)
         run.detect()
         assert run.workflow_run is not None, scenario.name
         proposed |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.PROPOSED)}
+        unrouted |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)}
         assert not run.workflow_run.outcomes_with(RuleOutcomeStatus.ERROR), scenario.name
         guard._reset_for_test_harness()
-    assert proposed == {r.id for r in WORKFLOW.recommendations}
-    assert check_coverage("dns-tunneling", scenarios, WORKFLOW, proposed_rules=proposed) == []
+    assert proposed | (unrouted & {r.id for r in WORKFLOW.recommendations
+                                if not executable_anywhere(r.action)}) == {r.id for r in WORKFLOW.recommendations}
+    assert check_coverage("dns-tunneling", scenarios, WORKFLOW, proposed_rules=proposed, unrouted_rules=unrouted) == []
     assert len([s for s in scenarios if s.name.startswith("edge-")]) >= 2
     names = {s.name for s in scenarios}
     for required in ("tp-approve-all", "tp-approve-selected", "tp-reject", "benign-no-action", "degraded-source",
@@ -97,8 +101,9 @@ def test_live_nothing_changes_before_the_human_decision_then_approved_actions_ex
     assert run.environment.state_changing_calls() == []
     assert run.orchestrator.get_incident(run.incident_id).state is IncidentState.AWAITING_APPROVAL
     package = detection.package
-    assert _selectors(package.actions) == {f"block_domain:{PARENT}", f"terminate_process:{HOST}/4242",
-                                           f"isolate_endpoint:{HOST}"}
+    assert _selectors(package.actions) == {f"block_domain:{PARENT}", f"isolate_endpoint:{HOST}"}
+    # the termination has no VERIFIED write anywhere: recommended, reported UNROUTED, never executed
+    assert f"terminate_process:{HOST}/4242" in {o.selector for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)}
     assert all(a.approval_level is ApprovalLevel.STANDARD for a in package.actions)
     assert all(a.evidence and a.rationale for a in package.actions)
     decision = run.decide()
@@ -126,13 +131,14 @@ def test_a_critical_asset_needs_the_lead_and_an_analyst_alone_is_refused():
     run = _run("critical-asset-elevated", live=True)
     detection = run.detect()
     elevated = [a for a in detection.package.actions if a.approval_level is ApprovalLevel.ELEVATED]
-    assert {a.action_type.value for a in elevated} == {"isolate_endpoint", "terminate_process"}
+    assert {a.action_type.value for a in elevated} == {"isolate_endpoint"}
+    assert any(s.startswith("terminate_process:") for s in {o.selector for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)})
     assert all(a.warnings for a in elevated)
     with pytest.raises(ApproverNotAllowedError):
         run.decide({"decision": "APPROVE_ALL"}, approvers=["analyst"])
     assert run.environment.state_changing_calls() == []
     decision = run.decide({"decision": "APPROVE_ALL"}, approvers=["lead"])
-    assert decision.report is not None and decision.report.overall.value == "CONTAINED"
+    assert decision.report is not None and decision.report.overall.value == "PARTIALLY_CONTAINED"
 
 
 def test_a_hypervisor_client_is_elevated_and_a_host_that_cannot_be_isolated_is_shown():
@@ -169,8 +175,9 @@ def test_restoration_needs_its_own_human_release_approval():
         run.decide_release({"decision": "APPROVE_ALL"}, approvers=["ai"])
     assert len(run.environment.state_changing_calls()) == calls
     result = run.decide_release({"decision": "APPROVE_ALL"}, approvers=["analyst"])
-    assert result.report is not None and result.report.overall.value == "RESTORED"
-    assert run.orchestrator.get_incident(run.incident_id).state is IncidentState.RESTORED
+    # the domain block is read back; the Secure Endpoint release is not, so its control waits for a human
+    assert result.report is not None and result.report.overall.value == "PARTIALLY_RESTORED"
+    assert run.orchestrator.get_incident(run.incident_id).state is IncidentState.AWAITING_RELEASE_APPROVAL
 
 
 def test_rejected_package_closes_without_any_control():
@@ -189,7 +196,7 @@ def test_a_degraded_source_does_not_block_the_recommendation():
     workflow_run = run.workflow_run
     assert workflow_run.degraded_sources() == ("umbrella",)
     assert any("degraded source: umbrella" in note for note in workflow_run.notes)
-    assert run.detection.package is not None and len(run.detection.package.actions) == 3
+    assert run.detection.package is not None and len(run.detection.package.actions) == 2
     block = next(p for p in workflow_run.proposals if p.action_type.value == "block_domain")
     assert block.confidence_score < baseline[(block.action_type, block.target)]
     assert run.check() == []
@@ -198,8 +205,8 @@ def test_a_degraded_source_does_not_block_the_recommendation():
 def test_an_approved_dns_tool_is_never_contained_but_the_real_tunnel_is():
     run = _run("edge-approved-dns-tool", live=True).play()
     package = run.detection.package
-    assert _selectors(package.actions) == {"block_domain:q9-relay.test", "terminate_process:TH-LT-2051/3301",
-                                           "isolate_endpoint:TH-LT-2051"}
+    assert _selectors(package.actions) == {"block_domain:q9-relay.test", "isolate_endpoint:TH-LT-2051"}
+    assert "terminate_process:TH-LT-2051/3301" in {o.selector for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)}
     assert {(e.action_type.value, e.target, e.reason) for e in package.excluded_targets} == {
         ("block_domain", "dnstools.example.net", "allowlists.approved_dns_tools: Example DNS diagnostics")}
     targets = {c.target for c in run.environment.state_changing_calls()}

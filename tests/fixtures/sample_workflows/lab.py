@@ -18,7 +18,8 @@ from xdr_response.workflows.runner import WorkflowRunner
 
 HASH = "9f2b7c1d" * 8
 HOST = "TH-LT-1047"
-SUITE: Mapping[str, tuple[str, ...]] = {"secure_endpoint": ("endpoint",), "virustotal": ("intel",)}
+SUITE: Mapping[str, tuple[str, ...]] = {"secure_endpoint": ("endpoint",), "defender_endpoint": ("endpoint",),
+                                         "virustotal": ("intel",)}
 
 
 @dataclass

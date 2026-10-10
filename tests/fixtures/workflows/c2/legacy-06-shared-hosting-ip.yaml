@@ -3,11 +3,13 @@ schema: 1
 name: legacy-06-shared-hosting-ip
 workflow: c2
 description: >-
-  Migrated from legacy scenario 06. The C2 domain static-assets.test is MALICIOUS but resolves to a
-  CDN address the incident source lists in trigger.shared_infrastructure_ips. The domain is blocked
-  and the infected WKS-0520 isolated; the shared IP is not blocked and is listed as considered.
-  KIOSK-0007 is infected too, but its connector policy does not allow isolation: it is a manual step
-  (contain it on the network by hand), never silently skipped.
+  Migrated from legacy scenario 06. The C2 domain static-assets.test is MALICIOUS but resolves to a CDN
+  address the incident source lists in trigger.shared_infrastructure_ips. The domain is blocked and the
+  infected WKS-0520 isolated; the shared IP is not blocked and is listed as considered. KIOSK-0007 is
+  infected too, but its connector policy does not allow isolation: it is a manual step (contain it on
+  the network by hand), never silently skipped. Production parity: isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/c2/scenarios/06-shared-hosting-ip.yaml
 mode: both
@@ -69,5 +71,5 @@ expect:
     - block_ip:198.51.100.80
   manual_steps:
     - isolate_endpoint:KIOSK-0007
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

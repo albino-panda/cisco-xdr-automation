@@ -4,11 +4,12 @@ name: edge-domain-controller-ntds
 workflow: credential-dumping
 description: >-
   The Active Directory database is copied on domain controller DC-02. Its isolation needs ELEVATED
-  approval with the domain-controller warning (never skipped), and so do the revocation and disable
-  of the Domain Admins member signed in on it. Because the domain credential store was exposed,
-  every domain account is affected: the domain-wide credential reset (including the Kerberos
-  ticket-granting account, twice) is a manual step for the incident commander, never automated.
-  The lead approves.
+  approval with the domain-controller warning (never skipped), and so do the revocation and disable of
+  the Domain Admins member signed in on it. Because the domain credential store was exposed, every
+  domain account is affected: the domain-wide credential reset (including the Kerberos ticket-granting
+  account, twice) is a manual step for the incident commander, never automated. The lead approves.
+  Production parity: isolate_endpoint through secure_endpoint cannot be read back by the real adapter
+  and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [edge_case, critical_asset, true_positive, approve_all]
 mode: both
 incident:
@@ -52,5 +53,5 @@ expect:
   considered: []
   manual_steps: [domain-credential-reset:DC-02]
   handoffs: [account-takeover:infra.admin@example.com]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

@@ -5,7 +5,9 @@ workflow: exfiltration
 description: >-
   Same compromised-account upload as tp-approve-all. The analyst approves only the isolation of the
   laptop and the block of the drop domain; the IP block and the account actions wait for the identity
-  team. Only the selected actions execute; the others are reported REJECTED_BY_ANALYST.
+  team. Only the selected actions execute; the others are reported REJECTED_BY_ANALYST. Production
+  parity: isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [true_positive, approve_selected]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel], entra: [identity],
@@ -78,5 +80,5 @@ expect:
     block_ip:203.0.113.145: REJECTED_BY_ANALYST
     revoke_sessions:jsmith@example.com: REJECTED_BY_ANALYST
     disable_user:jsmith@example.com: REJECTED_BY_ANALYST
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 2

@@ -18,6 +18,7 @@ from tools.simulator.workflow_scenario import (
     check_coverage,
     load_workflow_scenario,
 )
+from tools.simulator.workflow_scenario import executable_anywhere
 from xdr_response import guard
 from xdr_response.atomics.records import SourceOutcome
 from xdr_response.errors import ApprovalError
@@ -209,13 +210,16 @@ def test_every_rule_is_proposed_somewhere_and_the_minimum_set_is_met():
     paths = sorted(Path(SCENARIOS).glob("*.yaml"))
     scenarios = [load_workflow_scenario(p) for p in paths]
     proposed: set[str] = set()
+    unrouted: set[str] = set()
     for scenario in scenarios:
         guard._reset_for_test_harness()  # one runtime per process
         run = WorkflowScenarioRun(scenario, live=False)
         run.detect()
         proposed |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.PROPOSED)}
+        unrouted |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)}
     definition = discover_workflows().get("suspicious-authentication").definition
-    assert check_coverage("suspicious-authentication", scenarios, definition, proposed_rules=proposed) == []
-    assert proposed == {r.id for r in WORKFLOW.recommendations}
+    assert check_coverage("suspicious-authentication", scenarios, definition, proposed_rules=proposed, unrouted_rules=unrouted) == []
+    assert proposed | (unrouted & {r.id for r in WORKFLOW.recommendations
+                                if not executable_anywhere(r.action)}) == {r.id for r in WORKFLOW.recommendations}
     assert sum(1 for s in scenarios if "edge_case" in s.tags) >= 2
     assert not any("legacy" in s.tags for s in scenarios)  # new workflow: no legacy spec

@@ -6,7 +6,9 @@ description: >-
   A stolen session: Entra reports a token replay for gpatel from an IP with no reputation (no source
   rates it), and gpatel's laptop TH-LT-4410 has an active infostealer detection. Revoking the sessions
   invalidates the stolen token and isolating the laptop stops the theft; with no source rating the
-  replay IP malicious, no block is recommended.
+  replay IP malicious, no block is recommended. Production parity: isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive, approve_all]
 mode: both
 suite: {entra: [identity], cisco_xdr: [intel], microsoft_cloud: [network], secure_endpoint: [endpoint],
@@ -58,5 +60,5 @@ expect:
   actions:
     - revoke_sessions:gpatel@example.com
     - isolate_endpoint:TH-LT-4410
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 1

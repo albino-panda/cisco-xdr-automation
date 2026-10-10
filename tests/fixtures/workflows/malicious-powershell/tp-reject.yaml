@@ -3,8 +3,10 @@ schema: 1
 name: tp-reject
 workflow: malicious-powershell
 description: >-
-  True positive; the analyst rejects the whole package (the desktop team rebuilds the device). The incident closes,
-  nothing executes and no control is registered.
+  True positive; the analyst rejects the whole package (the desktop team rebuilds the device). The
+  incident closes, nothing executes and no control is registered. Production parity: the block_hash and
+  terminate_process recommendations stay UNROUTED (no enabled adapter has a VERIFIED write for them;
+  shown for manual handling, never executed).
 tags: [true_positive, reject]
 mode: both
 suite:
@@ -115,8 +117,11 @@ analyst:
   comment: device is rebuilt by the desktop team
 expect:
   package: true
-  actions: ['terminate_process:TH-LT-1047/4242', 'isolate_endpoint:TH-LT-1047', 'block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00',
-    'block_domain:cdn-update.test', 'block_ip:198.51.100.77']
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - block_domain:cdn-update.test
+    - block_ip:198.51.100.77
+  unrouted: [terminate_process:TH-LT-1047/4242, block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00]
   decision_state: CLOSED
   controls: 0
   final_state: CLOSED

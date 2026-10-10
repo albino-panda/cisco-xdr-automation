@@ -3,11 +3,12 @@ schema: 1
 name: edge-email-origin-campaign
 workflow: ransomware
 description: >-
-  The incident carries the id of the message that delivered the payload link. Secure Email shows
-  the message (malicious, still in the inbox) and its campaign: a second delivered copy to another
-  mailbox and a third already quarantined. Both delivered copies are recommended for quarantine
-  (the quarantined one is not), the link rated malicious is blocked, and the encrypting
-  workstation is isolated with the recipient's sessions revoked.
+  The incident carries the id of the message that delivered the payload link. Secure Email shows the
+  message (malicious, still in the inbox) and its campaign: a second delivered copy to another mailbox
+  and a third already quarantined. Both delivered copies are recommended for quarantine (the quarantined
+  one is not), the link rated malicious is blocked, and the encrypting workstation is isolated with the
+  recipient's sessions revoked. Production parity: isolate_endpoint through secure_endpoint cannot be
+  read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive]
 mode: both
 incident:
@@ -75,4 +76,4 @@ expect:
     - block_url:https://invoice-portal.test/view/2231
     - revoke_sessions:jsmith@example.com
   elevated: []
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED

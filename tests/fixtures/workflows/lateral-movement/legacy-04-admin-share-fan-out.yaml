@@ -3,14 +3,15 @@ schema: 1
 name: legacy-04-admin-share-fan-out
 workflow: lateral-movement
 description: >-
-  Legacy 04, converted to typed records (C5: over-limit becomes ELEVATED). An account that signed
-  in from an external address rated malicious uses SMB admin shares to reach six operations
-  workstations from one engineering workstation; all seven hosts carry malicious detections.
-  Seven isolations exceed the endpoint blast-radius cap (5), so every isolation stays proposed with
-  ELEVATED approval and a blast-radius warning, and the lead approves. The account actions need
-  standard approval: session revocation and, because of the successful sign-in from the malicious
-  address, disabling; the address is blocked (new: the legacy plan had no address block). The
-  account is handed off to account-takeover.
+  Legacy 04, converted to typed records (C5: over-limit becomes ELEVATED). An account that signed in
+  from an external address rated malicious uses SMB admin shares to reach six operations workstations
+  from one engineering workstation; all seven hosts carry malicious detections. Seven isolations exceed
+  the endpoint blast-radius cap (5), so every isolation stays proposed with ELEVATED approval and a
+  blast-radius warning, and the lead approves. The account actions need standard approval: session
+  revocation and, because of the successful sign-in from the malicious address, disabling; the address
+  is blocked (new: the legacy plan had no address block). The account is handed off to account-takeover.
+  Production parity: isolate_endpoint through secure_endpoint cannot be read back by the real adapter
+  and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, true_positive]
 legacy_source: workflows/lateral-movement/scenarios/04-admin-share-fan-out.yaml
 mode: both
@@ -184,4 +185,4 @@ expect:
   warnings: [ELEVATED APPROVAL REQUIRED, blast-radius cap]
   considered: []
   handoffs: ["account-takeover:m.ortiz@example.com"]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED

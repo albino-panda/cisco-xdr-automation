@@ -24,7 +24,8 @@ from xdr_response.models import (
 
 @pytest.fixture
 def lab():
-    return make_lab()
+    # One endpoint product and one intel source: the facade's name lists below are exact.
+    return make_lab({"secure_endpoint": ("endpoint",), "virustotal": ("intel",)})
 
 
 def test_only_a_registry_is_accepted_and_no_adapter_leaks(lab):

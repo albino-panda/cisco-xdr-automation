@@ -3,11 +3,16 @@ schema: 1
 name: tp-approve-selected
 workflow: persistence
 description: >-
-  True positive (same facts as tp-approve-all). The analyst approves only the isolation and the
-  hash block; the process termination is recorded as rejected by the analyst and never executed.
+  True positive (same facts as tp-approve-all). The tenant also runs Defender for Endpoint for
+  indicators, so the hash block routes to Defender (the real Secure Endpoint adapter cannot block
+  hashes). The analyst approves only the isolation; the hash block is recorded as rejected by the
+  analyst and never executed. Production parity: the terminate_process recommendation stays UNROUTED (no
+  enabled adapter has a VERIFIED write for it; shown for manual handling, never executed);
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [true_positive, approve_selected]
 mode: live
-suite: {secure_endpoint: [endpoint], virustotal: [intel]}
+suite: {secure_endpoint: [endpoint], defender_endpoint: [endpoint], virustotal: [intel]}
 incident:
   incident_id: XDR-PER-0002
   title: New Run key value launching unknown binary on TH-LT-1047
@@ -56,18 +61,17 @@ environment:
       subject: 0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5
       record: {kind: hash_prevalence, sha256: 0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5,
                file_name: odsync.exe, verdict: MALICIOUS, prevalence: 1, endpoints: [TH-LT-1047]}
-analyst: {decision: APPROVE_SELECTED, approvers: [analyst], select: [isolate_endpoint:TH-LT-1047, block_hash:0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5],
+analyst: {decision: APPROVE_SELECTED, approvers: [analyst], select: [isolate_endpoint:TH-LT-1047],
           comment: the endpoint team stops the process after isolation}
 expect:
   package: true
   actions:
     - isolate_endpoint:TH-LT-1047
-    - terminate_process:TH-LT-1047/4242
     - block_hash:0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5
+  unrouted: [terminate_process:TH-LT-1047/4242]
   results:
     isolate_endpoint:TH-LT-1047: SUCCESS
-    block_hash:0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5: SUCCESS
-    terminate_process:TH-LT-1047/4242: REJECTED_BY_ANALYST
+    block_hash:0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5: REJECTED_BY_ANALYST
   manual_steps: [remove_persistence:TH-LT-1047/run-onedrivesync]
-  containment: CONTAINED
-  controls: 2
+  containment: PARTIALLY_CONTAINED
+  controls: 1

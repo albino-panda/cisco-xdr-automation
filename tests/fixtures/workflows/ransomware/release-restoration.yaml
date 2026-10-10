@@ -3,8 +3,13 @@ schema: 1
 name: release-restoration
 workflow: ransomware
 description: >-
-  Approve and contain a kiosk with no signed-in account, then a separate human release decision
-  (after reimaging) restores both controls: the isolation is released and the hash unblocked.
+  Approve and contain a kiosk with no signed-in account, then a separate human release decision (after
+  reimaging) restores both controls: the isolation is released and the hash unblocked. Production
+  parity: the block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it;
+  shown for manual handling, never executed); isolate_endpoint and release_endpoint through
+  secure_endpoint cannot be read back by the real adapters and end UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED, restoration is RESTORATION_FAILED and the incident stays
+  AWAITING_RELEASE_APPROVAL.
 tags: [release, true_positive, approve_all]
 mode: live
 incident:
@@ -43,8 +48,8 @@ release: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
   actions:
     - isolate_endpoint:TH-KS-0204
-    - block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f
-  containment: CONTAINED
-  controls: 2
-  restoration: RESTORED
-  final_state: RESTORED
+  unrouted: [block_hash:5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f5e8a1c3f]
+  containment: PARTIALLY_CONTAINED
+  controls: 1
+  restoration: RESTORATION_FAILED
+  final_state: AWAITING_RELEASE_APPROVAL

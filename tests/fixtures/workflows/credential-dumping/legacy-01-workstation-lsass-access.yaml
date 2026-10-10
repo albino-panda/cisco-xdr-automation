@@ -5,13 +5,16 @@ workflow: credential-dumping
 description: >-
   Legacy 01, converted to typed records. Secure Endpoint flags a malicious read of LSASS memory on a
   standard workstation and the file hash is malicious. The two accounts logged on to the host (the
-  legacy incident.context.logged_on_users, now the endpoint record's users) lose their sessions,
-  and the help-desk account, which the identity provider marks privileged, is also disabled. A
-  third user named in the incident never logged on to the host and is not actioned. New compared
-  with the legacy plan: the malicious tool hash (prevalence 1) is proposed for a block, the
-  credential reset is a manual step and the exposed accounts are handed off to account-takeover.
-  Every action needs human approval (C1); the privileged account's actions are ELEVATED with a
-  privileged-account warning (14.11.6), so the lead approves.
+  legacy incident.context.logged_on_users, now the endpoint record's users) lose their sessions, and the
+  help-desk account, which the identity provider marks privileged, is also disabled. A third user named
+  in the incident never logged on to the host and is not actioned. New compared with the legacy plan:
+  the malicious tool hash (prevalence 1) is proposed for a block, the credential reset is a manual step
+  and the exposed accounts are handed off to account-takeover. Every action needs human approval (C1);
+  the privileged account's actions are ELEVATED with a privileged-account warning (14.11.6), so the lead
+  approves. Production parity: the block_hash recommendation stays UNROUTED (no enabled adapter has a
+  VERIFIED write for it; shown for manual handling, never executed); isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/credential-dumping/scenarios/01-workstation-lsass-access.yaml
 mode: both
@@ -73,11 +76,11 @@ expect:
     - revoke_sessions:alice.nguyen@example.com
     - revoke_sessions:helpdesk-admin07@example.com
     - disable_user:helpdesk-admin07@example.com
-    - block_hash:3b1f0c2d4e5a6978b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60718293a4b5c6d
   elevated: [revoke_sessions:helpdesk-admin07@example.com, disable_user:helpdesk-admin07@example.com]
+  unrouted: [block_hash:3b1f0c2d4e5a6978b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f60718293a4b5c6d]
   warnings: [ELEVATED APPROVAL REQUIRED, Privileged account]
   considered: []
   manual_steps: [credential-reset:WS-0142.EXAMPLE.COM]
   handoffs: [account-takeover:alice.nguyen@example.com, account-takeover:helpdesk-admin07@example.com]
-  containment: CONTAINED
-  controls: 3
+  containment: PARTIALLY_CONTAINED
+  controls: 2

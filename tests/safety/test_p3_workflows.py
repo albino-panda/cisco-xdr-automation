@@ -37,6 +37,7 @@ from xdr_response.models import (
     get_action_spec,
 )
 from xdr_response.workflows.discovery import discover_workflows
+from xdr_response.workflows.runner import RuleOutcomeStatus
 
 FIXTURES = REPO_ROOT / "tests" / "fixtures" / "workflows"
 PACKAGE_DIR = REPO_ROOT / "src" / "xdr_response" / "workflows"
@@ -79,13 +80,56 @@ def _detect(data: Mapping[str, Any], workflow: str, name: str, *, live: bool) ->
     return run
 
 
-def _baseline(workflow: str, name: str = "tp-approve-all") -> list[tuple[ActionType, str, TargetKind]]:
+def _baseline(workflow: str, name: str = "tp-approve-all", *,
+              data: Mapping[str, Any] | None = None) -> list[tuple[ActionType, str, TargetKind]]:
     """The package actions of the unmodified scenario (dry run), then a fresh guard."""
-    run = _detect(_raw(workflow, name), workflow, name, live=False)
+    run = _detect(_raw(workflow, name) if data is None else data, workflow, name, live=False)
     package = run.detection.package
     guard._reset_for_test_harness()
     assert package is not None, f"{workflow}/{name}: the unmodified scenario must propose a package"
     return [(a.action_type, a.target, a.target_kind) for a in package.actions]
+
+
+def _recommended(run: WorkflowScenarioRun) -> set[tuple[ActionType, str]]:
+    """Everything the run recommends to a human: the package actions plus the UNROUTED outcomes.
+
+    terminate_process, quarantine_file, remove_persistence and (without Defender for Endpoint) block_hash
+    have no VERIFIED write on the enabled real-parity adapters (architecture 14.14.3, 15.2). The run still
+    recommends them for manual handling as UNROUTED outcomes, so a check of what is (or is never)
+    recommended must look there too, or it would pass vacuously. An unrouted outcome whose target the
+    allow-list excludes ("never block it by hand") is not a recommendation.
+    """
+    package = run.detection.package if run.detection else None
+    out = {(a.action_type, a.target) for a in (package.actions if package else ())}
+    if run.workflow_run is not None:
+        out |= {(o.action_type, o.target) for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)
+                if o.target and "never block it by hand" not in o.detail}
+    return out
+
+
+def _recommended_baseline(workflow: str, name: str = "tp-approve-all") -> list[tuple[ActionType, str, TargetKind]]:
+    """:func:`_recommended` of the unmodified scenario (dry run), then a fresh guard."""
+    run = _detect(_raw(workflow, name), workflow, name, live=False)
+    out = sorted(_recommended(run), key=lambda item: (item[0].value, item[1]))
+    guard._reset_for_test_harness()
+    return [(a, t, get_action_spec(a).target_kind) for a, t in out]
+
+
+#: Workflows whose default lab executes fewer than two actions now that the simulated adapters mirror the
+#: real ones (persistence: only the Secure Endpoint isolation has a write; the hash block, termination,
+#: quarantine and persistence removal are unrouted). The multi-action checks (partial failure, release)
+#: also enable Defender for Endpoint, a real-parity adapter with a hash-block write, so there are two
+#: controls to work with.
+_MULTI_ACTION_SUITE: Mapping[str, Mapping[str, list[str]]] = {"persistence": {"defender_endpoint": ["endpoint"]}}
+
+
+def _multi_action_tp(workflow: str) -> dict[str, Any]:
+    """tp-approve-all, with the extra real-parity adapter of :data:`_MULTI_ACTION_SUITE` when listed."""
+    data = copy.deepcopy(_raw(workflow, "tp-approve-all"))
+    extra = _MULTI_ACTION_SUITE.get(workflow)
+    if extra:
+        data["suite"] = {**(data.get("suite") or {}), **extra}
+    return data
 
 
 def _approvers(package: Any) -> list[str]:
@@ -503,7 +547,7 @@ def test_allowlisted_endpoint_reported_by_its_fqdn_is_never_contained(workflow: 
 def test_approved_rmm_and_dns_tool_indicators_are_never_blocked(workflow: str):
     """Hashes and domains of sanctioned tools (approved RMM, approved DNS tools) are never blocked,
     nor are the running processes of those binaries terminated."""
-    baseline = _baseline(workflow)
+    baseline = _recommended_baseline(workflow)
     hashes = sorted({t for _a, t, k in baseline if k is TargetKind.HASH})
     domains = sorted({t for _a, t, k in baseline if k is TargetKind.DOMAIN})
     if not hashes and not domains:
@@ -516,11 +560,12 @@ def test_approved_rmm_and_dns_tool_indicators_are_never_blocked(workflow: str):
     data = _with_config(_raw(workflow, "tp-approve-all"), override)
     run = _detect(data, workflow, "tp-approve-all", live=True)
     package = run.detection.package
-    for action in package.actions if package else ():
-        if action.target_kind is TargetKind.HASH:
-            assert action.target not in hashes, f"approved RMM hash proposed: {action.action_type.value}"
-        if action.target_kind is TargetKind.DOMAIN:
-            assert action.target not in domains, "approved DNS tool domain proposed for blocking"
+    for action_type, target in _recommended(run):
+        kind = get_action_spec(action_type).target_kind
+        if kind is TargetKind.HASH:
+            assert target not in hashes, f"approved RMM hash recommended: {action_type.value}"
+        if kind is TargetKind.DOMAIN:
+            assert target not in domains, "approved DNS tool domain recommended for blocking"
     if package is not None and package.actions:
         _approve_all(run)
     touched = {(op, (tgt or "").lower()) for _i, op, tgt in _state_calls(run)}
@@ -618,8 +663,8 @@ def test_rmm_process_of_an_approved_tool_is_not_terminated_when_the_start_event_
     data = _strip_process_hashes(copy.deepcopy(_raw("unauthorized-rmm", "edge-approved-rmm-excluded")))
     run = _detect(data, "unauthorized-rmm", "edge-approved-rmm-excluded", live=True)
     package = run.detection.package
-    killed = [a.target for a in (package.actions if package else ()) if a.action_type is ActionType.TERMINATE_PROCESS]
-    assert killed == [], f"approved RMM agent proposed for termination: {killed}"
+    killed = [t for a, t in _recommended(run) if a is ActionType.TERMINATE_PROCESS]
+    assert killed == [], f"approved RMM agent recommended for termination: {killed}"
     if package is not None and package.actions:
         _approve_all(run)
     assert not [c for c in _state_calls(run) if c[1] == "terminate_process"]
@@ -631,9 +676,8 @@ def test_rmm_process_of_an_approved_signer_build_is_not_terminated_when_the_star
     termination of that same binary must still be withheld."""
     data = _strip_process_hashes(copy.deepcopy(_raw("unauthorized-rmm", "edge-approved-signer-new-build")))
     run = _detect(data, "unauthorized-rmm", "edge-approved-signer-new-build", live=False)
-    package = run.detection.package
-    killed = [a.target for a in (package.actions if package else ()) if a.action_type is ActionType.TERMINATE_PROCESS]
-    assert killed == [], f"approved-signer RMM build proposed for termination: {killed}"
+    killed = [t for a, t in _recommended(run) if a is ActionType.TERMINATE_PROCESS]
+    assert killed == [], f"approved-signer RMM build recommended for termination: {killed}"
 
 
 def test_rmm_relay_of_an_approved_signer_build_is_never_blocked():
@@ -671,9 +715,7 @@ def test_rmm_approved_signer_matching_ignores_case_and_whitespace(signer: str):
         if record.get("kind") == "hash_prevalence":
             record["signer"] = signer
     run = _detect(data, "unauthorized-rmm", "edge-approved-signer-new-build", live=False)
-    package = run.detection.package
-    assert package is None or not [a for a in package.actions if a.action_type in (
-        ActionType.BLOCK_HASH, ActionType.TERMINATE_PROCESS)]
+    assert not [a for a, _t in _recommended(run) if a in (ActionType.BLOCK_HASH, ActionType.TERMINATE_PROCESS)]
 
 
 def test_rmm_look_alike_signer_is_not_treated_as_approved():
@@ -684,7 +726,8 @@ def test_rmm_look_alike_signer_is_not_treated_as_approved():
         if record.get("kind") == "hash_prevalence":
             record["signer"] = "Example RMM Vendor Inc. Clone"
     run = _detect(data, "unauthorized-rmm", "tp-approve-all", live=False)
-    assert any(a.action_type is ActionType.BLOCK_HASH for a in run.detection.package.actions)
+    # The hash block has no VERIFIED write in this lab (unrouted, for manual handling): still recommended.
+    assert any(a is ActionType.BLOCK_HASH for a, _t in _recommended(run))
 
 
 def test_rmm_sanctioned_tool_in_persistence_workflow_is_never_blocked_or_terminated():
@@ -692,16 +735,15 @@ def test_rmm_sanctioned_tool_in_persistence_workflow_is_never_blocked_or_termina
     malicious by a vendor: its hash block and the termination of its process are withheld
     (allowlists.approved_rmm), never proposed."""
     data = copy.deepcopy(_raw("persistence", "tp-approve-all"))
-    baseline = _baseline("persistence")
+    baseline = _recommended_baseline("persistence")
     sha = [t for a, t, _k in baseline if a is ActionType.BLOCK_HASH][0]
     data = _walk_replace(data, sha, _APPROVED_HASH)
     for ref in data["incident"].get("observables") or ():
         if ref.get("value") == sha:
             ref["value"] = _APPROVED_HASH
     run = _detect(data, "persistence", "tp-approve-all", live=True)
-    package = run.detection.package
-    bad = [f"{a.action_type.value}:{a.target}" for a in (package.actions if package else ())
-           if a.action_type in (ActionType.BLOCK_HASH, ActionType.TERMINATE_PROCESS)]
+    bad = [f"{a.value}:{t}" for a, t in sorted(_recommended(run), key=lambda i: (i[0].value, i[1]))
+           if a in (ActionType.BLOCK_HASH, ActionType.TERMINATE_PROCESS)]
     assert bad == [], f"approved RMM binary blocked or terminated by persistence: {bad}"
 
 
@@ -988,9 +1030,10 @@ def test_degraded_source_is_reported_not_hidden(workflow: str):
 @pytest.mark.parametrize("position", ["first", "last"])
 @pytest.mark.parametrize("fault", ["FAIL", "NO_EFFECT", "TIMEOUT", "AUTH_FAIL", "INVALID_TARGET"])
 def test_one_failed_or_ineffective_action_reports_partially_contained(workflow: str, position: str, fault: str):
-    baseline = _baseline(workflow)
+    data = _multi_action_tp(workflow)
+    baseline = _baseline(workflow, data=data)
+    assert len(baseline) >= 2, f"{workflow}: need two executable actions for this test"
     action_type, target, _kind = baseline[0] if position == "first" else baseline[-1]
-    data = copy.deepcopy(_raw(workflow, "tp-approve-all"))
     data["environment"]["faults"] = list(data["environment"].get("faults") or []) + [
         {"kind": fault, "operation": action_type.value, "target": target, "times": None}]
     run = _detect(data, workflow, "tp-approve-all", live=True)
@@ -1015,11 +1058,11 @@ _REVERSIBLE = frozenset({ActionType.ISOLATE_ENDPOINT, ActionType.BLOCK_DOMAIN, A
 
 @pytest.mark.parametrize("workflow", P3_WORKFLOWS)
 def test_release_needs_release_approval_and_never_touches_preexisting_controls(workflow: str):
-    baseline = _baseline(workflow)
+    data = _multi_action_tp(workflow)
+    baseline = _baseline(workflow, data=data)
     reversible = [(a, t) for a, t, _k in baseline if a in _REVERSIBLE]
     assert len(reversible) >= 2, f"{workflow}: need two reversible actions for this test"
     pre_action, pre_target = reversible[0]
-    data = copy.deepcopy(_raw(workflow, "tp-approve-all"))
     data["environment"]["preexisting"] = list(data["environment"].get("preexisting") or []) + [
         {"action_type": pre_action.value, "target": pre_target}]
     run = _detect(data, workflow, "tp-approve-all", live=True)
@@ -1374,7 +1417,7 @@ def test_every_verdict_clean_produces_no_containment(workflow: str, live: bool):
 def test_no_action_on_a_host_that_no_record_names(workflow: str):
     """Remove every record that names a host the baseline contains: no isolation or termination may
     still target that host (the title, the incident observables and ratings are not evidence about it)."""
-    baseline = _baseline(workflow)
+    baseline = _recommended_baseline(workflow)
     hosts = sorted({_host_part(t) for a, t, _k in baseline
                     if a in (ActionType.ISOLATE_ENDPOINT, ActionType.TERMINATE_PROCESS)})
     assert hosts, f"{workflow}: precondition, a host action in the baseline"
@@ -1384,8 +1427,9 @@ def test_no_action_on_a_host_that_no_record_names(workflow: str):
             e for e in data["environment"]["records"]
             if host.lower() not in json.dumps(e["record"]).lower() and str(e["subject"]).lower() != host.lower()]
         run = _detect(data, workflow, "tp-approve-all", live=False)
-        package = run.detection.package
-        bad = [f"{a.action_type.value}:{a.target}" for a in (package.actions if package else ()) if _on_host(a, host)]
+        bad = sorted(f"{a.value}:{t}" for a, t in _recommended(run)
+                     if get_action_spec(a).target_kind in _ENDPOINT_KINDS
+                     and _host_part(t).upper().split(".", 1)[0] == host.upper())  # as _on_host
         guard._reset_for_test_harness()
         assert bad == [], f"{workflow}: actions on {host} without any record naming it: {bad}"
 
@@ -1436,7 +1480,7 @@ def test_release_of_a_selected_control_restores_only_that_control(workflow: str)
 def _every_action_cases() -> list[Any]:
     out = []
     for workflow in P3_WORKFLOWS:
-        run = _detect(_raw(workflow, "tp-approve-all"), workflow, "tp-approve-all", live=False)
+        run = _detect(_multi_action_tp(workflow), workflow, "tp-approve-all", live=False)
         for action in run.detection.package.actions:
             out.append(pytest.param(workflow, action.action_type.value, action.target,
                                     id=f"{workflow}:{action.action_type.value}:{action.target[:24]}"))
@@ -1448,7 +1492,7 @@ def _every_action_cases() -> list[Any]:
 def test_any_single_failed_action_reports_partially_contained(workflow: str, operation: str, target: str):
     """Not only the first or last action: whichever single action fails (session revocation and
     process termination included), the containment is PARTIALLY_CONTAINED."""
-    data = copy.deepcopy(_raw(workflow, "tp-approve-all"))
+    data = _multi_action_tp(workflow)
     data["environment"]["faults"] = [{"kind": "FAIL", "operation": operation, "target": target, "times": None}]
     run = _detect(data, workflow, "tp-approve-all", live=True)
     decision = _approve_all(run)
@@ -1563,9 +1607,9 @@ def test_termination_is_not_withheld_when_the_pid_also_ran_an_unsanctioned_binar
     binary of the baseline. 14.11.6: a process is treated as sanctioned only when *every* candidate
     binary is sanctioned; one unknown build keeps the action proposed. The hashed-event path must
     follow the same rule, or a hostile process escapes termination behind an old sanctioned event."""
-    baseline = _baseline(workflow)
+    baseline = _recommended_baseline(workflow)
     kills = [t for a, t, _k in baseline if a is ActionType.TERMINATE_PROCESS]
-    assert kills, f"{workflow}: precondition, a termination in the baseline"
+    assert kills, f"{workflow}: precondition, a termination recommended in the baseline"
     host, pid = kills[0].split("/", 1)
     data = copy.deepcopy(_raw(workflow, "tp-approve-all"))
     data["environment"]["records"].append({
@@ -1574,7 +1618,8 @@ def test_termination_is_not_withheld_when_the_pid_also_ran_an_unsanctioned_binar
                    "timestamp": "2026-01-15T08:00:00Z", "event_type": "process_start",
                    "process_name": "ExampleRmmAgent.exe", "pid": int(pid), "sha256": _APPROVED_HASH}})
     run = _detect(data, workflow, "tp-approve-all", live=False)
-    proposed = {(a.action_type, a.target) for a in run.detection.package.actions}
+    # terminate_process has no VERIFIED write (architecture 15.2): recommended as UNROUTED, never withheld.
+    proposed = _recommended(run)
     assert (ActionType.TERMINATE_PROCESS, kills[0]) in proposed, (
         f"{workflow}: termination of {kills[0]} withheld because an older event of the same pid ran the "
         f"approved binary: {[c.subject for c in run.workflow_run.considered]}")

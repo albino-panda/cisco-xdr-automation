@@ -37,6 +37,7 @@ from xdr_response.integrations.simulated import (
     SimulatedIntelAdapter,
     SimulatedNetworkAdapter,
     build_simulated_adapters,
+    production_manifest,
     simulated_adapter_class,
 )
 from xdr_response.models import (
@@ -72,6 +73,26 @@ def family_of(action: ActionType) -> str:
     return next(name for name, fam in FAMILIES.items() if action in fam.actions)
 
 
+def executor_of(action: ActionType) -> str | None:
+    """A real integration whose adapter supports ``action`` (catalog order), preferring one that verifies it."""
+    names = [n for n in get_action_spec(action).integrations
+             if action in production_manifest(n).supported_actions]  # type: ignore[union-attr]
+    verifying = [n for n in names if action in production_manifest(n).verifiable_actions]  # type: ignore[union-attr]
+    return (verifying or names or [None])[0]
+
+
+#: Action types some real adapter can execute, and those no real adapter has a VERIFIED write for.
+EXECUTABLE = [a for a in STATE_CHANGING if executor_of(a) is not None]
+NOT_EXECUTABLE = [a for a in STATE_CHANGING if executor_of(a) is None]
+
+
+def simulated_executor(action: ActionType, env: SimulatedEnvironment) -> SimulatedAdapter:
+    """The simulated adapter posing as :func:`executor_of` ``action`` (its family only)."""
+    name = executor_of(action)
+    assert name is not None
+    return simulated_adapter_class(name, (family_of(action),))(environment=env, clock=env.clock)
+
+
 def request_for(action: ActionType, integration: str, target: str | None = None) -> ActionRequest:
     spec = get_action_spec(action)
     return ActionRequest.from_recommendation(
@@ -101,6 +122,12 @@ def endpoint(env: SimulatedEnvironment) -> SimulatedEndpointAdapter:
     return SimulatedEndpointAdapter(environment=env, clock=env.clock)
 
 
+@pytest.fixture
+def defender(env: SimulatedEnvironment) -> SimulatedAdapter:
+    """Defender for Endpoint: its real adapter reads isolation back, so verification paths can be tested."""
+    return simulated_adapter_class("defender_endpoint", ("endpoint",))(environment=env, clock=env.clock)
+
+
 # ------------------------------------------------------------------ coverage --
 def test_every_state_changing_action_has_an_effect_and_a_family() -> None:
     assert set(ACTION_EFFECTS) == set(STATE_CHANGING)
@@ -115,13 +142,20 @@ def test_every_write_method_is_guarded() -> None:
 
 def test_family_classes_and_suite_manifests_are_valid() -> None:
     assert SimulatedEndpointAdapter.manifest.integration == "secure_endpoint"
+    # like the real Secure Endpoint adapter: isolate and release only, nothing read back
+    assert SimulatedEndpointAdapter.manifest.supported_actions == {ActionType.ISOLATE_ENDPOINT,
+                                                                   ActionType.RELEASE_ENDPOINT}
+    assert SimulatedEndpointAdapter.manifest.verifiable_actions == frozenset()
     assert SimulatedIdentityAdapter.name == "entra"
     assert SimulatedEmailAdapter.manifest.supported_actions == FAMILIES["email"].actions
-    assert ActionType.BLOCK_IP in SimulatedNetworkAdapter.manifest.supported_actions
+    assert ActionType.BLOCK_IP not in SimulatedNetworkAdapter.manifest.supported_actions  # Umbrella: DNS only
+    assert ActionType.BLOCK_DOMAIN in SimulatedNetworkAdapter.manifest.supported_actions
     assert SimulatedIntelAdapter.manifest.supported_actions == frozenset()
     for adapter in build_simulated_adapters(SimulatedEnvironment()):
-        assert adapter.manifest.verifiable_actions == adapter.manifest.supported_actions
-        assert adapter.name in SIMULATED_SUITE
+        real = production_manifest(adapter.name)
+        assert real is not None and adapter.name in SIMULATED_SUITE
+        assert adapter.manifest.supported_actions <= real.supported_actions
+        assert adapter.manifest.verifiable_actions == adapter.manifest.supported_actions & real.verifiable_actions
     assert simulated_adapter_class("meraki", ["network"]) is simulated_adapter_class("meraki", ("network",))
 
 
@@ -133,8 +167,9 @@ def test_simulated_adapters_make_no_http_calls(endpoint: SimulatedEndpointAdapte
 # ------------------------------------------------------------------- guard --
 @pytest.mark.parametrize("action", STATE_CHANGING, ids=lambda a: a.value)
 def test_every_write_refused_without_approval(action: ActionType, env: SimulatedEnvironment) -> None:
-    adapter = simulated_adapter_class("cisco_xdr", (family_of(action),))(environment=env)
-    request = request_for(action, "cisco_xdr")
+    name = executor_of(action) or "cisco_xdr"  # an unsupported write is refused by the guard first
+    adapter = simulated_adapter_class(name, (family_of(action),))(environment=env)
+    request = request_for(action, name)
     with pytest.raises(DryRunViolationError):  # fail-closed default: dry run on
         adapter.execute(request)
     install_fake_verifier()
@@ -171,44 +206,83 @@ def test_containment_token_cannot_release(endpoint: SimulatedEndpointAdapter, en
 
 
 # --------------------------------------------- execution / verify / rollback --
-@pytest.mark.parametrize("action", STATE_CHANGING, ids=lambda a: a.value)
-def test_every_action_executes_verifies_and_is_idempotent(action: ActionType, env: SimulatedEnvironment) -> None:
+def _expected_verification(adapter: SimulatedAdapter, action: ActionType) -> VerificationStatus:
+    """VERIFIED only where the real adapter of the same integration reads the action back."""
+    real = production_manifest(adapter.name)
+    assert real is not None
+    return VerificationStatus.VERIFIED if action in real.verifiable_actions else VerificationStatus.UNABLE_TO_VERIFY
+
+
+@pytest.mark.parametrize("action", EXECUTABLE, ids=lambda a: a.value)
+def test_every_executable_action_executes_verifies_like_production_and_is_idempotent(
+        action: ActionType, env: SimulatedEnvironment) -> None:
     install_fake_verifier()
-    adapter = simulated_adapter_class("cisco_xdr", (family_of(action),))(environment=env, clock=env.clock)
-    request = request_for(action, "cisco_xdr")
+    adapter = simulated_executor(action, env)
+    request = request_for(action, adapter.name)
     contain_first(action, env, request.target)
     assert adapter.current_state(request).state is TargetState.NOT_IN_DESIRED_STATE
-    assert adapter.verify(request, None).status is VerificationStatus.NOT_VERIFIED
+    expected = _expected_verification(adapter, action)
+    before = adapter.verify(request, None).status
+    assert before is (VerificationStatus.NOT_VERIFIED if expected is VerificationStatus.VERIFIED else expected)
 
     outcome = run(adapter, request)
     assert outcome.status is ActionResultStatus.SUCCESS
-    assert outcome.integration == "cisco_xdr"
+    assert outcome.integration == adapter.name
     assert outcome.api_calls[0].kind is OperationKind.STATE_CHANGING
     assert adapter.current_state(request).state is TargetState.IN_DESIRED_STATE
-    assert adapter.verify(request, outcome).status is VerificationStatus.VERIFIED
+    assert adapter.verify(request, outcome).status is expected
 
     again = run(adapter, request)
     assert again.status is ActionResultStatus.ALREADY_CONTAINED
     assert again.external_ref is None
 
 
-@pytest.mark.parametrize("action", [a for a in STATE_CHANGING if get_action_spec(a).creates_control],
+@pytest.mark.parametrize("action", NOT_EXECUTABLE, ids=lambda a: a.value)
+def test_no_simulated_adapter_executes_an_action_no_real_adapter_can(action: ActionType,
+                                                                     env: SimulatedEnvironment) -> None:
+    """terminate_process, quarantine_file, reset_password, ...: refused everywhere, as in production."""
+    install_fake_verifier()
+    for adapter in build_simulated_adapters(env):
+        assert action not in adapter.manifest.supported_actions
+        request = request_for(action, adapter.name)
+        with pytest.raises(CapabilityNotSupportedError):
+            run(adapter, request)
+        assert adapter.current_state(request).state is TargetState.UNKNOWN
+        assert adapter.verify(request, None).status is VerificationStatus.UNABLE_TO_VERIFY
+    assert env.state == {} and env.state_changing_calls() == []
+
+
+@pytest.mark.parametrize("action", [a for a in EXECUTABLE if get_action_spec(a).creates_control
+                                    and executor_of(get_action_spec(a).rollback_action_type) == executor_of(a)],
                          ids=lambda a: a.value)
 def test_reversible_actions_roll_back(action: ActionType, env: SimulatedEnvironment) -> None:
     install_fake_verifier()
-    adapter = simulated_adapter_class("cisco_xdr", (family_of(action),))(environment=env, clock=env.clock)
-    request = request_for(action, "cisco_xdr")
+    adapter = simulated_executor(action, env)
+    request = request_for(action, adapter.name)
     outcome = run(adapter, request)
     rollback_type = get_action_spec(action).rollback_action_type
     assert rollback_type is not None
     assert outcome.rollback_params["rollback_action_type"] == rollback_type.value
 
-    release = request_for(rollback_type, "cisco_xdr", target=request.target)
+    release = request_for(rollback_type, adapter.name, target=request.target)
     released = run(adapter, release)
     assert released.status is ActionResultStatus.SUCCESS
-    assert adapter.verify(release, released).status is VerificationStatus.VERIFIED
+    assert adapter.verify(release, released).status is _expected_verification(adapter, rollback_type)
     assert adapter.current_state(request).state is TargetState.NOT_IN_DESIRED_STATE
     assert [c.operation for c in env.state_changing_calls()] == [action.value, rollback_type.value]
+
+
+def test_secure_endpoint_isolation_is_never_verified(endpoint: SimulatedEndpointAdapter,
+                                                     env: SimulatedEnvironment) -> None:
+    """The real Secure Endpoint isolation read is UNVERIFIED: the simulated one never says VERIFIED."""
+    install_fake_verifier()
+    request = request_for(ActionType.ISOLATE_ENDPOINT, "secure_endpoint")
+    outcome = run(endpoint, request)
+    assert env.in_desired_state(ActionType.ISOLATE_ENDPOINT, "TH-LT-1047")
+    assert endpoint.verify(request, outcome).status is VerificationStatus.UNABLE_TO_VERIFY
+    hash_block = request_for(ActionType.BLOCK_HASH, "secure_endpoint")
+    with pytest.raises(CapabilityNotSupportedError):
+        run(endpoint, hash_block)
 
 
 def test_unsupported_action_for_family_is_refused(endpoint: SimulatedEndpointAdapter,
@@ -308,23 +382,22 @@ def test_already_contained_fault(endpoint: SimulatedEndpointAdapter, env: Simula
     assert outcome.rollback_params == {}
 
 
-def test_no_effect_fault_is_caught_by_verification(endpoint: SimulatedEndpointAdapter,
-                                                   env: SimulatedEnvironment) -> None:
+def test_no_effect_fault_is_caught_by_verification(defender: SimulatedAdapter, env: SimulatedEnvironment) -> None:
     install_fake_verifier()
     env.inject(FaultKind.NO_EFFECT, operation="isolate_endpoint")
-    request = request_for(ActionType.ISOLATE_ENDPOINT, "secure_endpoint")
-    outcome = run(endpoint, request)
+    request = request_for(ActionType.ISOLATE_ENDPOINT, "defender_endpoint")
+    outcome = run(defender, request)
     assert outcome.status is ActionResultStatus.SUCCESS
-    assert endpoint.verify(request, outcome).status is VerificationStatus.NOT_VERIFIED
+    assert defender.verify(request, outcome).status is VerificationStatus.NOT_VERIFIED
 
 
-def test_verify_fault_gives_unable_to_verify(endpoint: SimulatedEndpointAdapter, env: SimulatedEnvironment) -> None:
+def test_verify_fault_gives_unable_to_verify(defender: SimulatedAdapter, env: SimulatedEnvironment) -> None:
     install_fake_verifier()
-    request = request_for(ActionType.ISOLATE_ENDPOINT, "secure_endpoint")
-    outcome = run(endpoint, request)
+    request = request_for(ActionType.ISOLATE_ENDPOINT, "defender_endpoint")
+    outcome = run(defender, request)
     env.inject(FaultKind.TIMEOUT, operation="verify")
-    assert endpoint.verify(request, outcome).status is VerificationStatus.UNABLE_TO_VERIFY
-    assert endpoint.verify(request, outcome).status is VerificationStatus.VERIFIED
+    assert defender.verify(request, outcome).status is VerificationStatus.UNABLE_TO_VERIFY
+    assert defender.verify(request, outcome).status is VerificationStatus.VERIFIED
 
 
 def test_invalid_target(endpoint: SimulatedEndpointAdapter, env: SimulatedEnvironment) -> None:

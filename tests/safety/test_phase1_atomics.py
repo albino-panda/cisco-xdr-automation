@@ -165,6 +165,25 @@ def _package(settings: Settings, incident: Incident, proposals, *, dry_run: bool
         dry_run=dry_run)
 
 
+def _proposal_or_unrouted_probe(built: BuiltRecommendation, risk_score: int = 1,
+                                confidence_score: int = 1) -> ProposedAction:
+    """The built proposal, or, for an action no adapter can execute, the same proposal built by hand.
+
+    terminate_process and quarantine_file have no VERIFIED write on any real adapter, and the simulated
+    adapters mirror the real ones (production parity, architecture 14.14.3 and 15.2): they are reported
+    as unrouted for manual handling and never proposed. The package layer must still elevate their
+    critical targets if a route is ever added, so the probe goes through the PackageBuilder anyway.
+    """
+    if built.proposal is not None:
+        return built.proposal
+    assert built.unrouted_reason, "an unroutable action must be reported for manual handling, never dropped"
+    spec = get_action_spec(built.action_type)
+    return ProposedAction(action_type=built.action_type, target=built.target, target_kind=spec.target_kind,
+                          params={"integration": spec.integrations[0]},  # hypothetical future route
+                          evidence=_drafts(), risk_score=risk_score, confidence_score=confidence_score,
+                          rationale="fake detection on the target")
+
+
 def _keys_anywhere(value: Any) -> set[str]:
     """Every mapping key at any depth, folded."""
     found: set[str] = set()
@@ -317,6 +336,10 @@ def test_revoke_sessions_is_state_changing_irreversible_and_packaged_for_approva
 
 
 # ================================================================ critical assets ====
+#: Builders whose action no real adapter can execute (architecture 15.2): always unrouted, never proposed.
+_NO_VERIFIED_WRITE = frozenset({"terminate_process", "quarantine_file"})
+
+
 @pytest.mark.parametrize(("name", "target"), [
     ("isolate_secure_endpoint", "DC-01"),
     ("isolate_defender_endpoint", "prd-db-07"),
@@ -336,8 +359,9 @@ def test_critical_asset_targets_are_elevated_with_a_visible_warning(name, target
                                                                                        confidence_score=1))
     assert built.warnings, "the builder preview must show the critical-asset warning"
     assert built.elevation_expected
-    assert built.proposal is not None
-    (action,) = _package(lab.settings, incident, [built.proposal]).actions
+    if name not in _NO_VERIFIED_WRITE:
+        assert built.proposal is not None
+    (action,) = _package(lab.settings, incident, [_proposal_or_unrouted_probe(built)]).actions
     assert action.approval_level is ApprovalLevel.ELEVATED
     assert action.warnings and all(w.message.startswith(WARNING_PREFIX) for w in action.warnings)
 
@@ -368,12 +392,14 @@ def test_remove_privileged_role_is_always_elevated():
     ("quarantine_file", f"203.0.113.10/{HASH}"),
 ])
 def test_an_endpoint_named_by_its_ip_inside_a_critical_cidr_is_elevated(name, target):
-    """Endpoints are often reported by IP; the critical-asset CIDR must still apply (plan_bridge does it)."""
+    """Endpoints are often reported by IP; the critical-asset CIDR must still apply."""
     lab = _full_lab()
     incident = _incident()
     built = CONTAINMENT_BUILDERS[name](_ctx(lab, incident), target, **_builder_kwargs())
-    assert built.proposal is not None
-    (action,) = _package(lab.settings, incident, [built.proposal]).actions
+    if name not in _NO_VERIFIED_WRITE:
+        assert built.proposal is not None
+    assert built.warnings, "the builder preview must show the critical-asset warning"
+    (action,) = _package(lab.settings, incident, [_proposal_or_unrouted_probe(built, 80, 70)]).actions
     assert action.approval_level is ApprovalLevel.ELEVATED, (
         f"{name} on {target} (inside a critical CIDR) came out {action.approval_level.value} with no warning")
     assert action.warnings
@@ -394,7 +420,7 @@ def _workflow(*rules: dict[str, Any], workflow_id: str = "sample-malware") -> Wo
 
 
 def _exec_lab(groups=("Executives",), tags=()):
-    lab = make_lab()
+    lab = make_lab({"secure_endpoint": ("endpoint",), "virustotal": ("intel",)})  # Defender not enabled
     lab.typed("investigate_endpoint", HOST, "secure_endpoint", kind="endpoint", hostname=HOST,
               groups=list(groups), tags=list(tags), isolation_state="not_isolated")
     lab.typed("investigate_endpoint", HOST, "secure_endpoint", kind="detection", detection_id=f"det-{HOST}",

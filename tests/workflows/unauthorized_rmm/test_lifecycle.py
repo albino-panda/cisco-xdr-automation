@@ -17,6 +17,7 @@ from tools.simulator.workflow_scenario import (
     check_coverage,
     load_workflow_scenario,
 )
+from tools.simulator.workflow_scenario import executable_anywhere
 from xdr_response import guard
 from xdr_response.errors import ApprovalError, ApproverNotAllowedError
 from xdr_response.models import ActionResultStatus, ApprovalLevel, IncidentState
@@ -51,15 +52,18 @@ def _run(name: str, *, live: bool) -> WorkflowScenarioRun:
 def test_the_scenario_set_meets_the_minimum_and_every_rule_is_proposed_somewhere():
     scenarios = [load_workflow_scenario(p) for p in _paths()]
     proposed: set[str] = set()
+    unrouted: set[str] = set()
     for scenario in scenarios:
         run = WorkflowScenarioRun(scenario, live=False)
         run.detect()
         assert run.workflow_run is not None, scenario.name
         proposed |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.PROPOSED)}
+        unrouted |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)}
         assert not run.workflow_run.outcomes_with(RuleOutcomeStatus.ERROR), scenario.name
         guard._reset_for_test_harness()
-    assert proposed == {r.id for r in WORKFLOW.recommendations}
-    assert check_coverage("unauthorized-rmm", scenarios, WORKFLOW, proposed_rules=proposed) == []
+    assert proposed | (unrouted & {r.id for r in WORKFLOW.recommendations
+                                if not executable_anywhere(r.action)}) == {r.id for r in WORKFLOW.recommendations}
+    assert check_coverage("unauthorized-rmm", scenarios, WORKFLOW, proposed_rules=proposed, unrouted_rules=unrouted) == []
     assert len([s for s in scenarios if s.name.startswith("edge-")]) >= 2
 
 
@@ -100,7 +104,9 @@ def test_live_nothing_changes_before_the_human_decision_then_approved_actions_ex
     changed = {c.operation for c in run.environment.state_changing_calls()}
     assert changed == {a.action_type.value for a in package.actions}
     assert all(r.verification is not None for r in report.results)
-    assert len(run.runtime.registry.list(incident_id=run.incident_id)) == 5  # terminate registers no control
+    # the termination and the hash block have no executor: recommended, UNROUTED, never executed
+    assert {s.partition(":")[0] for s in {o.selector for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)}} == {"terminate_process", "block_hash"}
+    assert len(run.runtime.registry.list(incident_id=run.incident_id)) == 4
 
 
 @pytest.mark.parametrize("alias", ["ai", "automation"])
@@ -116,13 +122,13 @@ def test_a_critical_asset_needs_the_lead_and_an_analyst_alone_is_refused():
     run = _run("critical-asset-elevated", live=True)
     detection = run.detect()
     elevated = [a for a in detection.package.actions if a.approval_level is ApprovalLevel.ELEVATED]
-    assert {a.action_type.value for a in elevated} == {"isolate_endpoint", "terminate_process"}
+    assert {a.action_type.value for a in elevated} == {"isolate_endpoint"}
     assert all(a.warnings for a in elevated)
     with pytest.raises(ApproverNotAllowedError):
         run.decide({"decision": "APPROVE_ALL"}, approvers=["analyst"])
     assert run.environment.state_changing_calls() == []
     decision = run.decide({"decision": "APPROVE_ALL"}, approvers=["lead"])
-    assert decision.report is not None and decision.report.overall.value == "CONTAINED"
+    assert decision.report is not None and decision.report.overall.value == "PARTIALLY_CONTAINED"
 
 
 def test_a_help_desk_campaign_over_the_blast_radius_cap_is_elevated_not_split():
@@ -130,7 +136,9 @@ def test_a_help_desk_campaign_over_the_blast_radius_cap_is_elevated_not_split():
     detection = run.detect()
     actions = detection.package.actions
     per_host = [a for a in actions if a.action_type.value in ("isolate_endpoint", "terminate_process")]
-    assert len(per_host) == 12 and all(a.approval_level is ApprovalLevel.ELEVATED and a.warnings for a in per_host)
+    assert len(per_host) == 6 and all(a.approval_level is ApprovalLevel.ELEVATED and a.warnings for a in per_host)
+    # the six terminations are recommended but have no executor (UNROUTED), never dropped
+    assert len([s for s in {o.selector for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)} if s.startswith("terminate_process:")]) == 6
     assert run.environment.state_changing_calls() == []
 
 
@@ -139,7 +147,7 @@ def test_restoration_needs_its_own_human_release_approval():
     run.detect()
     run.decide()
     controls = run.runtime.registry.list(incident_id=run.incident_id)
-    assert len(controls) == 5
+    assert len(controls) == 4
     calls = len(run.environment.state_changing_calls())
     run.propose_release()
     assert len(run.environment.state_changing_calls()) == calls  # proposing a release changes nothing
@@ -147,8 +155,8 @@ def test_restoration_needs_its_own_human_release_approval():
         run.decide_release({"decision": "APPROVE_ALL"}, approvers=["ai"])
     assert len(run.environment.state_changing_calls()) == calls
     result = run.decide_release({"decision": "APPROVE_ALL"}, approvers=["analyst"])
-    assert result.report is not None and result.report.overall.value == "RESTORED"
-    assert run.orchestrator.get_incident(run.incident_id).state is IncidentState.RESTORED
+    assert result.report is not None and result.report.overall.value == "PARTIALLY_RESTORED"
+    assert run.orchestrator.get_incident(run.incident_id).state is IncidentState.AWAITING_RELEASE_APPROVAL
 
 
 def test_rejected_package_closes_without_any_control():
@@ -163,7 +171,7 @@ def test_a_degraded_source_does_not_block_the_recommendation():
     workflow_run = run.workflow_run
     assert workflow_run.degraded_sources() == ("umbrella",)
     assert any("degraded source: umbrella" in note for note in workflow_run.notes)
-    assert run.detection.package is not None and len(run.detection.package.actions) == 4
+    assert run.detection.package is not None and len(run.detection.package.actions) == 2
     # the isolation lost its only backing (Umbrella's rating of the peer): shown, never dropped silently
     assert {c.subject for c in workflow_run.considered} >= {f"isolate_endpoint:{HOST}"}
     assert run.check() == []
@@ -174,8 +182,12 @@ def test_an_approved_tool_is_never_blocked_or_terminated_but_its_session_is_isol
     package = run.detection.package
     assert {f"{a.action_type.value}:{a.target}" for a in package.actions} == {"isolate_endpoint:TH-LT-3105"}
     assert {(e.action_type.value, e.target, e.reason) for e in package.excluded_targets} == {
-        ("block_hash", APPROVED_SHA, "allowlists.approved_rmm: Example RMM"),
         ("block_domain", "rmm.example.net", "allowlists.approved_rmm: Example RMM")}
+    # the approved tool's hash has no executor here (UNROUTED); its outcome names the allow-list entry, so
+    # it is never blocked by hand either
+    [hash_outcome] = [o for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)
+                      if o.target == APPROVED_SHA]
+    assert "allowlists.approved_rmm: Example RMM" in hash_outcome.detail
     targets = {c.target for c in run.environment.state_changing_calls()}
     assert APPROVED_SHA not in targets and "rmm.example.net" not in targets
     assert not any(t.startswith("TH-LT-3105/") for t in targets)  # the approved binary keeps running
@@ -223,7 +235,7 @@ def test_hand_offs_and_manual_steps_reach_the_run_notes_and_start_nothing():
     assert any(n.startswith("hand-off: run persistence for TH-LT-5120") for n in notes)
     assert any(n.startswith("hand-off: run account-takeover for mlopez@example.com") for n in notes)
     assert any(n.startswith("manual step: uninstall Atera on TH-LT-5120") for n in notes)
-    assert {c.operation for c in run.environment.state_changing_calls()} == {"terminate_process"}
+    assert {c.operation for c in run.environment.state_changing_calls()} == {"block_domain"}
     assert run.check() == []
 
 

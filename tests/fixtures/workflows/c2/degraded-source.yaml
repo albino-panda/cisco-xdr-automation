@@ -4,10 +4,13 @@ name: degraded-source
 workflow: c2
 description: >-
   Umbrella is unavailable for every enrichment. The run lists it as a degraded source and still
-  recommends the whole package: the endpoint detection and the malicious process back the isolation
-  and the termination, Secure Endpoint's MALICIOUS verdict on the connection rates the domain and
-  the IP, and VirusTotal rates the URL and the hash. Confidence drops; nothing is blocked by the
-  outage.
+  recommends the whole package: the endpoint detection and the malicious process back the isolation and
+  the termination, Secure Endpoint's MALICIOUS verdict on the connection rates the domain and the IP,
+  and VirusTotal rates the URL and the hash. Confidence drops; nothing is blocked by the outage.
+  Production parity: the terminate_process recommendation stays UNROUTED (no enabled adapter has a
+  VERIFIED write for it; shown for manual handling, never executed); isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [degraded_source, true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel]}
@@ -76,6 +79,6 @@ expect:
     - block_ip:198.51.100.45
     - "block_url:https://beacon-gate.test/api/checkin"
     - isolate_endpoint:TH-LT-1047
-    - terminate_process:TH-LT-1047/3120
+  unrouted: [terminate_process:TH-LT-1047/3120]
   degraded_sources: [umbrella]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED

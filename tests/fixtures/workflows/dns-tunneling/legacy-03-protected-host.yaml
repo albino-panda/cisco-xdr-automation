@@ -7,7 +7,8 @@ description: >-
   management host HV-03 (critical asset class hypervisor). Both isolations are proposed; the
   hypervisor's needs ELEVATED approval with a warning, so the lead approves. KIOSK-07 reports that it
   cannot be isolated: no isolation is proposed and it is listed as considered (the legacy plan dropped
-  it silently).
+  it silently). Production parity: isolate_endpoint through secure_endpoint cannot be read back by the
+  real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, critical_asset, true_positive, approve_all]
 legacy_source: workflows/dns-tunneling/scenarios/03-protected-host.yaml
 mode: both
@@ -83,5 +84,5 @@ expect:
     - remove tunnel client on HV-03
     - remove tunnel client on KIOSK-07
     - assess data sent through sync-telemetry.test
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 3

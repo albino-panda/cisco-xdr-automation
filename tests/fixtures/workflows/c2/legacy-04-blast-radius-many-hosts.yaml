@@ -3,10 +3,12 @@ schema: 1
 name: legacy-04-blast-radius-many-hosts
 workflow: c2
 description: >-
-  Migrated from legacy scenario 04. Six workstations beacon to the same C2 domain, each with a
-  malicious detection. Six isolations exceed blast_radius.max_endpoints (5), so every isolation
-  stays proposed with ELEVATED approval and a blast-radius warning (never split or dropped) and the
-  SOC lead approves. The domain and IP blocks stay STANDARD: they cut the channel for all six hosts.
+  Migrated from legacy scenario 04. Six workstations beacon to the same C2 domain, each with a malicious
+  detection. Six isolations exceed blast_radius.max_endpoints (5), so every isolation stays proposed
+  with ELEVATED approval and a blast-radius warning (never split or dropped) and the SOC lead approves.
+  The domain and IP blocks stay STANDARD: they cut the channel for all six hosts. Production parity:
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/c2/scenarios/04-blast-radius-many-hosts.yaml
 mode: both
@@ -183,5 +185,5 @@ expect:
     - isolate_endpoint:WKS-0305
     - isolate_endpoint:WKS-0306
   warnings: [ELEVATED APPROVAL REQUIRED]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 8

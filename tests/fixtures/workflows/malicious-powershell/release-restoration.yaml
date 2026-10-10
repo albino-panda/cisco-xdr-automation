@@ -3,8 +3,13 @@ schema: 1
 name: release-restoration
 workflow: malicious-powershell
 description: >-
-  Approve and contain, then a separate human release decision restores every reversible control (isolation, hash,
-  domain and IP blocks). The process termination is not reversible and registers no control.
+  Approve and contain, then a separate human release decision restores every reversible control
+  (isolation, hash, domain and IP blocks). The process termination is not reversible and registers no
+  control. Production parity: the block_hash and terminate_process recommendations stay UNROUTED (no
+  enabled adapter has a VERIFIED write for them; shown for manual handling, never executed);
+  isolate_endpoint and release_endpoint through secure_endpoint cannot be read back by the real adapters
+  and end UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED, restoration is PARTIALLY_RESTORED and
+  the incident stays AWAITING_RELEASE_APPROVAL.
 tags: [release, true_positive, approve_all]
 mode: live
 suite:
@@ -117,9 +122,12 @@ release:
   approvers: [analyst]
 expect:
   package: true
-  actions: ['terminate_process:TH-LT-1047/4242', 'isolate_endpoint:TH-LT-1047', 'block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00',
-    'block_domain:cdn-update.test', 'block_ip:198.51.100.77']
-  containment: CONTAINED
-  controls: 4
-  restoration: RESTORED
-  final_state: RESTORED
+  actions:
+    - isolate_endpoint:TH-LT-1047
+    - block_domain:cdn-update.test
+    - block_ip:198.51.100.77
+  unrouted: [terminate_process:TH-LT-1047/4242, block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00]
+  containment: PARTIALLY_CONTAINED
+  controls: 3
+  restoration: PARTIALLY_RESTORED
+  final_state: AWAITING_RELEASE_APPROVAL

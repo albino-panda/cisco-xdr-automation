@@ -4,9 +4,12 @@ name: degraded-source
 workflow: credential-dumping
 description: >-
   Entra is unavailable for every account read. The run lists it as a degraded source and still
-  recommends the isolation, the tool hash block and the revocation of both exposed accounts from
-  the Secure Endpoint evidence. Whether the accounts are privileged cannot be assessed, so no
-  disable is proposed: both disables are listed as considered for the analyst.
+  recommends the isolation, the tool hash block and the revocation of both exposed accounts from the
+  Secure Endpoint evidence. Whether the accounts are privileged cannot be assessed, so no disable is
+  proposed: both disables are listed as considered for the analyst. Production parity: the block_hash
+  recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual
+  handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by the real
+  adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [degraded_source, true_positive, approve_all]
 mode: both
 incident:
@@ -70,10 +73,10 @@ expect:
     - isolate_endpoint:TH-LT-1047
     - revoke_sessions:jsmith@example.com
     - revoke_sessions:it.support@example.com
-    - block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed
+  unrouted: [block_hash:d00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeedd00dfeed]
   degraded_sources: [entra]
   considered: [disable_user:jsmith@example.com, disable_user:it.support@example.com]
   manual_steps: [credential-reset:TH-LT-1047]
   risk: {min: 80, max: 100}
-  containment: CONTAINED
-  controls: 2
+  containment: PARTIALLY_CONTAINED
+  controls: 1

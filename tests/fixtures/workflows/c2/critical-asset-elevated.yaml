@@ -5,8 +5,11 @@ workflow: c2
 description: >-
   The beaconing host is the production application server PRD-APP-03. Its isolation and the process
   termination stay proposed with ELEVATED approval and a visible Production server warning (never
-  skipped); the destination blocks stay STANDARD. An analyst alone cannot approve; the SOC lead
-  approves and the containment executes.
+  skipped); the destination blocks stay STANDARD. An analyst alone cannot approve; the SOC lead approves
+  and the containment executes. Production parity: the terminate_process recommendation stays UNROUTED
+  (no enabled adapter has a VERIFIED write for it; shown for manual handling, never executed);
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [critical_asset, true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel]}
@@ -72,9 +75,8 @@ expect:
     - block_ip:198.51.100.45
     - "block_url:https://beacon-gate.test/api/checkin"
     - isolate_endpoint:PRD-APP-03
-    - terminate_process:PRD-APP-03/3120
   elevated:
     - isolate_endpoint:PRD-APP-03
-    - terminate_process:PRD-APP-03/3120
+  unrouted: [terminate_process:PRD-APP-03/3120]
   warnings: [ELEVATED APPROVAL REQUIRED, Production server]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED

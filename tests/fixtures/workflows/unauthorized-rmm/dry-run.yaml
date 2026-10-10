@@ -4,7 +4,9 @@ name: dry-run
 workflow: unauthorized-rmm
 description: >-
   Dry run: the package is proposed and simulated; nothing changes at any vendor, no control is
-  registered and the DRY RUN report lists every recommended action.
+  registered and the DRY RUN report lists every recommended action. Production parity: the block_hash
+  and terminate_process recommendations stay UNROUTED (no enabled adapter has a VERIFIED write for them;
+  shown for manual handling, never executed).
 tags: [dry_run, true_positive]
 mode: dry_run
 suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
@@ -67,16 +69,13 @@ environment:
 analyst: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
   actions:
-    - terminate_process:TH-LT-1047/7311
-    - block_hash:a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0
     - block_domain:relay-01.anydesk-relay.test
     - block_domain:get-remote-support.test
     - block_ip:198.51.100.45
     - isolate_endpoint:TH-LT-1047
+  unrouted: [terminate_process:TH-LT-1047/7311, block_hash:a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0]
   dry_run_lines:
     - DRY RUN
-    - "Would terminate process: TH-LT-1047/7311"
-    - "Would block: a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0a11d35c0"
     - "Would block: get-remote-support.test"
     - "Would block: relay-01.anydesk-relay.test"
     - "Would block: 198.51.100.45"

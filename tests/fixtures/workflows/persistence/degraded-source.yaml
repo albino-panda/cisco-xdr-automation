@@ -7,6 +7,10 @@ description: >-
   recommends the whole package: Secure Endpoint's active detection, the execution event and the
   malicious prevalence record back the isolation, the termination and the hash block on their own
   (Secure Endpoint's enrichment alone is a single vendor verdict, never an aggregate MALICIOUS).
+  Production parity: the block_hash and terminate_process recommendations stay UNROUTED (no enabled
+  adapter has a VERIFIED write for them; shown for manual handling, never executed); isolate_endpoint
+  through secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so
+  containment is PARTIALLY_CONTAINED.
 tags: [degraded_source, true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], virustotal: [intel]}
@@ -65,10 +69,9 @@ expect:
   package: true
   actions:
     - isolate_endpoint:TH-LT-1047
-    - terminate_process:TH-LT-1047/4242
-    - block_hash:0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5
+  unrouted: [terminate_process:TH-LT-1047/4242, block_hash:0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5]
   degraded_sources: [virustotal]
   manual_steps: [remove_persistence:TH-LT-1047/run-onedrivesync]
   risk: {min: 80, max: 100}
-  containment: CONTAINED
-  controls: 2
+  containment: PARTIALLY_CONTAINED
+  controls: 1

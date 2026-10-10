@@ -4,10 +4,12 @@ name: critical-asset-elevated
 workflow: exfiltration
 description: >-
   Critical assets. A production file server is still uploading a database export to a file share that
-  two reputation sources rate malicious, driven by an administrator account with identity risk high.
-  The server is a production server and the account is privileged, so the isolation, the session
-  revocation and the disable are ELEVATED with visible warnings (never skipped). An analyst alone is
-  refused; the SOC lead approves and everything executes.
+  two reputation sources rate malicious, driven by an administrator account with identity risk high. The
+  server is a production server and the account is privileged, so the isolation, the session revocation
+  and the disable are ELEVATED with visible warnings (never skipped). An analyst alone is refused; the
+  SOC lead approves and everything executes. Production parity: isolate_endpoint through secure_endpoint
+  cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [critical_asset, true_positive, approve_all]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], meraki: [network], virustotal: [intel], entra: [identity],
@@ -65,5 +67,5 @@ expect:
     - disable_user:adm-rlee@example.com
   warnings: [ELEVATED APPROVAL REQUIRED, Production server, Privileged account]
   handoffs: ["account-takeover:adm-rlee@example.com"]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 4

@@ -8,7 +8,10 @@ description: >-
   domain and installer hash blocks are proposed once (duplicates collapse), but the per-host actions
   touch six endpoints, over blast_radius.max_endpoints (5): every isolation and process termination
   stays in the package with ELEVATED approval and a blast-radius warning instead of containing part of
-  the group, and the lead approves.
+  the group, and the lead approves. Production parity: the block_hash and terminate_process
+  recommendations stay UNROUTED (no enabled adapter has a VERIFIED write for them; shown for manual
+  handling, never executed); isolate_endpoint through secure_endpoint cannot be read back by the real
+  adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/unauthorized-rmm/scenarios/05-helpdesk-campaign-blast-radius.yaml
 mode: both
@@ -159,13 +162,6 @@ expect:
   package: true
   actions:
     - block_domain:relay.fictidesk.example
-    - block_hash:7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57
-    - terminate_process:WS-OPS-101/5101
-    - terminate_process:WS-OPS-102/5102
-    - terminate_process:WS-OPS-103/5103
-    - terminate_process:WS-OPS-104/5104
-    - terminate_process:WS-OPS-105/5105
-    - terminate_process:WS-OPS-106/5106
     - isolate_endpoint:WS-OPS-101
     - isolate_endpoint:WS-OPS-102
     - isolate_endpoint:WS-OPS-103
@@ -173,12 +169,6 @@ expect:
     - isolate_endpoint:WS-OPS-105
     - isolate_endpoint:WS-OPS-106
   elevated:
-    - terminate_process:WS-OPS-101/5101
-    - terminate_process:WS-OPS-102/5102
-    - terminate_process:WS-OPS-103/5103
-    - terminate_process:WS-OPS-104/5104
-    - terminate_process:WS-OPS-105/5105
-    - terminate_process:WS-OPS-106/5106
     - isolate_endpoint:WS-OPS-101
     - isolate_endpoint:WS-OPS-102
     - isolate_endpoint:WS-OPS-103
@@ -186,9 +176,17 @@ expect:
     - isolate_endpoint:WS-OPS-105
     - isolate_endpoint:WS-OPS-106
   excluded: []
+  unrouted:
+    - terminate_process:WS-OPS-101/5101
+    - terminate_process:WS-OPS-102/5102
+    - terminate_process:WS-OPS-103/5103
+    - terminate_process:WS-OPS-104/5104
+    - terminate_process:WS-OPS-105/5105
+    - terminate_process:WS-OPS-106/5106
+    - block_hash:7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57
   considered: []
   manual_steps: [uninstall fictidesk.exe on WS-OPS-101, uninstall fictidesk.exe on WS-OPS-102, uninstall fictidesk.exe on WS-OPS-103, uninstall fictidesk.exe on WS-OPS-104, uninstall fictidesk.exe on WS-OPS-105, uninstall fictidesk.exe on WS-OPS-106]
   handoffs: []
   warnings: [ELEVATED APPROVAL REQUIRED]
-  containment: CONTAINED
-  controls: 8
+  containment: PARTIALLY_CONTAINED
+  controls: 7

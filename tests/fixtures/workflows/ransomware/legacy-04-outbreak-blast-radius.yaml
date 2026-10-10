@@ -3,11 +3,13 @@ schema: 1
 name: legacy-04-outbreak-blast-radius
 workflow: ransomware
 description: >-
-  Legacy 04, converted to typed records (C5: over-limit becomes ELEVATED). The same payload
-  encrypts seven operations workstations. Seven isolations exceed the endpoint blast-radius cap
-  (5), so every isolation stays proposed with ELEVATED approval and a blast-radius warning, and a
-  lead weighs segment-level containment. The hash block and the session revocation are outside
-  that cap and need standard approval, so spread can still be slowed quickly.
+  Legacy 04, converted to typed records (C5: over-limit becomes ELEVATED). The same payload encrypts
+  seven operations workstations. Seven isolations exceed the endpoint blast-radius cap (5), so every
+  isolation stays proposed with ELEVATED approval and a blast-radius warning, and a lead weighs
+  segment-level containment. The hash block and the session revocation are outside that cap and need
+  standard approval, so spread can still be slowed quickly. Production parity: the block_hash
+  recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for manual
+  handling, never executed).
 tags: [legacy, true_positive]
 legacy_source: workflows/ransomware/scenarios/04-outbreak-blast-radius.yaml
 mode: both
@@ -124,7 +126,6 @@ expect:
     - isolate_endpoint:WS-OPS-005
     - isolate_endpoint:WS-OPS-006
     - isolate_endpoint:WS-OPS-007
-    - block_hash:b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0
     - revoke_sessions:ops.lead@example.com
   elevated:
     - isolate_endpoint:WS-OPS-001
@@ -134,4 +135,5 @@ expect:
     - isolate_endpoint:WS-OPS-005
     - isolate_endpoint:WS-OPS-006
     - isolate_endpoint:WS-OPS-007
+  unrouted: [block_hash:b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0b5d1f3a7c9e0b2d4f6a8c1e3b5d7f9a0]
   warnings: [ELEVATED APPROVAL REQUIRED, blast-radius cap]

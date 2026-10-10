@@ -7,7 +7,9 @@ description: >-
   recipient's endpoint shows unapproved remote-access tooling and resolves a domain two intelligence
   sources rate malicious. An older suspicious detection from before the flood is not tied to it. The
   package quarantines the flood, isolates the endpoint and blocks the domain; the remote-access tool
-  itself is the unauthorized-rmm workflow's job.
+  itself is the unauthorized-rmm workflow's job. Production parity: isolate_endpoint through
+  secure_endpoint cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive]
 mode: both
 incident:
@@ -60,5 +62,5 @@ expect:
     - isolate_endpoint:TH-LT-2210
     - block_domain:helpdesk-support.example
   elevated: []
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 3

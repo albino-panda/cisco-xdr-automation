@@ -5,8 +5,10 @@ workflow: bec
 description: >-
   True positive. A finance mailbox signed in from an IP rated malicious, gained a rule forwarding
   invoices outside the organisation and sent a bank-detail change request to a colleague; the user's
-  laptop has an active infostealer detection. The analyst approves everything: sessions are revoked,
-  the account is disabled, the message is quarantined and the laptop is isolated, each verified.
+  laptop has an active infostealer detection. The analyst approves everything: sessions are revoked, the
+  account is disabled, the message is quarantined and the laptop is isolated. Production parity:
+  isolate_endpoint through secure_endpoint cannot be read back by the real adapter and ends
+  UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [true_positive, approve_all]
 mode: both
 suite: {entra: [identity], secure_email: [email], secure_endpoint: [endpoint], umbrella: [network],
@@ -85,6 +87,6 @@ expect:
   confidence: {min: 50, max: 100}
   degraded_sources: []
   evidence_min: 1
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 3
   notifications: [incident_note, soc_notification, analyst_summary]

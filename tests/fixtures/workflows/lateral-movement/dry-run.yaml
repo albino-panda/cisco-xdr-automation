@@ -4,7 +4,9 @@ name: dry-run
 workflow: lateral-movement
 description: >-
   Dry run: the package for an admin-share movement is proposed and simulated; nothing changes at any
-  vendor and the incident stays AWAITING_APPROVAL after the (simulated) approval.
+  vendor and the incident stays AWAITING_APPROVAL after the (simulated) approval. Production parity: the
+  block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown for
+  manual handling, never executed).
 tags: [dry_run, true_positive]
 mode: dry_run
 incident:
@@ -71,13 +73,12 @@ expect:
   actions:
     - isolate_endpoint:TH-LT-1047
     - isolate_endpoint:TH-SRV-0310
-    - block_hash:8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c
     - revoke_sessions:jsmith@example.com
+  unrouted: [block_hash:8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c]
   dry_run_lines:
     - DRY RUN
     - "Would isolate: TH-LT-1047"
     - "Would isolate: TH-SRV-0310"
     - "Would revoke sessions: jsmith@example.com"
-    - "Would block: 8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c8b3f5a7c"
     - No containment actions executed.
   notifications: [incident_note, soc_notification, analyst_summary]

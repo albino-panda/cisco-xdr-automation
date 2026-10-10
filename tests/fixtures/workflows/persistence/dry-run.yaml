@@ -4,7 +4,9 @@ name: dry-run
 workflow: persistence
 description: >-
   Dry run: the package is proposed and simulated; nothing changes at any vendor, no control is
-  registered and the DRY RUN report lists every recommended action.
+  registered and the DRY RUN report lists every recommended action. Production parity: the block_hash
+  and terminate_process recommendations stay UNROUTED (no enabled adapter has a VERIFIED write for them;
+  shown for manual handling, never executed).
 tags: [dry_run, true_positive]
 mode: dry_run
 suite: {secure_endpoint: [endpoint], virustotal: [intel]}
@@ -60,13 +62,10 @@ analyst: {decision: APPROVE_ALL, approvers: [analyst]}
 expect:
   actions:
     - isolate_endpoint:TH-LT-1047
-    - terminate_process:TH-LT-1047/4242
-    - block_hash:0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5
+  unrouted: [terminate_process:TH-LT-1047/4242, block_hash:0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5]
   dry_run_lines:
     - DRY RUN
     - "Would isolate: TH-LT-1047"
-    - "Would terminate process: TH-LT-1047/4242"
-    - "Would block: 0dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e50dd5a1e5"
     - No containment actions executed.
   manual_steps: [remove_persistence:TH-LT-1047/run-onedrivesync]
   notifications: [incident_note, soc_notification, analyst_summary]

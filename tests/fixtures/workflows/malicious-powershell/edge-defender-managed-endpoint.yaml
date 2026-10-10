@@ -3,9 +3,12 @@ schema: 1
 name: edge-defender-managed-endpoint
 workflow: malicious-powershell
 description: >-
-  Edge case: the endpoint is managed by Defender for Endpoint, not Secure Endpoint. The same malicious PowerShell
-  activity reported by Defender leads to an isolation through Defender (machine id), a process termination and indicator
-  blocks; nothing depends on Secure Endpoint.
+  Edge case: the endpoint is managed by Defender for Endpoint, not Secure Endpoint. The same malicious
+  PowerShell activity reported by Defender leads to an isolation through Defender (machine id), a
+  process termination and indicator blocks; nothing depends on Secure Endpoint. Production parity: the
+  terminate_process recommendation stays UNROUTED (no enabled adapter has a VERIFIED write for it; shown
+  for manual handling, never executed); block_hash through defender_endpoint cannot be read back by the
+  real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [edge_case, true_positive, approve_all]
 mode: both
 suite:
@@ -93,6 +96,9 @@ analyst:
   approvers: [analyst]
 expect:
   package: true
-  actions: ['terminate_process:TH-LT-6604/8800', 'isolate_endpoint:TH-LT-6604', 'block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00',
-    'block_domain:cdn-update.test']
-  containment: CONTAINED
+  actions:
+    - isolate_endpoint:TH-LT-6604
+    - block_hash:c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00
+    - block_domain:cdn-update.test
+  unrouted: [terminate_process:TH-LT-6604/8800]
+  containment: PARTIALLY_CONTAINED

@@ -8,8 +8,12 @@ description: >-
   flags the tool (T1219), Umbrella rates its relay domain suspicious, and the session is still active on
   WS-FIN-014. The package blocks the tool's two relay domains and its installer hash, terminates the
   running tool (new in the runtime) and isolates the one host with the active session. The internal
-  domain, the unrelated document hash and the second investigated host (no session) are left alone;
-  the unrated relay IP is shared vendor infrastructure and is listed as considered.
+  domain, the unrelated document hash and the second investigated host (no session) are left alone; the
+  unrated relay IP is shared vendor infrastructure and is listed as considered. Production parity: the
+  block_hash and terminate_process recommendations stay UNROUTED (no enabled adapter has a VERIFIED
+  write for them; shown for manual handling, never executed); isolate_endpoint through secure_endpoint
+  cannot be read back by the real adapter and ends UNABLE_TO_VERIFY, so containment is
+  PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/unauthorized-rmm/scenarios/01-unapproved-tool-fake-helpdesk.yaml
 mode: both
@@ -101,13 +105,12 @@ expect:
   actions:
     - block_domain:relay.fictidesk.example
     - block_domain:broker.fictidesk.example
-    - block_hash:7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57
-    - terminate_process:WS-FIN-014/4014
     - isolate_endpoint:WS-FIN-014
   elevated: []
   excluded: []
+  unrouted: [terminate_process:WS-FIN-014/4014, block_hash:7e577e577e577e577e577e577e577e577e577e577e577e577e577e577e577e57]
   considered: [block_ip:203.0.113.145]
   manual_steps: [uninstall fictidesk.exe on WS-FIN-014]
   handoffs: []
-  containment: CONTAINED
-  controls: 4
+  containment: PARTIALLY_CONTAINED
+  controls: 3

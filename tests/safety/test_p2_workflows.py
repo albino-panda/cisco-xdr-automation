@@ -37,6 +37,7 @@ from xdr_response.models import (
     get_action_spec,
 )
 from xdr_response.workflows.discovery import discover_workflows
+from xdr_response.workflows.runner import RuleOutcomeStatus
 
 FIXTURES = REPO_ROOT / "tests" / "fixtures" / "workflows"
 PACKAGE_DIR = REPO_ROOT / "src" / "xdr_response" / "workflows"
@@ -973,10 +974,20 @@ def test_process_of_an_allowlisted_or_approved_tool_hash_is_never_terminated(sec
     data = _with_config(_raw("malware", "tp-approve-all"), _hash_listing(section))
     run = _detect(data, "malware", "tp-approve-all", live=True)
     package = run.detection.package
-    excluded = {(e.action_type, e.target) for e in package.excluded_targets}
+    outcomes = run.workflow_run.outcomes
+    # block_hash and terminate_process have no VERIFIED write in this lab (production parity, architecture
+    # 14.14.3 and 15.2): an excluded hash shows as an unrouted outcome marked "never block it by hand", and
+    # a termination would be recommended for manual handling as an UNROUTED outcome. Both count here.
+    excluded = {(e.action_type, e.target) for e in package.excluded_targets} | {
+        (o.action_type, o.target) for o in outcomes
+        if o.status is RuleOutcomeStatus.UNROUTED and "never block it by hand" in o.detail}
     assert (ActionType.BLOCK_HASH, _MALWARE_HASH) in excluded, "precondition: the hash itself is excluded"
-    killed = [a.target for a in package.actions if a.action_type is ActionType.TERMINATE_PROCESS]
-    assert killed == [], f"{section}: process of the sanctioned binary proposed for termination: {killed}"
+    killed = [a.target for a in package.actions if a.action_type is ActionType.TERMINATE_PROCESS] + [
+        o.target for o in outcomes if o.action_type is ActionType.TERMINATE_PROCESS
+        and o.status is RuleOutcomeStatus.UNROUTED and "never block it by hand" not in o.detail]
+    assert killed == [], f"{section}: process of the sanctioned binary recommended for termination: {killed}"
+    assert any(o.action_type is ActionType.TERMINATE_PROCESS and o.status is RuleOutcomeStatus.ALLOWLISTED
+               for o in outcomes), f"{section}: the withheld termination must be shown, never silently dropped"
     if package.actions:
         _approve_all(run)
     assert not [c for c in _state_calls(run) if c[1] == "terminate_process"], (

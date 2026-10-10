@@ -8,9 +8,10 @@ description: >-
   Every rule that applies fires: both destinations are blocked, the source laptop is isolated while the
   transfer runs, and the account's sessions are revoked and the account is disabled (C1: session
   revocation needs approval like everything else). The legacy context flags (transfer_ongoing,
-  actor_users) now come from records: the connection's last record time and the account named on it.
-  The destination IP moved from 203.0.113.45 to 203.0.113.145 because the lab's production_server
-  class covers 203.0.113.0/26.
+  actor_users) now come from records: the connection's last record time and the account named on it. The
+  destination IP moved from 203.0.113.45 to 203.0.113.145 because the lab's production_server class
+  covers 203.0.113.0/26. Production parity: isolate_endpoint through secure_endpoint cannot be read back
+  by the real adapter and ends UNABLE_TO_VERIFY, so containment is PARTIALLY_CONTAINED.
 tags: [legacy, true_positive, approve_all]
 legacy_source: workflows/exfiltration/scenarios/01-ongoing-upload-compromised-account.yaml
 mode: both
@@ -83,5 +84,5 @@ expect:
   considered: []
   manual_steps: [assess data exposure from FIN-LT-07]
   handoffs: ["account-takeover:j.doe@example.com"]
-  containment: CONTAINED
+  containment: PARTIALLY_CONTAINED
   controls: 4

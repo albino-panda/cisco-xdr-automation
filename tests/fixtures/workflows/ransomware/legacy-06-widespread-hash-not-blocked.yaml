@@ -4,11 +4,12 @@ name: legacy-06-widespread-hash-not-blocked
 workflow: ransomware
 description: >-
   Legacy 06, converted to typed records (prevalence gate). Two hashes come back malicious: the real
-  payload (prevalence 1) and a common software updater that reputation mis-scored (prevalence
-  1800). Only the low-prevalence payload is blocked, and only hosts with a detection or with the
-  low-prevalence payload are isolated. The marketing workstation that merely has the common
-  updater is neither investigated as a payload host nor isolated, and the widespread hash is left
-  to the approver.
+  payload (prevalence 1) and a common software updater that reputation mis-scored (prevalence 1800).
+  Only the low-prevalence payload is blocked, and only hosts with a detection or with the low-prevalence
+  payload are isolated. The marketing workstation that merely has the common updater is neither
+  investigated as a payload host nor isolated, and the widespread hash is left to the approver.
+  Production parity: the block_hash recommendation stays UNROUTED (no enabled adapter has a VERIFIED
+  write for it; shown for manual handling, never executed).
 tags: [legacy, true_positive]
 legacy_source: workflows/ransomware/scenarios/06-widespread-hash-not-blocked.yaml
 mode: both
@@ -64,6 +65,6 @@ expect:
   package: true
   actions:
     - isolate_endpoint:WS-SAL-019
-    - block_hash:1f3e5d7c9b0a2f4e6d8c1b3a5f7e9d0c1f3e5d7c9b0a2f4e6d8c1b3a5f7e9d0c
   elevated: []
+  unrouted: [block_hash:1f3e5d7c9b0a2f4e6d8c1b3a5f7e9d0c1f3e5d7c9b0a2f4e6d8c1b3a5f7e9d0c]
   below_threshold: []

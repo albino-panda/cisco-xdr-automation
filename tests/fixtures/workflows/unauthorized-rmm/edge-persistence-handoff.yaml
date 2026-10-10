@@ -5,10 +5,14 @@ workflow: unauthorized-rmm
 description: >-
   Edge case: an Atera agent the tenant does not use was installed as a service on a workstation and
   Secure Endpoint flags it. No session is open (its last connection was blocked by the proxy), so
-  isolation is not proposed; the running agent is terminated and its binary blocked. Removing the
-  service has no VERIFIED write: the run hands the endpoint off to the persistence workflow. The
-  workstation's user shows a high identity risk in Entra, so the account is handed off to
-  account-takeover. Hand-offs are suggestions only; the analyst approves the selected actions.
+  isolation is not proposed. Terminating the running agent and blocking its binary are recommended but
+  UNROUTED: the real Secure Endpoint adapter has no VERIFIED write for either and no other enabled
+  adapter has one, so both are shown for manual handling. Removing the service has no VERIFIED write
+  either: the run hands the endpoint off to the persistence workflow. The workstation's user shows a
+  high identity risk in Entra, so the account is handed off to account-takeover. Hand-offs are
+  suggestions only; the analyst approves the selected relay-domain block. Production parity: the
+  block_hash and terminate_process recommendations stay UNROUTED (no enabled adapter has a VERIFIED
+  write for them; shown for manual handling, never executed).
 tags: [edge_case, true_positive, approve_selected]
 mode: both
 suite: {secure_endpoint: [endpoint], umbrella: [network], virustotal: [intel], meraki: [network], entra: [identity]}
@@ -67,19 +71,18 @@ environment:
       subject: mlopez@example.com
       record: {kind: user_profile, user: mlopez@example.com, display_name: M Lopez, department: Finance,
                risk_level: high, risk_state: at_risk, account_enabled: true}
-analyst: {decision: APPROVE_SELECTED, approvers: [analyst], select: [terminate_process:TH-LT-5120/5120]}
+analyst: {decision: APPROVE_SELECTED, approvers: [analyst], select: [block_domain:agent-api.atera-relay.test]}
 expect:
   package: true
   actions:
+    - block_domain:agent-api.atera-relay.test
+  unrouted:
     - terminate_process:TH-LT-5120/5120
     - block_hash:a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2
-    - block_domain:agent-api.atera-relay.test
   considered: [block_ip:198.51.100.150]
   manual_steps: [uninstall Atera on TH-LT-5120]
   handoffs: ["persistence:TH-LT-5120", "account-takeover:mlopez@example.com"]
   results:
-    terminate_process:TH-LT-5120/5120: SUCCESS
-    block_hash:a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2a7e2: REJECTED_BY_ANALYST
-    block_domain:agent-api.atera-relay.test: REJECTED_BY_ANALYST
+    block_domain:agent-api.atera-relay.test: SUCCESS
   containment: CONTAINED
-  controls: 0
+  controls: 1

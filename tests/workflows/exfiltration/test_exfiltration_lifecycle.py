@@ -17,6 +17,7 @@ from tools.simulator.workflow_scenario import (
     check_coverage,
     load_workflow_scenario,
 )
+from tools.simulator.workflow_scenario import executable_anywhere
 from xdr_response import guard
 from xdr_response.errors import ApprovalError, ApproverNotAllowedError
 from xdr_response.models import ActionResultStatus, ApprovalLevel, IncidentState
@@ -50,16 +51,19 @@ def _run(name: str, *, live: bool) -> WorkflowScenarioRun:
 def test_the_scenario_set_meets_the_minimum_and_every_rule_is_proposed_somewhere():
     scenarios = [load_workflow_scenario(p) for p in _paths()]
     proposed: set[str] = set()
+    unrouted: set[str] = set()
     for scenario in scenarios:
         run = WorkflowScenarioRun(scenario, live=False)
         run.detect()
         assert run.workflow_run is not None, scenario.name
         proposed |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.PROPOSED)}
+        unrouted |= {o.rule_id for o in run.workflow_run.outcomes_with(RuleOutcomeStatus.UNROUTED)}
         assert not run.workflow_run.outcomes_with(RuleOutcomeStatus.ERROR), scenario.name
         assert not [n for n in run.workflow_run.notes if n.startswith("hook ")], scenario.name
         guard._reset_for_test_harness()
-    assert proposed == {r.id for r in WORKFLOW.recommendations}
-    assert check_coverage("exfiltration", scenarios, WORKFLOW, proposed_rules=proposed) == []
+    assert proposed | (unrouted & {r.id for r in WORKFLOW.recommendations
+                                if not executable_anywhere(r.action)}) == {r.id for r in WORKFLOW.recommendations}
+    assert check_coverage("exfiltration", scenarios, WORKFLOW, proposed_rules=proposed, unrouted_rules=unrouted) == []
     assert len([s for s in scenarios if s.name.startswith("edge-")]) >= 2
 
 
@@ -120,7 +124,7 @@ def test_a_critical_asset_needs_the_lead_and_an_analyst_alone_is_refused():
         run.decide({"decision": "APPROVE_ALL"}, approvers=["analyst"])
     assert run.environment.state_changing_calls() == []
     decision = run.decide({"decision": "APPROVE_ALL"}, approvers=["lead"])
-    assert decision.report is not None and decision.report.overall.value == "CONTAINED"
+    assert decision.report is not None and decision.report.overall.value == "PARTIALLY_CONTAINED"
 
 
 def test_blocks_over_the_indicator_cap_are_elevated_not_dropped():
@@ -145,8 +149,8 @@ def test_restoration_needs_its_own_human_release_approval():
         run.decide_release({"decision": "APPROVE_ALL"}, approvers=["ai"])
     assert len(run.environment.state_changing_calls()) == calls
     result = run.decide_release({"decision": "APPROVE_ALL"}, approvers=["analyst"])
-    assert result.report is not None and result.report.overall.value == "RESTORED"
-    assert run.orchestrator.get_incident(run.incident_id).state is IncidentState.RESTORED
+    assert result.report is not None and result.report.overall.value == "PARTIALLY_RESTORED"
+    assert run.orchestrator.get_incident(run.incident_id).state is IncidentState.AWAITING_RELEASE_APPROVAL
 
 
 def test_rejected_package_closes_without_any_control():
@@ -163,7 +167,8 @@ def test_a_degraded_identity_source_does_not_block_the_destination_blocks():
     assert any("degraded source: entra" in note for note in workflow_run.notes)
     assert {a.action_type.value for a in run.detection.package.actions} == {"block_domain", "block_ip"}
     assert {c.subject for c in workflow_run.considered if not c.manual} == {f"isolate_endpoint:{HOST}",
-                                                                          f"revoke_sessions:{USER}"}
+                                                                          f"revoke_sessions:{USER}",
+                                                                          f"disable_user:{USER}"}
     assert run.check() == []
 
 

@@ -30,6 +30,12 @@ What it prints, in order: the analyst decision card, the containment result (the
 in dry-run mode), the release package checklist and the restoration result (simulated-live only),
 and the audit-chain verification.
 
+Production parity (architecture 14.14.3): every simulated adapter does exactly what the real adapter
+of the same integration supports and verifies (derived from its manifest), so a run shows the
+production outcome: an action no enabled adapter can execute is UNROUTED, an action whose real adapter
+has no read-back ends UNABLE_TO_VERIFY (PARTIALLY_CONTAINED under the default thresholds).
+``--production-parity`` is still accepted for older command lines and changes nothing.
+
 Nothing leaves the process: adapters are :mod:`xdr_response.integrations.simulated` (no HTTP),
 the audit trail, control registry and token ledger are in memory, and lab approvers get random
 credentials per run. ``--live`` still goes through the real approval engine (HMAC tokens for
@@ -95,6 +101,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--list-workflows", action="store_true", help="list workflows and their scenarios")
     parser.add_argument("--workflow", help="run the scenarios of this workflow (tests/fixtures/workflows/<id>)")
     parser.add_argument("--scenario", dest="workflow_scenario", help="with --workflow: one scenario name")
+    parser.add_argument("--production-parity", action="store_true", help=argparse.SUPPRESS)  # always on
     parser.add_argument("--all-workflows", action="store_true",
                         help="run the scenarios of every discovered workflow (dry run unless --live)")
     parser.add_argument("--package", default=DEFAULT_PACKAGE, help=argparse.SUPPRESS)
