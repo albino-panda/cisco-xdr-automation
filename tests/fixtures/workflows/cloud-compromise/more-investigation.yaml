@@ -1,0 +1,46 @@
+# cloud-compromise workflow scenario; fake lab data only.
+schema: 1
+name: more-investigation
+workflow: cloud-compromise
+description: >-
+  True positive; the analyst asks for more investigation instead of deciding (REQUEST_MORE_INVESTIGATION).
+  No token is issued, nothing executes and no control is registered: the incident returns to
+  NOT_STARTED, the package can no longer be approved, and a later run proposes a new package.
+tags: [true_positive, more_investigation]
+mode: both
+suite: {entra: [identity], microsoft_cloud: [identity], cisco_xdr: [intel], meraki: [network]}
+incident:
+  incident_id: XDR-CC-0003-MI
+  title: Risky OAuth consent grant after unfamiliar sign-in by tnguyen@example.com
+  severity: HIGH
+  workflow_id: cloud-compromise
+  observables:
+    - {type: user, value: tnguyen@example.com}
+    - {type: ip, value: 203.0.113.177}
+  users: [tnguyen@example.com]
+  trigger: {source: entra, mitre_techniques: [T1528]}
+environment:
+  reputations:
+    - {type: ip, value: 203.0.113.177, verdict: MALICIOUS, risk_score: 85, confidence: 80,
+       integrations: [cisco_xdr], summary: attacker infrastructure}
+  records:
+    - integration: entra
+      atomic: investigate_user
+      subject: tnguyen@example.com
+      record: {kind: user_profile, user: tnguyen@example.com, display_name: T Nguyen, department: Finance,
+               groups: [Finance Users], account_enabled: true, risk_level: high, risk_state: confirmed_compromised}
+    - integration: entra
+      atomic: investigate_authentication
+      subject: tnguyen@example.com
+      record: {kind: sign_in, sign_in_id: si-cc-0003-1, user: tnguyen@example.com,
+               timestamp: "2026-01-15T10:40:00Z", ip: 203.0.113.177, country: US, app: Office 365 Exchange Online,
+               result: success, mfa_result: satisfied, risk_level: medium}
+analyst: {decision: REQUEST_MORE_INVESTIGATION, approvers: [analyst], comment: check the other endpoints of the user first}
+expect:
+  actions:
+    - revoke_sessions:tnguyen@example.com
+    - block_ip:203.0.113.177
+  handoffs: [account-takeover:tnguyen@example.com]
+  decision_state: NOT_STARTED
+  controls: 0
+  final_state: NOT_STARTED

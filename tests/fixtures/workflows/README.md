@@ -9,7 +9,13 @@ Scenarios are found automatically (`discover_workflow_scenarios()` in
   by simulated adapters, lab-only `config` overrides without approval keys, `expect` block).
 - Minimum set per workflow: 14.5.3 (`tp-approve-all`, `tp-approve-selected`, `tp-reject`,
   `benign-no-action`, `degraded-source`, `critical-asset-elevated`, `partial-failure`, `dry-run`,
-  `release-restoration`, at least two `edge-<slug>`, one `legacy-<NN>-<slug>` per legacy scenario).
+  `release-restoration`, `more-investigation` (the analyst's REQUEST_MORE_INVESTIGATION: no token,
+  nothing executes, the incident returns to NOT_STARTED), at least two `edge-<slug>`, one
+  `legacy-<NN>-<slug>` per legacy scenario).
+- Expectations describe production: the simulated adapters do only what the real adapters support and
+  verify (14.14.3). A Secure Endpoint isolation or release ends `UNABLE_TO_VERIFY` (so containment is
+  `PARTIALLY_CONTAINED`), a hash block needs Defender for Endpoint in the `suite`, and actions with no
+  VERIFIED write anywhere (`terminate_process`, `quarantine_file`, ...) are expected under `unrouted`.
 - Every scenario runs in `tests/simulation/test_workflow_scenarios.py` in each of its modes, with the
   implicit safety assertions of 14.5.3 that a scenario cannot switch off.
 - Run one: `python tools/simulator/simulate.py --workflow <id> --scenario <name> [--live] --check`.

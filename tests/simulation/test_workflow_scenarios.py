@@ -80,4 +80,20 @@ def test_the_sample_workflow_proposes_every_rule_somewhere():
 def test_the_sample_covers_every_scenario_category():
     tags = {t for path in SAMPLE_SCENARIOS["sample-malware"] for t in load_workflow_scenario(path).tags}
     assert {"true_positive", "approve_all", "approve_selected", "reject", "benign", "degraded_source",
-            "critical_asset", "partial_failure", "dry_run", "release", "edge_case"} <= tags
+            "critical_asset", "partial_failure", "dry_run", "release", "edge_case", "more_investigation"} <= tags
+
+
+@pytest.mark.parametrize("workflow_id", sorted(PRODUCTION.ids()))
+def test_every_production_workflow_has_a_request_more_investigation_scenario(workflow_id: str):
+    """REQUEST_MORE_INVESTIGATION is exercised per workflow: no token, nothing executes, the incident
+    returns to NOT_STARTED, and the scenario says so (the minimum set enforces the file and the tag)."""
+    scenarios = [load_workflow_scenario(p) for p in PRODUCTION_SCENARIOS.get(workflow_id, [])]
+    more = [s for s in scenarios if "more_investigation" in s.tags]
+    assert any(s.name == "more-investigation" for s in more), f"{workflow_id}: more-investigation.yaml is missing"
+    for scenario in more:
+        assert scenario.analyst is not None
+        assert scenario.analyst.decision.value == "REQUEST_MORE_INVESTIGATION", scenario.name
+        assert scenario.expect.package, scenario.name
+        assert scenario.expect.decision_state is not None and scenario.expect.decision_state.value == "NOT_STARTED"
+        if "live" in scenario.mode or scenario.mode == "both":
+            assert scenario.expect.controls == 0, scenario.name

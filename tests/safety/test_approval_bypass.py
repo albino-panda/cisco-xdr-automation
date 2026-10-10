@@ -48,7 +48,7 @@ from xdr_response import guard
 from xdr_response.approval import ApprovalEngine, ApprovalTokenService, InMemoryTokenUseLedger
 from xdr_response.clock import FixedClock
 from xdr_response.config import ApprovalSettings, IntegrationConfig
-from xdr_response.config.schema import Settings
+from xdr_response.config.schema import RuntimeSettings, Settings
 from xdr_response.errors import (
     ApprovalError,
     ApprovalRequiredError,
@@ -63,6 +63,7 @@ from xdr_response.errors import (
     TokenReplayError,
 )
 from xdr_response.execution.executor import ContainmentExecutor
+from xdr_response.execution.runner import ActionRunner
 from xdr_response.integrations.base import STATE_CHANGING_ACTION_NAMES, IntegrationAdapter
 from xdr_response.integrations.http import GuardedHttpClient, RetryPolicy
 from xdr_response.integrations.registry import ADAPTER_PATHS, load_adapter_class
@@ -98,6 +99,8 @@ from xdr_response.models import (
     number_evidence,
 )
 from xdr_response.restoration.engine import RestorationEngine
+from xdr_response.restoration.registry import InMemoryControlRegistry
+from xdr_response.verification.engine import VerificationEngine
 
 INCIDENT = "XDR-83921"
 OTHER_INCIDENT = "XDR-99999"
@@ -316,9 +319,61 @@ def assert_denied(call: Callable[[], Any], recorder: Recorder | None = None,
 
 
 # ============================================== 1. the four named brief tests ==
+class _OneAdapter:
+    """``AdapterProvider`` serving one real adapter (the executor path of the required tests)."""
+
+    def __init__(self, adapter: IntegrationAdapter) -> None:
+        self._adapter = adapter
+
+    def get(self, name: str) -> IntegrationAdapter:
+        if name != self._adapter.name:
+            raise KeyError(name)
+        return self._adapter
+
+
+def _executor_for(adapter: IntegrationAdapter, clock: FixedClock, tokens: ApprovalTokenService,
+                  audit: RecordingAudit) -> ContainmentExecutor:
+    """The production pipeline around a real adapter: ContainmentExecutor -> ActionRunner -> adapter ->
+    GuardedHttpClient, with live settings (``runtime.dry_run`` false) and the real token service."""
+    adapters = _OneAdapter(adapter)
+    runner = ActionRunner(adapters, VerificationEngine(adapters, clock=clock, sleep=lambda _s: None),
+                          registry=InMemoryControlRegistry(clock=clock), audit=audit, clock=clock)
+    return ContainmentExecutor(runner, tokens, Settings(runtime=RuntimeSettings(dry_run=False)), audit=audit,
+                               clock=clock)
+
+
+def _executor_attempts(executor: ContainmentExecutor, package: ContainmentPackage, recorder: Recorder,
+                       wiring: str) -> None:
+    """No token, and an unsigned token bound to the package: refused (live wiring) or a pure preview
+    (pristine guard: dry run by default); never a vendor request either way."""
+    forged = make_token(*package.actions)
+    forged = forged.model_copy(update={"claims": forged.claims.model_copy(update={
+        "package_id": package.package_id, "evidence_snapshot_hash": package.evidence_snapshot_hash})})
+    for token in (None, forged):
+        if wiring == "live":
+            assert_denied(lambda: executor.execute(package, token), recorder)
+            continue
+        try:
+            report = executor.execute(package, token)
+        except ApprovalRequiredError:
+            pass
+        else:
+            assert report.dry_run and report.overall is None
+            assert all(r.status.value == "DRY_RUN" for r in report.results)
+        assert recorder.calls == [], f"vendor request(s) left the process: {[str(c.url) for c in recorder.calls]}"
+
+
 def _direct_attempts(clock: FixedClock, tokens: ApprovalTokenService, integration: str,
                      action_type: ActionType, **params: Any) -> None:
-    """Call the adapter method and ``execute`` directly: pristine guard, then production wiring."""
+    """Architecture section 10: each required test goes through the adapter method, through the
+    executor and through the HTTP client. Pristine guard first, then the production wiring.
+
+    * adapter: the ``@state_changing`` method and ``adapter.execute`` called directly;
+    * executor: :class:`ContainmentExecutor` with a real :class:`ActionRunner` around the real adapter,
+      without a token and with an unsigned token bound to the package;
+    * HTTP client: the adapter's own :class:`GuardedHttpClient` (every refusal above is checked against
+      the recording transport) and, inside a forged authorization context, the method itself.
+    """
     request = request_for(action_type, integration, **params)
     for wiring in ("pristine", "live"):
         guard.reset_for_tests()
@@ -330,12 +385,17 @@ def _direct_attempts(clock: FixedClock, tokens: ApprovalTokenService, integratio
         method = getattr(adapter, action_type.value)
         assert_denied(lambda: method(request), recorder)
         assert_denied(lambda: adapter.execute(request), recorder)
-        # a forged, unsigned token is never enough either
+        audit = RecordingAudit()
+        package = make_package(recommendation(action_type, integration, **params), incident_id=INCIDENT)
+        _executor_attempts(_executor_for(adapter, clock, tokens, audit), package, recorder, wiring)
         if wiring == "live":
+            assert audit.of(AuditEventType.GUARD_DENIED), "an executor refusal must be audited"
+            # a forged, unsigned token is never enough either
             def forged() -> None:
                 with guard.authorized(make_token(request), request):
                     method(request)
             assert_denied(forged, recorder)
+        assert recorder.writes() == []
 
 
 @pytest.mark.parametrize("integration,params", [

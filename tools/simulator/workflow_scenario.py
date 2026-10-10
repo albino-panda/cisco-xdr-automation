@@ -104,6 +104,7 @@ REQUIRED_SCENARIOS: Mapping[str, frozenset[str]] = {
     "partial-failure": frozenset({"partial_failure"}),
     "dry-run": frozenset({"dry_run"}),
     "release-restoration": frozenset({"release"}),
+    "more-investigation": frozenset({"more_investigation"}),
 }
 MIN_EDGE_SCENARIOS = 2
 
@@ -112,6 +113,7 @@ _CONFIG_KEYS = frozenset({"critical_assets", "allowlists", "thresholds", "exclus
 _FILLED_RECORD_FIELDS = frozenset({"record_id", "integration", "atomic", "subject"})
 _PLACEHOLDER_VERSION = "0.0.0"
 _APPROVING = frozenset({DecisionType.APPROVE_ALL, DecisionType.APPROVE_SELECTED})
+_NOT_APPROVING = frozenset({DecisionType.REJECT, DecisionType.REQUEST_MORE_INVESTIGATION})
 
 
 def _forbidden_paths(node: Any, path: str = "") -> list[str]:
@@ -395,6 +397,8 @@ class _Probe:
     guard_denials: int = 0
     refused: dict[str, bool] = field(default_factory=dict)  # alias -> refused
     elevated_refused_for_analyst: bool | None = None
+    #: After a REJECT or REQUEST_MORE_INVESTIGATION: was a later APPROVE_ALL of the same package refused?
+    stale_package_refused: bool | None = None
 
 
 class WorkflowScenarioRun(ScenarioRun):
@@ -443,6 +447,9 @@ class WorkflowScenarioRun(ScenarioRun):
         if probe:
             self._probe_non_humans(package)
         self.decide()
+        if self.decision is not None and self.decision.outcome.decision.decision in _NOT_APPROVING:
+            # the decided package can never be approved afterwards (a new package needs a new decision)
+            self.probe.stale_package_refused = self._refused(package, {"decision": "APPROVE_ALL"}, "analyst")
         if self._should_release():
             self.propose_release()
             self.decide_release()
@@ -618,10 +625,34 @@ class WorkflowScenarioRun(ScenarioRun):
                 problems.append(f"principal {alias!r} was able to approve a package")
         if "critical_asset" in self.workflow_scenario.tags and self.probe.elevated_refused_for_analyst is not True:
             problems.append("an APPROVE_ALL by 'analyst' alone was not refused on an ELEVATED package")
+        problems += self._not_approving_problems()
         verification = self.runtime.audit.verify()  # type: ignore[attr-defined]
         if not verification.ok:
             problems.append("the audit chain does not verify")
         problems += self._error_outcomes()
+        return problems
+
+    def _not_approving_problems(self) -> list[str]:
+        """REJECT and REQUEST_MORE_INVESTIGATION: no token, no state change, no control, and the decided
+        package can no longer be approved (REQUEST_MORE_INVESTIGATION returns the incident to NOT_STARTED)."""
+        decision = self.decision
+        if decision is None or decision.outcome.decision.decision not in _NOT_APPROVING:
+            return []
+        kind = decision.outcome.decision.decision.value
+        problems: list[str] = []
+        if decision.outcome.token is not None:
+            problems.append(f"{kind}: an approval token was issued")
+        if decision.report is not None:
+            problems.append(f"{kind}: an execution report was produced")
+        if self.environment.state_changing_calls():
+            problems.append(f"{kind}: {len(self.environment.state_changing_calls())} state-changing call(s)")
+        if self.runtime.registry.list(incident_id=self.incident_id):
+            problems.append(f"{kind}: a temporary control was registered")
+        if self.probe.stale_package_refused is not True:
+            problems.append(f"{kind}: the decided package could still be approved afterwards")
+        if (decision.outcome.decision.decision is DecisionType.REQUEST_MORE_INVESTIGATION
+                and decision.incident.state is not IncidentState.NOT_STARTED):
+            problems.append(f"{kind}: the incident is {decision.incident.state.value}, not NOT_STARTED")
         return problems
 
     def _evidence_problems(self) -> list[str]:
@@ -678,6 +709,9 @@ def check_coverage(workflow_id: str, scenarios: Sequence[WorkflowScenario], defi
                    legacy_root: Path = LEGACY_WORKFLOWS_DIR) -> list[str]:
     """Problems with the minimum scenario set of 14.5.3 (empty list: covered).
 
+    Every tag of the vocabulary (``more_investigation`` included) must be carried by some scenario, and
+    every required scenario (``more-investigation.yaml`` included) must exist.
+
     ``proposed_rules`` are the rule ids that were PROPOSED in played runs; without it a rule counts
     as covered when its action type appears in some scenario's expected actions. A rule whose action no
     real adapter can execute (no VERIFIED write anywhere, e.g. ``terminate_process``) can never be
@@ -699,7 +733,7 @@ def check_coverage(workflow_id: str, scenarios: Sequence[WorkflowScenario], defi
     if len(edges) < MIN_EDGE_SCENARIOS:
         problems.append(f"{workflow_id}: at least {MIN_EDGE_SCENARIOS} edge-<slug>.yaml scenarios tagged edge_case")
     present = {t for s in scenarios for t in s.tags}
-    missing_tags = sorted(SCENARIO_TAGS - present - {"legacy", "more_investigation"})
+    missing_tags = sorted(SCENARIO_TAGS - present - {"legacy"})
     if missing_tags:
         problems.append(f"{workflow_id}: no scenario carries tags {missing_tags}")
     if not any("benign" in s.tags or s.expect.below_threshold for s in scenarios):
