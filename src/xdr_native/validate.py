@@ -4,8 +4,8 @@ Two kinds of check, both run on the JSON that is imported into XDR, not on the b
 
 - ``check_structure``: identifiers are unique and well formed, every reference resolves, only activity
   types, operators and envelope keys seen in real exports are used, every script is one of this
-  repository's own, every HTTP request is one of the known requests on one of the known targets, and no
-  credential is embedded;
+  repository's own, every HTTP request is a known request to the XDR platform APIs, and no vendor target,
+  account key or credential is exported;
 - ``check_approval_gate``: no state-changing activity can run unless a human chose *Approve* in an XDR
   approval task that showed the decision card, and Dry Run is false. This is the deterministic approval
   control for workflows that run inside XDR, where no code-level guard exists.
@@ -47,24 +47,19 @@ KNOWN_TYPES = frozenset({
 #: XDR roles a Request Approval activity can be assigned to (as exported by the target org).
 KNOWN_ROLES = frozenset({"admin", "user"})
 KNOWN_OPERATORS = frozenset({"and", "or", "eq", "eqi", "ne", "gt", "gte", "lt", "lte", "mregex", "mw"})
-KNOWN_ENVELOPE = frozenset({"workflow", "targets", "runtime_users", "module_targets"})
+#: No ``targets`` or ``runtime_users``: a vendor target needs an account key, which XDR asks for on import.
+KNOWN_ENVELOPE = frozenset({"workflow", "module_targets"})
 #: Module targets a workflow may use: XDR's own platform APIs (enrich, response, private intelligence).
 KNOWN_MODULE_TARGETS = frozenset({PLATFORM_APIS})
-#: Hosts an exported HTTP target may name: the regional Secure Email Threat Defense APIs, path ``/v1``.
-KNOWN_TARGET_HOST = re.compile(r"api\.(us|de|au|in|ae)\.etd\.cisco\.com")
-KNOWN_TARGET_PATH = "/v1"
 MAX_ACTIVITIES = 200  # documented XDR limit per workflow
 
-#: Requests a workflow may send, per kind of target. ``READ_REQUESTS`` only read; the others change state.
-ETD_READS = frozenset({("POST", "/oauth/token"), ("POST", "/messages/search"), ("POST", "/messages/status")})
-ETD_WRITES = frozenset({("POST", "/messages/move")})
+#: The Cisco XDR enrich and response reads: verdicts, sightings and the list of response actions on
+#: offer. Triggering a response action is state-changing.
 PLATFORM_READS = frozenset({
     ("POST", "/iroh-enrich/deliberate/observables"), ("POST", "/iroh-enrich/observe/observables"),
     ("POST", "/iroh-response/respond/observables"),
 })
-#: The Cisco XDR enrich and response reads: verdicts, sightings and the list of response actions on
-#: offer. Triggering a response action is state-changing.
-READ_REQUESTS = ETD_READS | PLATFORM_READS
+READ_REQUESTS = PLATFORM_READS
 #: Activity types that call other workflows. None is allowed outside the gate; there is no allow-list.
 CALL_TYPES = frozenset({"workflow.sub_workflow", "workflow.atomic_workflow"})
 FORBIDDEN_KEYS = frozenset({"auto_approve", "skip_approval", "bypass_approval", "approval_required"})
@@ -183,8 +178,7 @@ def check_structure(document: dict[str, Any]) -> list[str]:
     if len(activities) > MAX_ACTIVITIES:
         problems.append(f"{len(activities)} activities, over the XDR limit of {MAX_ACTIVITIES}")
 
-    names = [workflow["unique_name"], *(a["unique_name"] for a, _ in activities), *_variables(document),
-             *(document.get("targets") or {}), *(document.get("runtime_users") or {})]
+    names = [workflow["unique_name"], *(a["unique_name"] for a, _ in activities), *_variables(document)]
     for name in names:
         if not _ID.match(name):
             problems.append(f"malformed identifier {name}")
@@ -196,8 +190,6 @@ def check_structure(document: dict[str, Any]) -> list[str]:
     for label in sorted({n for n in labels if labels.count(n) > 1}):
         problems.append(f"duplicate variable name {label!r}")
     activity_ids = {a["unique_name"] for a, _ in activities}
-    targets = document.get("targets") or {}
-    runtime_users = document.get("runtime_users") or {}
     module_refs = set()
     for module in document.get("module_targets") or []:
         key = (module.get("module_type"), module.get("external_id"), module.get("proxy_endpoint_metadata_id")) \
@@ -242,7 +234,7 @@ def check_structure(document: dict[str, Any]) -> list[str]:
                 if activity_id not in activity_ids:
                     problems.append(f"{where}: reference to unknown activity {activity_id}")
         target_id = (properties.get("target") or {}).get("target_id")
-        if target_id and target_id not in targets and target_id not in module_refs:
+        if target_id and target_id not in module_refs:
             problems.append(f"{where}: unknown target {target_id}")
         if kind == "python3.script":
             if properties.get("script") not in own_scripts:
@@ -262,9 +254,6 @@ def check_structure(document: dict[str, Any]) -> list[str]:
                     problems.append(f"{where}: {request[0]} {request[1]} is not a known request to the XDR platform")
                 if headers:
                     problems.append(f"{where}: a request to the XDR platform carries no custom header")
-            elif target_id in targets:
-                if request not in ETD_READS | ETD_WRITES:
-                    problems.append(f"{where}: {request[0]} {request[1]} is not a known request to this target")
             else:
                 problems.append(f"{where}: an HTTP request must name its target")
             for header in headers:
@@ -273,18 +262,6 @@ def check_structure(document: dict[str, Any]) -> list[str]:
                         not refs or any(variables.get(n, {}).get("type") != "datatype.secure_string" for _, _, n in refs)):
                     problems.append(f"{where}: header {header['name']} must come from a secure string variable")
 
-    for target in targets.values():
-        properties = target["properties"]
-        user = properties.get("default_runtime_user_id")
-        if user and user not in runtime_users:
-            problems.append(f"target {target['name']}: unknown account key {user}")
-        if target.get("type") != "web-service.endpoint" or properties.get("protocol") != "https" \
-                or not KNOWN_TARGET_HOST.fullmatch(str(properties.get("host"))) \
-                or properties.get("path") != KNOWN_TARGET_PATH or properties.get("disable_certificate_validation") is not False:
-            problems.append(f"target {target['name']}: not a known HTTPS host and path")
-    for user in runtime_users.values():
-        if user["properties"].get("basic_password") or user["properties"].get("basic_username"):
-            problems.append(f"account key {user['name']}: credentials must not be exported")
     for properties in variables.values():
         if properties["type"] == "datatype.secure_string" and properties["value"]:
             problems.append(f"secure variable {properties['name']}: a value must not be exported")

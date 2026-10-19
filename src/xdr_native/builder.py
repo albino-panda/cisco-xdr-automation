@@ -82,8 +82,6 @@ class Workflow:
         self.description = description
         self.variables: list[dict[str, Any]] = []
         self.actions: list[Activity] = []
-        self.targets: dict[str, dict[str, Any]] = {}
-        self.runtime_users: dict[str, dict[str, Any]] = {}
         self.module_targets: list[tuple[str, str, str]] = []
         self.properties: dict[str, Any] = {}
         self.categories: list[str] = []
@@ -120,36 +118,8 @@ class Workflow:
             raise ValueError(f"{name!r} is not a template output")
         return f"$workflow.{self.id}.output.{name}$"
 
-    # -- targets and account keys ------------------------------------------------------------------
-
-    def runtime_user(self, name: str, description: str) -> str:
-        """HTTP Basic account key, exported without credentials."""
-        unique_name = make_id("definition_runtime_user", self.slug, name)
-        self.runtime_users[unique_name] = {
-            "unique_name": unique_name, "name": name, "title": name,
-            "type": "runtime_user.web-service_basic_credentials", "base_type": "runtime_user",
-            "object_type": "definition_runtime_user",
-            "properties": {"auth_option": "Basic", "basic_password": "", "basic_username": "",
-                           "description": description, "display_name": name},
-        }
-        return unique_name
-
-    def target(self, name: str, host: str, *, path: str = "", description: str = "",
-               runtime_user_id: str | None = None) -> str:
-        unique_name = make_id("definition_target", self.slug, name)
-        properties: dict[str, Any] = {}
-        if runtime_user_id:
-            properties["default_runtime_user_id"] = runtime_user_id
-        properties.update({"description": description, "disable_certificate_validation": False,
-                           "display_name": name, "host": host, "ignore_proxy": False,
-                           "no_runtime_user": runtime_user_id is None})
-        if path:
-            properties["path"] = path
-        properties["protocol"] = "https"
-        self.targets[unique_name] = {"unique_name": unique_name, "name": name, "title": name,
-                                     "type": "web-service.endpoint", "base_type": "target",
-                                     "object_type": "definition_target", "properties": properties}
-        return unique_name
+    # -- targets ------------------------------------------------------------------------------------
+    # Only module targets XDR provides. A vendor target needs an account key, which XDR asks for on import.
 
     def module_target(self, module: tuple[str, str, str] = PLATFORM_APIS) -> str:
         """Declare a module target XDR provides (default: the platform APIs) and return its reference."""
@@ -182,7 +152,7 @@ class Workflow:
     def http(self, title: str, *, method: str, target_id: str, relative_url: str, body: str | None = None,
              headers: list[tuple[str, str]] | None = None,
              content_type: str | None = "application/json") -> Activity:
-        """HTTP request with the target's default account key (none when the target has none).
+        """HTTP request to a module target (no account key).
 
         An error status does not stop the workflow: the caller checks ``status_code``.
         """
@@ -200,14 +170,6 @@ class Workflow:
         if content_type:
             properties["content_type"] = content_type
         return self._activity("web-service.http_request", "HTTP Request", title, properties)
-
-    def jsonpath(self, title: str, input_json: str, queries: list[tuple[str, str, str]]) -> Activity:
-        return self._activity("corejava.jsonpathquery", "JSONPath Query", title, {
-            "action_timeout": 180, "input_json": input_json,
-            "jsonpath_queries": [{"jsonpath_query": query, "jsonpath_query_name": name,
-                                  "jsonpath_query_type": kind, "zdate_type_format": "yyyy-MM-dd'T'HH:mm:ssZ"}
-                                 for query, name, kind in queries],
-        })
 
     def python(self, title: str, script: str, args: list[str], outputs: list[tuple[str, str]]) -> Activity:
         """Execute Python Script: ``args`` arrive as ``sys.argv[1:]`` strings, outputs are global names."""
@@ -232,11 +194,6 @@ class Workflow:
     def if_else(self, title: str, branches: list[Activity], *, unique_name: str | None = None) -> Activity:
         return self._activity("logic.if_else", "Condition Block", title, {"conditions": None},
                               unique_name=unique_name, blocks=branches)
-
-    def while_loop(self, title: str, condition: dict[str, Any], actions: list[Activity]) -> Activity:
-        body = self._activity("logic.condition_block", "Condition Branch", f"{title}: next page",
-                              {"condition": condition}, actions=actions)
-        return self._activity("logic.while", "While Loop", title, {}, blocks=[body])
 
     def for_each(self, title: str, source_array: str, *, unique_name: str | None = None,
                  description: str = "") -> Activity:
@@ -292,10 +249,6 @@ class Workflow:
         if self.template_type:
             workflow["template_type"] = self.template_type
         document: dict[str, Any] = {"workflow": workflow}
-        if self.targets:
-            document["targets"] = self.targets
-        if self.runtime_users:
-            document["runtime_users"] = self.runtime_users
         if self.module_targets:
             document["module_targets"] = [
                 {"module_type": module_type, "external_id": external_id, "proxy_endpoint_metadata_id": endpoint}

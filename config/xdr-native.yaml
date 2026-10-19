@@ -7,17 +7,13 @@
 #
 # Every list is empty here on purpose: this repository does not know your org. Until you fill them in,
 # no asset is protected and nothing is excluded. Do not put a secret in this file.
-# Values are text without commas. A flag of build.py overrides the roles and the ETD host.
+# Values are text without commas. A flag of build.py overrides the roles.
 
 # XDR roles asked for a standard approval: admin (administrators), user (incident responders).
 approver_roles: [admin, user]
 # XDR roles asked when a protected asset or a large package is involved, and how many must approve.
 elevated_roles: [admin]
 elevated_approvals: 2
-
-# Regional Secure Email Threat Defense API host, used by Email Bombing only:
-# api.us, api.de, api.au, api.in or api.ae followed by .etd.cisco.com
-etd_host: api.us.etd.cisco.com
 
 # Your own DNS and mail suffixes. A dotted name under one of them is an endpoint, any other dotted name
 # is a domain. Account actions are proposed only for addresses under them.

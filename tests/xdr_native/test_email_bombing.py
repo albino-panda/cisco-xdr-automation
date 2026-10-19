@@ -4,14 +4,18 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
 from tools.xdr_native import build as build_tool
-from xdr_native import email_bombing, scripts, validate
+from xdr_native import email_bombing, incident_scripts, scripts, validate
+from xdr_native.builder import PLATFORM_APIS
 from xdr_native.scripts import run
 
 ROOT = Path(__file__).resolve().parents[2]
+MAILBOX = "jsmith@example.com"
+WINDOW = ("2026-01-01T09:30:00Z", "2026-01-01T10:30:00Z")
 
 
 @pytest.fixture()
@@ -60,36 +64,42 @@ def test_export_keeps_the_tenant_template(document):
     assert incident["properties"]["source_array"] == "$rule.incident rule_event.output.targets.data$"
 
 
-def test_export_holds_no_credentials_and_defaults_to_dry_run(document):
+def test_uses_the_etd_integration_through_xdr_and_asks_for_no_credential(document):
+    """XDR asked for a username and password on import: the export now carries no target or account key."""
+    assert set(document) == {"workflow", "module_targets"}
+    assert document["module_targets"] == [{"module_type": PLATFORM_APIS[0], "external_id": PLATFORM_APIS[1],
+                                           "proxy_endpoint_metadata_id": PLATFORM_APIS[2]}]
     variables = {v["properties"]["name"]: v["properties"] for v in document["workflow"]["variables"]}
     assert variables["Dry Run"]["value"] is True
-    assert variables["ETD API Key"]["type"] == "datatype.secure_string" and variables["ETD API Key"]["value"] == ""
-    assert variables["ETD Access Token"]["type"] == "datatype.secure_string"
-    for user in document["runtime_users"].values():
-        assert user["properties"]["basic_username"] == "" and user["properties"]["basic_password"] == ""
-    assert "example.com" not in json.dumps(document) and "assignees" not in json.dumps(document)  # roles only
-    for script in (scripts.SELECT_MAILBOXES, scripts.BUILD_SEARCH, scripts.MERGE_PAGE, scripts.ASSESS,
-                   scripts.RECORD_MOVE, scripts.RECORD_VERIFICATION, scripts.CONTAINMENT_RESULT):
+    assert not [name for name, v in variables.items() if v["type"] == "datatype.secure_string"]
+    for activity, _ in validate.walk(document["workflow"]["actions"]):
+        if activity["type"] == "web-service.http_request":
+            assert activity["properties"]["target"]["target_id"] == "$module_target;" + ";".join(PLATFORM_APIS) + "$"
+            assert "custom_headers" not in activity["properties"]
+    text = json.dumps(document)
+    assert "etd.cisco.com" not in text and "example.com" not in text and "assignees" not in text
+    for script in (scripts.SELECT_MAILBOXES, scripts.BUILD_OBSERVE, scripts.COLLECT_SIGHTINGS, scripts.ASSESS,
+                   scripts.PLAN_MOVES):
         assert "import" in script and not any(word in script for word in ("requests", "urllib", "socket", "subprocess", "os."))
 
 
 def test_build_tool_accepts_org_settings(tmp_path, monkeypatch):
     monkeypatch.setattr(build_tool, "ROOT", tmp_path)
-    assert build_tool.main(["--approver-role", "user", "--elevated-role", "admin", "--elevated-approvals", "3",
-                            "--etd-host", "api.de.etd.cisco.com"]) == 0
+    assert build_tool.main(["--approver-role", "user", "--elevated-role", "admin", "--elevated-approvals", "3"]) == 0
     written = json.loads(next((tmp_path / "xdr").rglob(f"{email_bombing.WORKFLOW_ID}.json")).read_text(encoding="utf-8"))
     standard, _ = _find(written, "Request standard approval")
     elevated, _ = _find(written, "Request elevated approval")
     assert standard["properties"]["assignee_roles"] == ["user"]
     assert elevated["properties"]["assignee_roles"] == ["admin"]
     assert elevated["properties"]["minimum_approvals"] == 3
-    assert {t["properties"]["host"] for t in written["targets"].values()} == {"api.de.etd.cisco.com"}
     with pytest.raises(SystemExit):
         build_tool.main(["--approver-role", "everyone"])
+    with pytest.raises(SystemExit):
+        build_tool.main(["--etd-host", "api.de.etd.cisco.com"])
 
 
-def test_request_approval_matches_the_org_export(document):
-    """Property names and values of the Request Approval activity exported from the target org."""
+def test_request_approval_uses_the_default_choices(document):
+    """A custom choice list showed an empty "Approval choices array" in XDR, so the default pair is used."""
     request, _ = _find(document, "Request standard approval")
     properties = request["properties"]
     assert request["type"] == "task.request_approval" and request["name"] == "Request Approval"
@@ -103,10 +113,10 @@ def test_request_approval_matches_the_org_export(document):
         f"$workflow.{email_bombing.WORKFLOW_ID}.output.started_by$")
     assert properties["expiration_date"] == {"is_relative_time": True, "relative_time": {"duration": 72, "time_units": "hours"}}
     assert properties["approval_choices_holder"] == {
-        "approval_choices": ["Approve", "Reject", "More investigation"], "is_custom_approval_choices": True,
-        "is_default_approval_choices": False}
-    assessment, _ = _find(document, "Assess flood and write decision card")
-    assert properties["body_text"] == f"$activity.{assessment['unique_name']}.output.script_queries.card$"
+        "approval_choices": ["Approve", "Reject"], "is_custom_approval_choices": False,
+        "is_default_approval_choices": True}
+    plan, _ = _find(document, "Plan moves and write decision card")
+    assert properties["body_text"] == f"$activity.{plan['unique_name']}.output.script_queries.card$"
 
 
 # -- approval gate -------------------------------------------------------------------------------------
@@ -114,9 +124,9 @@ def test_request_approval_matches_the_org_export(document):
 
 def test_only_the_move_is_state_changing_and_it_is_gated(document):
     changing = [a["title"] for a, _ in validate.walk(document["workflow"]["actions"]) if validate.is_state_changing(a)]
-    assert changing == ["Move approved messages"]
+    assert changing == ["Move approved message"]
     assert validate.check_approval_gate(document) == []
-    _, ancestors = _find(document, "Move approved messages")
+    _, ancestors = _find(document, "Move approved message")
     assert [a["title"] for a in ancestors if a["type"] == "logic.condition_block"][-2:] == [
         "Approved", "Live: execute the approved package"]
 
@@ -128,20 +138,19 @@ def test_elevated_approval_needs_two_people(document):
     assert standard["properties"]["minimum_approvals"] == 1
     assert elevated["properties"]["approval_title"].startswith("ELEVATED APPROVAL REQUIRED")
     for request in (elevated, standard):
-        assert request["properties"]["approval_choices_holder"]["approval_choices"] == [
-            "Approve", "Reject", "More investigation"]
+        assert request["properties"]["approval_choices_holder"]["approval_choices"] == ["Approve", "Reject"]
 
 
 def _move_out_of_gate(document):
-    move, ancestors = _find(document, "Move approved messages")
+    move, ancestors = _find(document, "Move approved message")
     ancestors[-1]["actions"].remove(move)
     document["workflow"]["actions"].append(move)
 
 
 def _move_before_approval(document):
     siblings = _siblings(document, "Which approval level?")
-    table, _ = _find(document, "Move requests table")
-    loop, _ = _find(document, "For each chunk of up to 100 messages")
+    table, _ = _find(document, "Approved moves table")
+    loop, _ = _find(document, "For each approved move")
     siblings[0:0] = [copy.deepcopy(table), copy.deepcopy(loop)]
 
 
@@ -162,9 +171,9 @@ def _self_approve(document):
 
 def _approve_from_script(document):
     record, _ = _find(document, "Record standard decision")
-    assess, _ = _find(document, "Assess flood and write decision card")
+    plan, _ = _find(document, "Plan moves and write decision card")
     record["properties"]["variables_to_update"][0]["variable_value_new"] = (
-        f"$activity.{assess['unique_name']}.output.script_queries.qualifies$")
+        f"$activity.{plan['unique_name']}.output.script_queries.has_proposal$")
 
 
 def _do_not_wait(document):
@@ -225,32 +234,32 @@ def _remove_approve_choice(document):
 
 
 def _extra_write_elsewhere(document):
-    move, _ = _find(document, "Move approved messages")
+    move, _ = _find(document, "Move approved message")
     extra = copy.deepcopy(move)
     extra["unique_name"] = extra["unique_name"][:-3] + "Zz9"
     extra["title"] = "Second move"
-    _siblings(document, "Build ETD search").append(extra)
+    _siblings(document, "Build sightings query").append(extra)
 
 
 def _delete_request(document):
-    search, _ = _find(document, "Search ETD messages")
-    search["properties"]["method"] = "DELETE"
+    sightings, _ = _find(document, "Get ETD sightings through XDR")
+    sightings["properties"]["method"] = "DELETE"
 
 
 def _call_a_workflow(document):
-    _siblings(document, "Build ETD search").append({
-        "unique_name": "definition_activity_02AAAAAAAAAAAAAAaaaaaaaaaaaaaaaaaaa", "name": "Contain", "title": "Contain",
+    _siblings(document, "Build sightings query").append({
+        "unique_name": "definition_activity_02AAAAAAAAAAA0aaaaaaaaaaaaaaaaaaaaa", "name": "Contain", "title": "Contain",
         "type": "workflow.atomic_workflow", "base_type": "subworkflow", "object_type": "definition_activity",
-        "properties": {"workflow_id": "definition_workflow_02AAAAAAAAAAAAAAaaaaaaaaaaaaaaaaaaa"}})
+        "properties": {"workflow_id": "definition_workflow_02AAAAAAAAAAA0aaaaaaaaaaaaaaaaaaaaa"}})
 
 
 def _swap_package_after_approval(document):
-    move, _ = _find(document, "Move approved messages")
-    move["properties"]["body"] = validate.variable_ref(document, "Search Body")
+    move, _ = _find(document, "Move approved message")
+    move["properties"]["relative_url"] = validate.variable_ref(document, "Candidate Observables")
 
 
 def _script_writes_decision(document):
-    script, _ = _find(document, "Build ETD search")
+    script, _ = _find(document, "Build sightings query")
     script["properties"]["script"] += "\n# " + validate.variable_ref(document, "Decision")
 
 
@@ -270,15 +279,19 @@ def test_gate_check_rejects_every_bypass(document, bypass):
 
 
 def test_structure_check_rejects_unknown_shapes(document):
+    target = {"definition_target_02AAAAAAAAAAA0aaaaaaaaaaaaaaaaaaaaa": {"properties": {"host": "api.us.etd.cisco.com"}}}
     for mutate, expected in [
         (lambda d: d.update(rules={}), "envelope key"),
-        (lambda d: _find(d, "Build ETD search")[0].update(type="core.sleep"), "activity type"),
+        (lambda d: d.update(targets=target), "envelope key 'targets'"),
+        (lambda d: d.update(runtime_users={}), "envelope key 'runtime_users'"),
+        (lambda d: _find(d, "Build sightings query")[0].update(type="core.sleep"), "activity type"),
         (lambda d: _find(d, "Approved")[0]["properties"]["condition"].update(operator="contains"), "operator"),
         (lambda d: d["workflow"]["variables"][0]["properties"].update(scope="static"), "unresolved variable"),
-        (lambda d: next(iter(d["runtime_users"].values()))["properties"].update(basic_password="x"), "credentials"),
         (lambda d: _find(d, "Request standard approval")[0]["properties"].update(auto_approve=True), "forbidden"),
-        (lambda d: _find(d, "Search ETD messages")[0]["properties"]["custom_headers"][0].update(value="Bearer abc"),
-         "secure string"),
+        (lambda d: _find(d, "Get ETD sightings through XDR")[0]["properties"].update(
+            custom_headers=[{"name": "x-api-key", "value": "abc"}]), "custom header"),
+        (lambda d: _find(d, "Get ETD sightings through XDR")[0]["properties"].update(relative_url="/messages/search"),
+         "not a known request"),
     ]:
         changed = copy.deepcopy(document)
         mutate(changed)
@@ -288,30 +301,51 @@ def test_structure_check_rejects_unknown_shapes(document):
 # -- embedded scripts ----------------------------------------------------------------------------------
 
 
-def _message(index: int, *, subject: str = "Welcome to our newsletter", verdict: str = "neutral",
-             sender: str | None = None) -> dict:
-    return {"id": f"msg-{index:04d}", "timestamp": "2026-01-01T10:00:00Z", "subject": subject,
-            "fromAddress": sender or f"news@list{index % 40}.example", "verdict": {"latestVerdict": verdict}}
+def _sighting(index: int, *, subject: str = "Welcome to our newsletter", verdict: str = "Neutral",
+              sender: str | None = None, when: str = "2026-01-01T10:00:00Z", message_id: bool = True) -> dict:
+    observables = [{"type": "email", "value": MAILBOX}, {"type": "email_subject", "value": subject}]
+    if message_id:
+        observables.append({"type": "email_messageid", "value": f"<msg-{index:04d}@mail.example>"})
+    return {"id": f"sighting-{index}", "title": f"Inbound message, verdict {verdict}", "observed_time": {"start_time": when},
+            "observables": observables,
+            "relations": [{"origin": "Secure Email Threat Defense", "relation": "Sent_From",
+                           "source": {"type": "email", "value": sender or f"news@list{index % 40}.example"},
+                           "related": {"type": "email", "value": MAILBOX}}]}
 
 
-def _collect(messages: list[dict], *, page: int = 100, max_messages: int = 1000) -> dict:
-    state, body = "{}", json.dumps({"recipient": "jsmith@example.com"})
-    for start in range(0, max(len(messages), 1), page):
-        chunk = messages[start:start + page]
-        response = {"data": {"messages": chunk}}
-        if start + page < len(messages):
-            response["nextPageToken"] = f"token-{start + page}"
-        result = run(scripts.MERGE_PAGE, state, 200, json.dumps(response), body, max_messages)
-        state, body = result["state_json"], result["search_body"]
-        if result["has_more"] != "true":
-            break
-    return json.loads(state)
+def _observe(docs: list[dict], *, count: int | None = None, module: str = "Secure Email Threat Defense",
+             extra: list[dict] | None = None) -> str:
+    rows = [{"module": module, "module_instance_id": "etd-1",
+             "data": {"sightings": {"count": len(docs) if count is None else count, "docs": docs}}}]
+    return json.dumps({"data": rows + (extra or [])})
 
 
-def _assess(state: dict, *, protected: str = "false", dry_run: str = "True", folder: str = "quarantine",
-            elevated_above: int = 500, trusted: str = "") -> dict:
-    return run(scripts.ASSESS, json.dumps(state), "jsmith@example.com", protected, 30, 10, 50, dry_run, folder,
-               "graymail", "2026-01-01T09:30:00Z", "2026-01-01T10:30:00Z", elevated_above, trusted)
+def _collect(docs: list[dict], *, status: int = 200, max_messages: int = 200, **kwargs) -> dict:
+    raw = docs if isinstance(docs, str) else _observe(docs, **kwargs)
+    return json.loads(run(scripts.COLLECT_SIGHTINGS, status, raw, MAILBOX, *WINDOW, max_messages)["state_json"])
+
+
+def _assess(state: dict, *, protected: str = "false", trusted: str = "") -> dict:
+    return run(scripts.ASSESS, json.dumps(state), MAILBOX, protected, 30, 10, 50, *WINDOW, trusted)
+
+
+def _offers(assessed: dict, *, title: str = "Move to Quarantine", **params) -> str:
+    rows = []
+    for obs in json.loads(assessed["respond_body"]):
+        rows.append({"id": "etd-move-quarantine", "title": title, "module": "Secure Email Threat Defense",
+                     "module_instance_id": "etd-instance-1",
+                     "query-params": {"observable_type": obs["type"], "observable_value": obs["value"], **params}})
+    return json.dumps({"data": rows})
+
+
+def _plan(assessed: dict, respond: str, *, status: int = 200, dry_run: str = "True", folder: str = "quarantine",
+          pattern: str = email_bombing.MOVE_PATTERN, elevated_above: int = 100) -> dict:
+    return run(scripts.PLAN_MOVES, status, respond, assessed["respond_body"], MAILBOX, assessed["evidence"],
+               assessed["elevated_reasons"], dry_run, folder, pattern, elevated_above)
+
+
+def _flood(count: int = 120) -> list[dict]:
+    return [_sighting(i) for i in range(count)]
 
 
 def test_select_mailboxes_filters_dedupes_caps_and_flags_protected():
@@ -327,105 +361,143 @@ def test_select_mailboxes_filters_dedupes_caps_and_flags_protected():
     assert run(scripts.SELECT_MAILBOXES, "", "", 5)["mailbox_count"] == "0"
 
 
-def test_build_search_bounds_the_window():
-    result = run(scripts.BUILD_SEARCH, " JSmith@Example.com ", "999999")
-    body = json.loads(result["search_body"])
-    assert body["recipient"] == "jsmith@example.com" and body["directions"] == ["incoming"] and body["pageSize"] == 100
-    assert body["timestamp"] == [result["window_start"], result["window_end"]]
-    assert result["window_start"][:10] != "" and result["window_start"] < result["window_end"]
+def test_build_observe_asks_xdr_for_the_mailbox_and_bounds_the_window():
+    result = run(scripts.BUILD_OBSERVE, " JSmith@Example.com ", "999999")
+    assert json.loads(result["observe_body"]) == [{"type": "email", "value": "jsmith@example.com"}]
+    assert result["window_start"] < result["window_end"]
 
 
-def test_merge_pages_follows_tokens_and_stops_at_the_limit():
-    state = _collect([_message(i) for i in range(250)])
-    assert len(state["messages"]) == 250 and state["pages"] == 3 and not state["truncated"] and not state["error"]
-    capped = _collect([_message(i) for i in range(250)], max_messages=120)
-    assert len(capped["messages"]) == 120 and capped["truncated"]
+def test_collect_reads_etd_sightings_and_ignores_other_modules():
+    docs = _flood(50) + [_sighting(900, sender=MAILBOX), _sighting(901, when="2026-01-01T07:00:00Z"), _sighting(3)]
+    other = [{"module": "Secure Endpoint", "data": {"sightings": {"count": 7, "docs": [_sighting(950)]}}}]
+    state = _collect(docs, extra=other)
+    assert len(state["messages"]) == 50  # outbound, outside the window and duplicate left out
+    assert state["outside"] == 1 and state["other_modules"] == {"Secure Endpoint": 7}
+    assert state["modules"] == {"Secure Email Threat Defense": 53} and not state["truncated"] and not state["error"]
+    kind, value, domain, label, topic, when = state["messages"][0]
+    assert (kind, value, domain, label, when) == ("email_messageid", "<msg-0000@mail.example>", "list0.example",
+                                                  "neutral", "2026-01-01T10:00:00Z")
 
 
-def test_merge_page_records_a_failed_source_and_stops():
-    result = run(scripts.MERGE_PAGE, "{}", 502, "Bad Gateway", "{}", 1000)
-    assert result["has_more"] == "false" and "HTTP 502" in json.loads(result["state_json"])["error"]
-    result = run(scripts.MERGE_PAGE, "{}", 200, "not json", "{}", 1000)
-    assert result["has_more"] == "false" and json.loads(result["state_json"])["error"]
+def test_collect_marks_a_partial_answer_and_the_collection_limit():
+    assert _collect(_flood(20), count=500)["truncated"]
+    capped = _collect(_flood(50), max_messages=30)
+    assert len(capped["messages"]) == 30 and capped["truncated"]
 
 
-def test_assess_proposes_the_flood_and_keeps_buried_messages():
-    messages = [_message(i) for i in range(120)]
-    messages.append(_message(900, subject="Your password was changed", sender="no-reply@bank.example"))
-    messages.append(_message(901, subject="Reset your password now", verdict="phishing", sender="x@bad.example"))
-    messages.append(_message(902, subject="Quarterly report", sender="partner@trusted.example"))
-    result = _assess(_collect(messages), trusted="trusted.example")
-    assert result["qualifies"] == "true" and result["elevated"] == "false"
-    moved = [mid for chunk in json.loads(result["move_chunks"]) for mid in json.loads(chunk["body"])["ids"]]
-    assert "msg-0900" not in moved and "msg-0902" not in moved and "msg-0901" in moved
-    assert result["move_count"] == "121" and len(moved) == 121
-    assert all(len(json.loads(chunk["body"])["ids"]) <= 100 for chunk in json.loads(result["move_chunks"]))
-    assert "Your password was changed" in result["card"] and "DRY RUN" in result["card"]
-    assert "Check the account" in result["card"] and result["package_digest"] in result["card"]
-    assert len(json.loads(result["verify_sample"])) == 5
-    assert _assess(_collect(messages), trusted="trusted.example")["package_digest"] == result["package_digest"]
+def test_collect_records_a_failed_source():
+    assert "HTTP 502" in _collect("Bad Gateway", status=502)["error"]
+    assert _collect("not json")["error"]
+    assert _collect(json.dumps({"data": "unexpected"})) ["messages"] == []
+
+
+def test_collect_cleans_product_text():
+    hostile = _sighting(1, subject="Reset your password **now** [click](https://evil.example)",
+                        sender="x@evil`.example\n## injected")
+    state = _collect([hostile])
+    assert state["messages"][0][2] == "evil"  # cut at the first character a domain cannot hold
+    assert not any(c in state["buried"][0]["subject"] + state["buried"][0]["from"] for c in "*[]`#\n")
+
+
+def test_assess_measures_the_flood_and_keeps_buried_messages():
+    docs = _flood(120)
+    docs.append(_sighting(900, subject="Your password was changed", sender="no-reply@bank.example"))
+    docs.append(_sighting(901, subject="Reset your password now", verdict="Phishing", sender="x@bad.example"))
+    docs.append(_sighting(902, subject="Quarterly report", sender="partner@trusted.example"))
+    result = _assess(_collect(docs), trusted="trusted.example")
+    assert result["qualifies"] == "true" and json.loads(result["elevated_reasons"]) == []
+    moved = [obs["value"] for obs in json.loads(result["respond_body"])]
+    assert "<msg-0900@mail.example>" not in moved and "<msg-0902@mail.example>" not in moved
+    assert "<msg-0901@mail.example>" in moved and result["move_count"] == "121" and len(moved) == 121
+    assert "Your password was changed" in result["evidence"] and "Check the account" in result["evidence"]
 
 
 def test_assess_does_not_propose_below_the_thresholds():
-    few = _assess(_collect([_message(i) for i in range(12)]))
-    assert few["qualifies"] == "false" and few["move_chunks"] == "[]" and few["move_count"] == "0" and few["card"] == ""
-    one_sender = _assess(_collect([_message(i, sender="bulk@one.example") for i in range(200)]))
+    few = _assess(_collect(_flood(12)))
+    assert few["qualifies"] == "false" and few["respond_body"] == "[]" and few["move_count"] == "0"
+    one_sender = _assess(_collect([_sighting(i, sender="bulk@one.example") for i in range(200)]))
     assert one_sender["qualifies"] == "false"
-    spam_storm = _assess(_collect([_message(i, verdict="spam") for i in range(200)]))
+    spam_storm = _assess(_collect([_sighting(i, verdict="Spam") for i in range(200)]))
     assert spam_storm["qualifies"] == "false" and "No action proposed" in spam_storm["summary"]
 
 
-def test_assess_surfaces_elevated_approval_instead_of_blocking():
-    state = _collect([_message(i) for i in range(120)])
-    protected = _assess(state, protected="true")
-    assert protected["qualifies"] == "true" and protected["elevated"] == "true"
-    assert "ELEVATED APPROVAL REQUIRED" in protected["card"] and "protected list" in protected["card"]
-    large = _assess(state, elevated_above=100)
-    assert large["elevated"] == "true" and "above the limit" in large["card"]
-    truncated = _assess(_collect([_message(i) for i in range(250)], max_messages=120))
-    assert truncated["elevated"] == "true" and "collection limit" in truncated["card"]
+def test_assess_without_verdicts_skips_that_threshold_and_says_so():
+    docs = [_sighting(i, verdict="unrated") for i in range(60)]
+    result = _assess(_collect(docs))
+    assert result["qualifies"] == "true" and "threshold was not applied" in result["evidence"]
 
 
-def test_assess_keeps_a_recommendation_when_the_source_degrades_midway():
-    state = _collect([_message(i) for i in range(120)])
-    state["error"] = "ETD message search failed on page 3: HTTP 502"
-    result = _assess(state)
-    assert result["qualifies"] == "true" and "Degraded source" in result["card"]
-    empty = _assess({"messages": [], "error": "ETD message search failed on page 1: HTTP 403"})
+def test_assess_needs_message_ids_to_act():
+    result = _assess(_collect([_sighting(i, message_id=False) for i in range(60)]))
+    assert result["qualifies"] == "false" and "no message of the flood carries a message ID" in result["summary"]
+
+
+def test_assess_surfaces_elevated_reasons_instead_of_blocking():
+    assert "protected list" in _assess(_collect(_flood()), protected="true")["elevated_reasons"]
+    assert "only part of the sightings" in _assess(_collect(_flood(), count=900))["elevated_reasons"]
+
+
+def test_assess_reports_a_failed_source():
+    empty = _assess(_collect("Forbidden", status=403))
     assert empty["qualifies"] == "false" and "HTTP 403" in empty["summary"]
 
 
-def test_assess_treats_anything_but_false_as_dry_run_and_refuses_delete():
-    state = _collect([_message(i) for i in range(120)])
-    assert "LIVE" in _assess(state, dry_run="false")["card"]
-    for value in ("True", "true", "", "0", "no"):
-        assert "DRY RUN" in _assess(state, dry_run=value)["card"]
+def test_plan_lists_one_move_per_message_with_the_offered_action():
+    assessed = _assess(_collect(_flood()))
+    result = _plan(assessed, _offers(assessed, folder_id="7"))
+    actions = json.loads(result["actions_json"])
+    assert result["has_proposal"] == "true" and result["action_count"] == "120" == str(len(actions))
+    url = urlsplit(actions[0]["url"])
+    assert url.path == "/iroh-response/respond/trigger/etd-instance-1/etd-move-quarantine"
+    query = parse_qs(url.query)
+    assert query["observable_type"] == ["email_messageid"] and query["folder_id"] == ["7"]
+    assert query["observable_value"][0] in [obs["value"] for obs in json.loads(assessed["respond_body"])]
+    assert "DRY RUN" in result["card"] and result["package_digest"] in result["card"]
+    assert "*Reject* changes nothing" in result["card"] and "More investigation" not in result["card"]
+    assert result["elevated"] == "true"  # 120 is above the default limit of 100
+    assert _plan(assessed, _offers(assessed, folder_id="7"))["package_digest"] == result["package_digest"]
+    assert len(json.loads(result["verify_body"])) == 120
+
+
+def test_plan_needs_the_folder_and_never_picks_an_undo_action():
+    assessed = _assess(_collect(_flood(40)))
+    for title in ("Release from Quarantine", "Move to Inbox", "Move to Junk", "Delete message"):
+        assert _plan(assessed, _offers(assessed, title=title))["has_proposal"] == "false", title
+    assert _plan(assessed, _offers(assessed, title="Move to Junk"), folder="junk")["has_proposal"] == "true"
+    none = _plan(assessed, _offers(assessed, title="Release from Quarantine"))
+    assert "Release from Quarantine" in none["summary"] and "Move Action Pattern" in none["summary"]
     with pytest.raises(SystemExit):
-        _assess(state, folder="delete")
+        _plan(assessed, _offers(assessed), folder="delete")
+    with pytest.raises(SystemExit):
+        _plan(assessed, _offers(assessed), pattern="(")
 
 
-def test_move_tally_counts_queued_and_failed():
-    ok = json.dumps({"data": [{"id": "a", "queueSuccess": True}, {"id": "b", "queueSuccess": False}]})
-    tally = run(scripts.RECORD_MOVE, "{}", 200, ok, 2)["tally_json"]
-    tally = run(scripts.RECORD_MOVE, tally, 200, "{}", 100)["tally_json"]
-    tally = json.loads(run(scripts.RECORD_MOVE, tally, 403, "Forbidden", 50)["tally_json"])
-    assert tally["queued"] == 101 and tally["failed"] == 51 and "403" in tally["errors"][0]
+def test_plan_acts_only_on_listed_messages():
+    assessed = _assess(_collect(_flood(40)))
+    foreign = json.dumps({"data": [{"id": "move", "title": "Move to Quarantine", "module": "ETD",
+                                    "module_instance_id": "i", "query-params": {
+                                        "observable_type": "email_messageid", "observable_value": "<ceo@corp>"}}]})
+    result = _plan(assessed, foreign)
+    assert result["has_proposal"] == "false" and "<ceo@corp>" not in result["actions_json"]
 
 
-def test_verification_is_three_valued():
-    def verify(tally, code, body):
-        return run(scripts.RECORD_VERIFICATION, tally, code, body, "quarantine")["tally_json"]
+def test_plan_reports_a_missing_integration_or_a_failed_source():
+    assessed = _assess(_collect(_flood(40)))
+    assert "Secure Email Threat Defense integration is enabled" in _plan(assessed, json.dumps({"data": []}))["summary"]
+    assert "HTTP 500" in _plan(assessed, "error", status=500)["summary"]
 
-    tally = verify("{}", 200, json.dumps({"data": {"statuses": [{"action": "Moved to Quarantine"}]}}))
-    tally = verify(tally, 200, json.dumps({"data": {"statuses": [{"folder": "inbox"}]}}))
-    tally = verify(tally, 200, json.dumps({"data": {}}))
-    tally = verify(tally, 500, "error")
-    assert json.loads(tally) == {"verified": 1, "not_verified": 1, "unable": 2}
-    text = run(scripts.CONTAINMENT_RESULT, "jsmith@example.com", "quarantine", "abc", json.dumps(
-        {"queued": 120, "failed": 0, **json.loads(tally)}))["result"]
-    assert "120 messages queued" in text and "NOT VERIFIED" in text and "needs its own approval" in text
-    verified = run(scripts.CONTAINMENT_RESULT, "jsmith@example.com", "quarantine", "abc",
-                   json.dumps({"queued": 5, "failed": 0, "verified": 5}))["result"]
-    assert "VERIFIED on a sample of 5" in verified
-    unknown = run(scripts.CONTAINMENT_RESULT, "jsmith@example.com", "quarantine", "abc", json.dumps({"queued": 5}))["result"]
-    assert "UNABLE TO VERIFY" in unknown
+
+def test_plan_treats_anything_but_false_as_dry_run():
+    assessed = _assess(_collect(_flood(40)))
+    assert "LIVE" in _plan(assessed, _offers(assessed), dry_run="false")["card"]
+    for value in ("True", "true", "", "0", "no"):
+        assert "DRY RUN" in _plan(assessed, _offers(assessed), dry_run=value)["card"]
+
+
+def test_trigger_results_use_the_incident_steps():
+    assessed = _assess(_collect(_flood(40)))
+    action = json.loads(_plan(assessed, _offers(assessed))["actions_json"])[0]
+    tally = run(incident_scripts.RECORD_TRIGGER, "{}", 200, json.dumps({"data": {"status": "success"}}),
+                action["title"], action["target"], action["key"])["tally_json"]
+    result = run(incident_scripts.RESULT, '{"name": "Email Bombing"}', "abc", tally, 200, json.dumps({"data": []}))
+    assert result["result"].startswith("Email Bombing: APPROVED and executed") and "1 of 1" in result["result"]

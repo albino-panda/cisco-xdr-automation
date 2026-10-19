@@ -61,7 +61,7 @@
           "scope": "input",
           "name": "Lookback Minutes",
           "type": "datatype.integer",
-          "description": "How far back to search for the flood (5 to 1440).",
+          "description": "How far back to count the flood (5 to 1440).",
           "is_required": false,
           "display_on_wizard": false,
           "is_invisible": false,
@@ -109,7 +109,7 @@
           "scope": "input",
           "name": "Minimum Clean Percent",
           "type": "datatype.integer",
-          "description": "Share of neutral or graymail messages a subscription flood must reach.",
+          "description": "Share of neutral or graymail messages a subscription flood must reach, among the messages whose sighting names an ETD verdict.",
           "is_required": false,
           "display_on_wizard": false,
           "is_invisible": false,
@@ -121,11 +121,11 @@
       {
         "schema_id": "datatype.integer",
         "properties": {
-          "value": 1000,
+          "value": 200,
           "scope": "input",
           "name": "Maximum Messages",
           "type": "datatype.integer",
-          "description": "Collection limit per mailbox. A larger flood needs elevated approval and a second run.",
+          "description": "Collection limit per mailbox. Each message is moved by its own XDR response action. A larger flood needs elevated approval and a second run.",
           "is_required": false,
           "display_on_wizard": false,
           "is_invisible": false,
@@ -137,7 +137,7 @@
       {
         "schema_id": "datatype.integer",
         "properties": {
-          "value": 500,
+          "value": 100,
           "scope": "input",
           "name": "Elevated Approval Above",
           "type": "datatype.integer",
@@ -157,7 +157,7 @@
           "scope": "input",
           "name": "Containment Folder",
           "type": "datatype.string",
-          "description": "Where approved messages go: quarantine, junk or trash. Delete is refused.",
+          "description": "Where approved messages go: quarantine, junk or trash. Delete is refused. The ETD response action used must name this folder.",
           "is_required": false,
           "display_on_wizard": false,
           "is_invisible": false,
@@ -169,17 +169,17 @@
       {
         "schema_id": "datatype.string",
         "properties": {
-          "value": "graymail",
+          "value": "^(move|quarantine|remediate)",
           "scope": "input",
-          "name": "Reclassify Verdict",
+          "name": "Move Action Pattern",
           "type": "datatype.string",
-          "description": "ETD verdict recorded with the move (the ETD API requires one).",
+          "description": "Text of the ETD response action that moves a message (regular expression on its title, case-insensitive). The worklog lists the titles on offer when nothing matches.",
           "is_required": false,
           "display_on_wizard": false,
           "is_invisible": false,
           "variable_string_format": ""
         },
-        "unique_name": "variable_workflow_02ASGRU01Q0D91emZyeLJZF1uV9bjP8IC3f",
+        "unique_name": "variable_workflow_02F576Z7GDUY407WV3rtv7CCY7xUQppVXlE",
         "object_type": "variable_workflow"
       },
       {
@@ -215,35 +215,19 @@
         "object_type": "variable_workflow"
       },
       {
-        "schema_id": "datatype.secure_string",
+        "schema_id": "datatype.string",
         "properties": {
-          "value": "",
+          "value": "{\"name\": \"Email Bombing\"}",
           "scope": "local",
-          "name": "ETD API Key",
-          "type": "datatype.secure_string",
-          "description": "Secure Email Threat Defense API key, sent as x-api-key. Set it in the editor.",
+          "name": "Workflow Rules",
+          "type": "datatype.string",
+          "description": "Name used in the result line. Generated: do not edit here.",
           "is_required": false,
           "display_on_wizard": false,
           "is_invisible": false,
           "variable_string_format": ""
         },
-        "unique_name": "variable_workflow_0261CQA1TYKVH1l0NEEPHyfJ89URWZHd9eh",
-        "object_type": "variable_workflow"
-      },
-      {
-        "schema_id": "datatype.secure_string",
-        "properties": {
-          "value": "",
-          "scope": "local",
-          "name": "ETD Access Token",
-          "type": "datatype.secure_string",
-          "description": "Short-lived ETD token obtained by the workflow.",
-          "is_required": false,
-          "display_on_wizard": false,
-          "is_invisible": false,
-          "variable_string_format": ""
-        },
-        "unique_name": "variable_workflow_02VIDLP0RXK4X2N0XrPSqvqDwEZO2JmE33J",
+        "unique_name": "variable_workflow_02HIM5Q351ILM3JZ0Q30TOjDopSUa7UdYNv",
         "object_type": "variable_workflow"
       },
       {
@@ -259,51 +243,6 @@
           "variable_string_format": ""
         },
         "unique_name": "variable_workflow_02G1RB39I6J7H1IJfbS18ZrtORilxYwjRXC",
-        "object_type": "variable_workflow"
-      },
-      {
-        "schema_id": "datatype.string",
-        "properties": {
-          "value": "",
-          "scope": "local",
-          "name": "Search Body",
-          "type": "datatype.string",
-          "is_required": false,
-          "display_on_wizard": false,
-          "is_invisible": false,
-          "variable_string_format": ""
-        },
-        "unique_name": "variable_workflow_0239OCPGXVPIA2MYuyuiDT8sEI1NLYQQHwZ",
-        "object_type": "variable_workflow"
-      },
-      {
-        "schema_id": "datatype.string",
-        "properties": {
-          "value": "{}",
-          "scope": "local",
-          "name": "Search State",
-          "type": "datatype.string",
-          "is_required": false,
-          "display_on_wizard": false,
-          "is_invisible": false,
-          "variable_string_format": ""
-        },
-        "unique_name": "variable_workflow_024N9XBRJGFSW6qU7dAF2C2PszBmCHhntHd",
-        "object_type": "variable_workflow"
-      },
-      {
-        "schema_id": "datatype.string",
-        "properties": {
-          "value": "false",
-          "scope": "local",
-          "name": "Has More Pages",
-          "type": "datatype.string",
-          "is_required": false,
-          "display_on_wizard": false,
-          "is_invisible": false,
-          "variable_string_format": ""
-        },
-        "unique_name": "variable_workflow_026BP8YUY8DDB73RtI7p6vlVhxTxUDBQpYO",
         "object_type": "variable_workflow"
       },
       {
@@ -327,14 +266,14 @@
         "properties": {
           "value": "{}",
           "scope": "local",
-          "name": "Containment Tally",
+          "name": "Action Tally",
           "type": "datatype.string",
           "is_required": false,
           "display_on_wizard": false,
           "is_invisible": false,
           "variable_string_format": ""
         },
-        "unique_name": "variable_workflow_02T71E6EQ0TWP04qiOXLPclNIPdNX2KpnHT",
+        "unique_name": "variable_workflow_02F9RJGLDC4RG4nLzlWn3ISNmUJ2gxw8UiX",
         "object_type": "variable_workflow"
       }
     ],
@@ -348,7 +287,7 @@
         ]
       },
       "delete_workflow_instance": false,
-      "description": "Responds to an email or subscription bombing incident. For each mailbox it searches Secure Email Threat Defense, measures the flood, lists the messages the flood may hide and asks an administrator or incident responder to approve moving the flood out of the inbox. Nothing is moved without that approval, and nothing is moved while Dry Run is true.",
+      "description": "Responds to an email or subscription bombing incident. For each mailbox it reads the Secure Email Threat Defense sightings through Cisco XDR, measures the flood, lists the messages the flood may hide and asks an administrator or incident responder to approve moving the flood out of the inbox with the ETD response action XDR offers. Nothing is moved without that approval, and nothing is moved while Dry Run is true.",
       "display_name": "Email Bombing",
       "runtime_user": {
         "target_default": true
@@ -704,40 +643,32 @@
                               "variable_value_new": ""
                             },
                             {
-                              "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_024N9XBRJGFSW6qU7dAF2C2PszBmCHhntHd$",
+                              "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02F9RJGLDC4RG4nLzlWn3ISNmUJ2gxw8UiX$",
                               "variable_value_new": "{}"
-                            },
-                            {
-                              "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02T71E6EQ0TWP04qiOXLPclNIPdNX2KpnHT$",
-                              "variable_value_new": "{}"
-                            },
-                            {
-                              "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_026BP8YUY8DDB73RtI7p6vlVhxTxUDBQpYO$",
-                              "variable_value_new": "true"
                             }
                           ]
                         },
                         "object_type": "definition_activity"
                       },
                       {
-                        "unique_name": "definition_activity_02NPN523MBZ294nxmVGBCZdvRaXCVLudG6U",
+                        "unique_name": "definition_activity_02AKCGCY8WAUZ7xjmHgv5V2xhhd7bVJCRGY",
                         "name": "Execute Python Script",
-                        "title": "Build ETD search",
+                        "title": "Build sightings query",
                         "type": "python3.script",
                         "base_type": "activity",
                         "properties": {
                           "action_timeout": 180,
                           "continue_on_failure": false,
-                          "display_name": "Build ETD search",
-                          "script": "import datetime, json, sys\nmailbox = sys.argv[1].strip().lower()\nlookback = max(5, min(int(float(sys.argv[2] or \"60\")), 1440))\nnow = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)\nstart = now - datetime.timedelta(minutes=lookback)\nfmt = \"%Y-%m-%dT%H:%M:%SZ\"\nwindow_start = start.strftime(fmt)\nwindow_end = now.strftime(fmt)\nsearch_body = json.dumps({\"timestamp\": [window_start, window_end], \"pageSize\": 100,\n                          \"recipient\": mailbox, \"directions\": [\"incoming\"]})\n",
+                          "display_name": "Build sightings query",
+                          "script": "import datetime, json, sys\nmailbox = sys.argv[1].strip().lower()\nlookback = max(5, min(int(float(sys.argv[2] or \"60\")), 1440))\nnow = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)\nstart = now - datetime.timedelta(minutes=lookback)\nfmt = \"%Y-%m-%dT%H:%M:%SZ\"\nwindow_start = start.strftime(fmt)\nwindow_end = now.strftime(fmt)\nobserve_body = json.dumps([{\"type\": \"email\", \"value\": mailbox}])\n",
                           "script_arguments": [
                             "$activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].mailbox$",
                             "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02RE3COE4SCUZ3a7F12KFMmqfU0SgFbpfMk$"
                           ],
                           "script_queries": [
                             {
-                              "script_query": "search_body",
-                              "script_query_name": "search_body",
+                              "script_query": "observe_body",
+                              "script_query_name": "observe_body",
                               "script_query_type": "string"
                             },
                             {
@@ -756,28 +687,9 @@
                         "object_type": "definition_activity"
                       },
                       {
-                        "unique_name": "definition_activity_02K1NQSVT7LYX4C3pFE4oi9ULPXKY8R79z7",
-                        "name": "Set Variables",
-                        "title": "Store search body",
-                        "type": "core.set_multiple_variables",
-                        "base_type": "activity",
-                        "properties": {
-                          "continue_on_failure": false,
-                          "display_name": "Store search body",
-                          "skip_execution": false,
-                          "variables_to_update": [
-                            {
-                              "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_0239OCPGXVPIA2MYuyuiDT8sEI1NLYQQHwZ$",
-                              "variable_value_new": "$activity.definition_activity_02NPN523MBZ294nxmVGBCZdvRaXCVLudG6U.output.script_queries.search_body$"
-                            }
-                          ]
-                        },
-                        "object_type": "definition_activity"
-                      },
-                      {
-                        "unique_name": "definition_activity_02GX6FP7A6Q1O4WuyZod11oNfu6nAlTZjem",
+                        "unique_name": "definition_activity_02U1ZDDD6HRD85r8S6ZXH34J8NGX9K56ceN",
                         "name": "HTTP Request",
-                        "title": "Get ETD access token",
+                        "title": "Get ETD sightings through XDR",
                         "type": "web-service.http_request",
                         "base_type": "activity",
                         "properties": {
@@ -785,75 +697,163 @@
                           "action_timeout": 180,
                           "allow_auto_redirect": true,
                           "allow_headers_redirect": false,
+                          "body": "$activity.definition_activity_02AKCGCY8WAUZ7xjmHgv5V2xhhd7bVJCRGY.output.script_queries.observe_body$",
                           "content_type": "application/json",
                           "continue_on_error_status_code": true,
                           "continue_on_failure": false,
-                          "custom_headers": [
-                            {
-                              "name": "x-api-key",
-                              "value": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_0261CQA1TYKVH1l0NEEPHyfJ89URWZHd9eh$"
-                            }
-                          ],
-                          "display_name": "Get ETD access token",
+                          "display_name": "Get ETD sightings through XDR",
                           "method": "POST",
-                          "relative_url": "/oauth/token",
+                          "relative_url": "/iroh-enrich/observe/observables",
                           "runtime_user": {
                             "target_default": true
                           },
                           "skip_execution": false,
                           "target": {
                             "override_workflow_target": true,
-                            "target_id": "definition_target_02ZZNHFZ8C4OD5sCwUVtyv2qrlFfpHoyKgY"
+                            "target_id": "$module_target;Cisco XDR;securex:ao:iroh_api;platform-apis$"
                           }
                         },
                         "object_type": "definition_activity"
                       },
                       {
-                        "unique_name": "definition_activity_02WKNPG7BDX2H4IUzGgUWsDWtcUalxnNDB9",
+                        "unique_name": "definition_activity_02G4NM6MW03MD1rJxNAOiK6IpqLaHCW0Cw1",
+                        "name": "Execute Python Script",
+                        "title": "Collect messages from sightings",
+                        "type": "python3.script",
+                        "base_type": "activity",
+                        "properties": {
+                          "action_timeout": 180,
+                          "continue_on_failure": false,
+                          "display_name": "Collect messages from sightings",
+                          "script": "import datetime, json, re, sys\nstatus_code = str(sys.argv[1]).strip()\nraw_response = sys.argv[2]\nmailbox = sys.argv[3].strip().lower()\nwindow_start, window_end = sys.argv[4], sys.argv[5]\nmax_messages = int(float(sys.argv[6] or \"200\"))\ntopics = [\n    (\"credential\", r\"password|passcode|account recovery|recover your account|reset your\"),\n    (\"security alert\", r\"security alert|new sign[- ]?in|new log[- ]?in|new device|unusual (activity|sign)|suspicious (activity|sign)\"),\n    (\"mfa\", r\"verification code|one[- ]time|\\bmfa\\b|\\b2fa\\b|two[- ]factor|multi[- ]factor|authenticat\"),\n    (\"payment\", r\"wire transfer|invoice|payment|bank|purchase|order confirm|receipt|refund\"),\n    (\"lure\", r\"docusign|shared a (file|document)|voicemail|microsoft 365|office 365\"),\n]\nmessage_types = (\"email_messageid\", \"cisco_mid\")\nverdict_words = (\"malicious\", \"phishing\", \"bec\", \"scam\", \"spam\", \"graymail\", \"neutral\")\nmail_module = re.compile(r\"e-?mail|\\betd\\b|threat defense\", re.IGNORECASE)\nstate = {\"messages\": [], \"buried\": [], \"error\": \"\", \"truncated\": False, \"modules\": {}, \"other_modules\": {},\n         \"no_id\": 0, \"outside\": 0}\n\ndef plain(text, limit=120):\n    out = []\n    for char in str(text)[:4 * limit]:\n        out.append(\"'\" if char == '\"' else char if 32 <= ord(char) < 127 and char not in \"*`[]<>|#\\\\~_{}\" else \" \")\n    line = \" \".join(\"\".join(out).split())\n    return (line[:limit] + \"...\") if len(line) > limit else line\n\ndef when(text):\n    try:\n        stamp = datetime.datetime.fromisoformat(str(text).strip().replace(\"Z\", \"+00:00\"))\n        return stamp if stamp.tzinfo else stamp.replace(tzinfo=datetime.timezone.utc)\n    except Exception:\n        return None\n\ndef node(value):\n    return value if isinstance(value, dict) else {}\n\ndef pair(value):\n    value = node(value)\n    return (str(value.get(\"type\") or \"\").strip().lower(), str(value.get(\"value\") or \"\").strip())\n\nstart, end = when(window_start), when(window_end)\ntry:\n    if status_code != \"200\":\n        raise ValueError(\"HTTP \" + plain(status_code, 12))\n    body = json.loads(raw_response or \"null\")\n    if isinstance(body, dict):\n        body = body.get(\"data\")\n    rows = [r for r in body if isinstance(r, dict)] if isinstance(body, list) else []\n    known = set()\n    for row in rows:\n        module = plain(row.get(\"module\") or row.get(\"module-name\") or row.get(\"module_name\") or \"module\", 40)\n        sightings = node(node(row.get(\"data\")).get(\"sightings\"))\n        docs = [d for d in sightings.get(\"docs\") if isinstance(d, dict)] if isinstance(sightings.get(\"docs\"), list) else []\n        count = sightings.get(\"count\")\n        count = count if isinstance(count, int) and not isinstance(count, bool) else len(docs)\n        if not mail_module.search(module):\n            if count:\n                state[\"other_modules\"][module] = state[\"other_modules\"].get(module, 0) + count\n            continue\n        state[\"modules\"][module] = state[\"modules\"].get(module, 0) + count\n        if count > len(docs):\n            state[\"truncated\"] = True\n        for doc in docs:\n            pairs = [pair(o) for o in (doc.get(\"observables\") if isinstance(doc.get(\"observables\"), list) else [])]\n            senders = []\n            for relation in doc.get(\"relations\") if isinstance(doc.get(\"relations\"), list) else []:\n                relation = node(relation)\n                source, related = pair(relation.get(\"source\")), pair(relation.get(\"related\"))\n                pairs += [source, related]\n                name = re.sub(r\"[^a-z]\", \"\", str(relation.get(\"relation\") or \"\").lower())\n                if name in (\"sentfrom\", \"sentby\", \"sender\", \"from\") and source[0] == \"email\" and source[1]:\n                    senders.append(source[1])\n            if not senders:\n                senders = [v for t, v in pairs if t == \"email\" and v and v.lower() != mailbox]\n            sender = senders[0] if senders else \"\"\n            if sender.lower() == mailbox:\n                continue  # sent by the mailbox itself: not part of an inbound flood\n            stamp = when(node(doc.get(\"observed_time\")).get(\"start_time\"))\n            if stamp and start and end and not (start <= stamp <= end):\n                state[\"outside\"] += 1\n                continue\n            found = [(t, v) for t, v in pairs if t in message_types and v and len(v) <= 500]\n            mid = found[0] if found else (\"\", \"\")\n            key = (mid[0] + \"|\" + mid[1].lower()) if mid[1] else \"sighting|\" + str(doc.get(\"id\") or len(known))\n            if key in known:\n                continue\n            if len(state[\"messages\"]) >= max_messages:\n                state[\"truncated\"] = True\n                break\n            known.add(key)\n            if not mid[1]:\n                state[\"no_id\"] += 1\n            domain = sender.rsplit(\"@\", 1)[1].lower() if \"@\" in sender else \"\"\n            domain = re.split(r\"[^a-z0-9.-]\", domain)[0].strip(\".\")[:100] or \"unknown\"\n            text = \" \".join(str(doc.get(k) or \"\") for k in (\"title\", \"description\", \"short_description\", \"severity\", \"resolution\")).lower()\n            label = next((w for w in verdict_words if re.search(r\"\\b\" + w + r\"\\b\", text)), \"noverdict\")\n            subject = next((v for t, v in pairs if t == \"email_subject\" and v), \"\") or str(doc.get(\"title\") or \"\")\n            topic = \"\"\n            for name, pattern in topics:\n                if re.search(pattern, subject, re.IGNORECASE):\n                    topic = name\n                    break\n            moment = stamp.strftime(\"%Y-%m-%dT%H:%M:%SZ\") if stamp else \"\"\n            state[\"messages\"].append([mid[0], mid[1], domain, label, topic, moment])\n            if topic and len(state[\"buried\"]) < 15:\n                state[\"buried\"].append({\"topic\": topic, \"subject\": plain(subject), \"from\": plain(sender),\n                                        \"time\": moment, \"verdict\": label})\nexcept Exception as exc:\n    state[\"error\"] = \"the XDR sightings query failed: \" + plain(exc, 200)\nstate_json = json.dumps(state)\nmessage_count = str(len(state[\"messages\"]))\n",
+                          "script_arguments": [
+                            "$activity.definition_activity_02U1ZDDD6HRD85r8S6ZXH34J8NGX9K56ceN.output.status_code$",
+                            "$activity.definition_activity_02U1ZDDD6HRD85r8S6ZXH34J8NGX9K56ceN.output.response_body$",
+                            "$activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].mailbox$",
+                            "$activity.definition_activity_02AKCGCY8WAUZ7xjmHgv5V2xhhd7bVJCRGY.output.script_queries.window_start$",
+                            "$activity.definition_activity_02AKCGCY8WAUZ7xjmHgv5V2xhhd7bVJCRGY.output.script_queries.window_end$",
+                            "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02T9D5H9IXPW50D6GrR2q6L0tK92Rmldgv7$"
+                          ],
+                          "script_queries": [
+                            {
+                              "script_query": "state_json",
+                              "script_query_name": "state_json",
+                              "script_query_type": "string"
+                            },
+                            {
+                              "script_query": "message_count",
+                              "script_query_name": "message_count",
+                              "script_query_type": "string"
+                            }
+                          ],
+                          "skip_execution": false
+                        },
+                        "object_type": "definition_activity"
+                      },
+                      {
+                        "unique_name": "definition_activity_02MRHIQHFWNQU0Sht8LhP8ataXDMtdv5Jtr",
+                        "name": "Execute Python Script",
+                        "title": "Assess flood",
+                        "type": "python3.script",
+                        "base_type": "activity",
+                        "properties": {
+                          "action_timeout": 180,
+                          "continue_on_failure": false,
+                          "display_name": "Assess flood",
+                          "script": "import json, sys\nstate = json.loads(sys.argv[1] or \"{}\")\nmailbox = sys.argv[2]\nprotected = str(sys.argv[3]).lower() == \"true\"\nmin_messages = int(float(sys.argv[4] or \"30\"))\nmin_domains = int(float(sys.argv[5] or \"10\"))\nmin_clean = int(float(sys.argv[6] or \"50\"))\nwindow_start, window_end = sys.argv[7], sys.argv[8]\ntrusted = set(d.strip().lower().lstrip(\"@\") for d in (sys.argv[9] or \"\").replace(\";\", \",\").split(\",\") if d.strip())\n\ndef show(value):\n    line = \"\".join(c if 32 <= ord(c) < 127 and c != \"`\" else \"?\" for c in str(value))\n    return \"`\" + line[:200] + \"`\"\n\nmessages = state.get(\"messages\") or []\nerror = state.get(\"error\") or \"\"\ntruncated = bool(state.get(\"truncated\"))\ntotal = len(messages)\ndomains, verdicts = {}, {}\nfor kind, value, domain, label, topic, when in messages:\n    domains[domain] = domains.get(domain, 0) + 1\n    verdicts[label] = verdicts.get(label, 0) + 1\nsenders = len([d for d in domains if d != \"unknown\"])\nrated = total - verdicts.get(\"noverdict\", 0)\nclean = verdicts.get(\"neutral\", 0) + verdicts.get(\"graymail\", 0)\nclean_share = int(round(100.0 * clean / rated)) if rated else None\nbad = (\"malicious\", \"phishing\", \"bec\", \"scam\")\nkept = set(i for i, m in enumerate(messages) if (m[4] and m[3] not in bad) or m[2] in trusted)\nmove = [{\"type\": m[0], \"value\": m[1]} for i, m in enumerate(messages) if i not in kept and m[1]]\nunmovable = sum(1 for i, m in enumerate(messages) if i not in kept and not m[1])\nqualifies = (total >= min_messages and senders >= min_domains\n             and (clean_share is None or clean_share >= min_clean) and bool(move))\nreasons = []\nif protected:\n    reasons.append(\"the mailbox is on the protected list\")\nif truncated:\n    reasons.append(\"XDR returned only part of the sightings or the collection limit was reached, so the flood is larger than what is listed\")\nmodules = state.get(\"modules\") or {}\nothers = state.get(\"other_modules\") or {}\ntop = sorted(domains.items(), key=lambda kv: (-kv[1], kv[0]))[:8]\nverdict_text = \", \".join(k + \" \" + str(v) for k, v in sorted(verdicts.items(), key=lambda kv: (-kv[1], kv[0]))) or \"none\"\nif clean_share is None:\n    share_text = \"no ETD verdict in the sightings\"\nelse:\n    share_text = str(clean_share) + \"% of the messages with a verdict are neutral or graymail\"\nfacts = (show(mailbox) + \": \" + str(total) + \" inbound messages from \" + str(senders) + \" sender domains between \"\n         + window_start + \" and \" + window_end + \" UTC in the Secure Email Threat Defense sightings, \" + share_text)\nlines = [\"**Evidence from Secure Email Threat Defense, through Cisco XDR**\", \"\",\n         \"1. \" + str(total) + \" inbound messages to \" + show(mailbox) + \" between \" + window_start + \" and \" + window_end + \" UTC (threshold \" + str(min_messages) + \").\",\n         \"2. \" + str(senders) + \" different sender domains (threshold \" + str(min_domains) + \"). Largest: \" + (\", \".join(show(d) + \" \" + str(n) for d, n in top) or \"none\") + \".\"]\nif clean_share is None:\n    lines.append(\"3. The sightings name no ETD verdict, so the \" + str(min_clean) + \"% neutral or graymail threshold was not applied. Check the verdicts in ETD before approving.\")\nelse:\n    lines.append(\"3. \" + share_text + \" (threshold \" + str(min_clean) + \"%). Verdicts: \" + verdict_text + \".\")\nlines.append(\"4. Sightings by module: \" + (\", \".join(m + \" \" + str(n) for m, n in sorted(modules.items())) or \"none\") + \".\")\nif others:\n    lines.append(\"5. Sightings of other modules, not counted: \" + \", \".join(m + \" \" + str(n) for m, n in sorted(others.items())[:8]) + \".\")\nif error:\n    lines.append(\"Degraded source: \" + error + \".\")\nif domains.get(\"unknown\"):\n    lines.append(str(domains[\"unknown\"]) + \" messages name no sender.\")\nif unmovable:\n    lines.append(str(unmovable) + \" messages of the flood carry no message ID in their sighting, so they cannot be acted on through XDR.\")\nif state.get(\"outside\"):\n    lines.append(str(state[\"outside\"]) + \" sightings outside the time window were left out.\")\nburied = state.get(\"buried\") or []\nlines += [\"\", \"**Not moved (\" + str(len(kept)) + \"):** messages from trusted sender domains and messages a flood is used to hide.\"]\nfor b in buried:\n    lines.append(\"- [\" + b[\"topic\"] + \"] \" + b[\"subject\"] + \" (from \" + b[\"from\"] + \", \" + b[\"time\"] + \")\")\nhidden_topics = sorted(set(b[\"topic\"] for b in buried if b[\"verdict\"] not in bad))\nif hidden_topics:\n    lines += [\"\", \"**Check the account:** the flood contains \" + \", \".join(hidden_topics) + \" messages. Review this user's sign-ins, MFA prompts and mailbox rules. This workflow does not change the account.\"]\nevidence = \"\\n\".join(lines)\nif qualifies:\n    summary = facts + \". Flood found: \" + str(len(move)) + \" messages can be moved.\"\nelif error and not total:\n    summary = facts + \". No action proposed: \" + error + \".\"\nelif total >= min_messages and senders >= min_domains and not move:\n    summary = facts + \". No action proposed: no message of the flood carries a message ID XDR can act on.\"\nelse:\n    summary = (facts + \". No action proposed: below the flood thresholds (\" + str(min_messages) + \" messages, \"\n               + str(min_domains) + \" sender domains, \" + str(min_clean) + \"% neutral or graymail).\")\nrespond_body = json.dumps(move if qualifies else [])\nmove_count = str(len(move) if qualifies else 0)\nelevated_reasons = json.dumps(reasons)\nqualifies = \"true\" if qualifies else \"false\"\n",
+                          "script_arguments": [
+                            "$activity.definition_activity_02G4NM6MW03MD1rJxNAOiK6IpqLaHCW0Cw1.output.script_queries.state_json$",
+                            "$activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].mailbox$",
+                            "$activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].protected$",
+                            "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02KW4EGPZA7R34skxvjAIWSyDSwB3ModuR2$",
+                            "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02FU13FHGV6T15U5p6eyD9bs8ZmkNYQNLKA$",
+                            "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02FWEAJNM6EQJ0WXw3MAOpLpJlHL79RDxnW$",
+                            "$activity.definition_activity_02AKCGCY8WAUZ7xjmHgv5V2xhhd7bVJCRGY.output.script_queries.window_start$",
+                            "$activity.definition_activity_02AKCGCY8WAUZ7xjmHgv5V2xhhd7bVJCRGY.output.script_queries.window_end$",
+                            "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_0252UYT8CPKXT1scUaEHHiPnFFk1nERdYIo$"
+                          ],
+                          "script_queries": [
+                            {
+                              "script_query": "qualifies",
+                              "script_query_name": "qualifies",
+                              "script_query_type": "string"
+                            },
+                            {
+                              "script_query": "summary",
+                              "script_query_name": "summary",
+                              "script_query_type": "string"
+                            },
+                            {
+                              "script_query": "evidence",
+                              "script_query_name": "evidence",
+                              "script_query_type": "string"
+                            },
+                            {
+                              "script_query": "respond_body",
+                              "script_query_name": "respond_body",
+                              "script_query_type": "string"
+                            },
+                            {
+                              "script_query": "move_count",
+                              "script_query_name": "move_count",
+                              "script_query_type": "string"
+                            },
+                            {
+                              "script_query": "elevated_reasons",
+                              "script_query_name": "elevated_reasons",
+                              "script_query_type": "string"
+                            }
+                          ],
+                          "skip_execution": false
+                        },
+                        "object_type": "definition_activity"
+                      },
+                      {
+                        "unique_name": "definition_activity_02DUH6SU31YDI4eQMNqfickqXUebwshx5dT",
                         "name": "Condition Block",
-                        "title": "Did ETD issue a token?",
+                        "title": "Is it a flood?",
                         "type": "logic.if_else",
                         "base_type": "activity",
                         "properties": {
                           "conditions": null,
                           "continue_on_failure": false,
-                          "display_name": "Did ETD issue a token?",
+                          "display_name": "Is it a flood?",
                           "skip_execution": false
                         },
                         "object_type": "definition_activity",
                         "blocks": [
                           {
-                            "unique_name": "definition_activity_022SZIH5MI30U4kEzVTjqSg7qO1AFAFH30y",
+                            "unique_name": "definition_activity_02DVL0YMIM3IQ5L56ovDuo3HCEfDmIrUx1F",
                             "name": "Condition Branch",
-                            "title": "No token",
+                            "title": "No flood",
                             "type": "logic.condition_block",
                             "base_type": "activity",
                             "properties": {
                               "condition": {
-                                "left_operand": "$activity.definition_activity_02GX6FP7A6Q1O4WuyZod11oNfu6nAlTZjem.output.status_code$",
+                                "left_operand": "$activity.definition_activity_02MRHIQHFWNQU0Sht8LhP8ataXDMtdv5Jtr.output.script_queries.qualifies$",
                                 "operator": "ne",
-                                "right_operand": 200
+                                "right_operand": "true"
                               },
                               "continue_on_failure": false,
-                              "display_name": "No token",
+                              "display_name": "No flood",
                               "skip_execution": false
                             },
                             "object_type": "definition_activity",
                             "actions": [
                               {
-                                "unique_name": "definition_activity_02N3AYTR78X641W8ZpoYE4uQbiQAGmrtQfS",
+                                "unique_name": "definition_activity_02DC2W8UBNR5H6KluhGrMegrBqqTU7axHZz",
                                 "name": "Set Variables",
-                                "title": "Report ETD token failure",
+                                "title": "Report assessment without proposal",
                                 "type": "core.set_multiple_variables",
                                 "base_type": "activity",
                                 "properties": {
                                   "continue_on_failure": false,
-                                  "display_name": "Report ETD token failure",
+                                  "display_name": "Report assessment without proposal",
                                   "skip_execution": false,
                                   "variables_to_update": [
                                     {
                                       "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$",
-                                      "variable_value_new": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$\n- `$activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].mailbox$`: Secure Email Threat Defense refused the token request (HTTP $activity.definition_activity_02GX6FP7A6Q1O4WuyZod11oNfu6nAlTZjem.output.status_code$). Not assessed, nothing changed."
+                                      "variable_value_new": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$\n- $activity.definition_activity_02MRHIQHFWNQU0Sht8LhP8ataXDMtdv5Jtr.output.script_queries.summary$"
                                     }
                                   ]
                                 },
@@ -862,240 +862,98 @@
                             ]
                           },
                           {
-                            "unique_name": "definition_activity_02PENE5XG2RK01c413P6aHBhgDZYBodprMz",
+                            "unique_name": "definition_activity_02BL1QNADB6SY09B3IR16KlLDeuMlsln9tU",
                             "name": "Condition Branch",
-                            "title": "Token issued",
+                            "title": "Flood",
                             "type": "logic.condition_block",
                             "base_type": "activity",
                             "properties": {
                               "condition": {
-                                "left_operand": "$activity.definition_activity_02GX6FP7A6Q1O4WuyZod11oNfu6nAlTZjem.output.status_code$",
+                                "left_operand": "$activity.definition_activity_02MRHIQHFWNQU0Sht8LhP8ataXDMtdv5Jtr.output.script_queries.qualifies$",
                                 "operator": "eq",
-                                "right_operand": 200
+                                "right_operand": "true"
                               },
                               "continue_on_failure": false,
-                              "display_name": "Token issued",
+                              "display_name": "Flood",
                               "skip_execution": false
                             },
                             "object_type": "definition_activity",
                             "actions": [
                               {
-                                "unique_name": "definition_activity_02WSWPG85XS0B2K4bD61oDA7G0oq05A6bKD",
-                                "name": "JSONPath Query",
-                                "title": "Extract ETD access token",
-                                "type": "corejava.jsonpathquery",
-                                "base_type": "activity",
-                                "properties": {
-                                  "action_timeout": 180,
-                                  "continue_on_failure": false,
-                                  "display_name": "Extract ETD access token",
-                                  "input_json": "$activity.definition_activity_02GX6FP7A6Q1O4WuyZod11oNfu6nAlTZjem.output.response_body$",
-                                  "jsonpath_queries": [
-                                    {
-                                      "jsonpath_query": "$.accessToken",
-                                      "jsonpath_query_name": "access_token",
-                                      "jsonpath_query_type": "secure_string",
-                                      "zdate_type_format": "yyyy-MM-dd'T'HH:mm:ssZ"
-                                    }
-                                  ],
-                                  "skip_execution": false
-                                },
-                                "object_type": "definition_activity"
-                              },
-                              {
-                                "unique_name": "definition_activity_02N8UMZBABYBD2oOlFI905o6llX7pnwa892",
+                                "unique_name": "definition_activity_02722VZD1W7SG7Hq2wY4Tda6jie4SmHnBMW",
                                 "name": "Set Variables",
-                                "title": "Store ETD access token",
+                                "title": "Report flood",
                                 "type": "core.set_multiple_variables",
                                 "base_type": "activity",
                                 "properties": {
                                   "continue_on_failure": false,
-                                  "display_name": "Store ETD access token",
+                                  "display_name": "Report flood",
                                   "skip_execution": false,
                                   "variables_to_update": [
                                     {
-                                      "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02VIDLP0RXK4X2N0XrPSqvqDwEZO2JmE33J$",
-                                      "variable_value_new": "$activity.definition_activity_02WSWPG85XS0B2K4bD61oDA7G0oq05A6bKD.output.jsonpath_queries.access_token$"
+                                      "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$",
+                                      "variable_value_new": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$\n- $activity.definition_activity_02MRHIQHFWNQU0Sht8LhP8ataXDMtdv5Jtr.output.script_queries.summary$"
                                     }
                                   ]
                                 },
                                 "object_type": "definition_activity"
                               },
                               {
-                                "unique_name": "definition_activity_02WW2UESFNCND5HZOT9m9QrhXwUuOEGH20E",
-                                "name": "While Loop",
-                                "title": "Page through ETD results",
-                                "type": "logic.while",
+                                "unique_name": "definition_activity_02Y6TBLGOL6LB5EviubQ8ELSEfEhE7ouyCl",
+                                "name": "HTTP Request",
+                                "title": "List ETD response actions",
+                                "type": "web-service.http_request",
                                 "base_type": "activity",
                                 "properties": {
+                                  "accept": "application/json",
+                                  "action_timeout": 180,
+                                  "allow_auto_redirect": true,
+                                  "allow_headers_redirect": false,
+                                  "body": "$activity.definition_activity_02MRHIQHFWNQU0Sht8LhP8ataXDMtdv5Jtr.output.script_queries.respond_body$",
+                                  "content_type": "application/json",
+                                  "continue_on_error_status_code": true,
                                   "continue_on_failure": false,
-                                  "display_name": "Page through ETD results",
-                                  "skip_execution": false
-                                },
-                                "object_type": "definition_activity",
-                                "blocks": [
-                                  {
-                                    "unique_name": "definition_activity_02FDNGNE85MVB4wrrXOYNuZXzSnjMlW13Oi",
-                                    "name": "Condition Branch",
-                                    "title": "Page through ETD results: next page",
-                                    "type": "logic.condition_block",
-                                    "base_type": "activity",
-                                    "properties": {
-                                      "condition": {
-                                        "left_operand": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_026BP8YUY8DDB73RtI7p6vlVhxTxUDBQpYO$",
-                                        "operator": "eq",
-                                        "right_operand": "true"
-                                      },
-                                      "continue_on_failure": false,
-                                      "display_name": "Page through ETD results: next page",
-                                      "skip_execution": false
-                                    },
-                                    "object_type": "definition_activity",
-                                    "actions": [
-                                      {
-                                        "unique_name": "definition_activity_024TEEMZ3VB8E6SlPxCpI7uR1rIsMLHFc7p",
-                                        "name": "HTTP Request",
-                                        "title": "Search ETD messages",
-                                        "type": "web-service.http_request",
-                                        "base_type": "activity",
-                                        "properties": {
-                                          "accept": "application/json",
-                                          "action_timeout": 180,
-                                          "allow_auto_redirect": true,
-                                          "allow_headers_redirect": false,
-                                          "body": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_0239OCPGXVPIA2MYuyuiDT8sEI1NLYQQHwZ$",
-                                          "content_type": "application/json",
-                                          "continue_on_error_status_code": true,
-                                          "continue_on_failure": false,
-                                          "custom_headers": [
-                                            {
-                                              "name": "Authorization",
-                                              "value": "Bearer $workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02VIDLP0RXK4X2N0XrPSqvqDwEZO2JmE33J$"
-                                            },
-                                            {
-                                              "name": "x-api-key",
-                                              "value": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_0261CQA1TYKVH1l0NEEPHyfJ89URWZHd9eh$"
-                                            }
-                                          ],
-                                          "display_name": "Search ETD messages",
-                                          "method": "POST",
-                                          "relative_url": "/messages/search",
-                                          "runtime_user": {
-                                            "target_default": true
-                                          },
-                                          "skip_execution": false,
-                                          "target": {
-                                            "override_workflow_target": true,
-                                            "target_id": "definition_target_02SPOB1KIT3NG5Z8B55k2YzQ4jlB1hSNpRu"
-                                          }
-                                        },
-                                        "object_type": "definition_activity"
-                                      },
-                                      {
-                                        "unique_name": "definition_activity_02WJF1KP449110bdtg2qKA6Ha9Ru49uaFpS",
-                                        "name": "Execute Python Script",
-                                        "title": "Merge page into search state",
-                                        "type": "python3.script",
-                                        "base_type": "activity",
-                                        "properties": {
-                                          "action_timeout": 180,
-                                          "continue_on_failure": false,
-                                          "display_name": "Merge page into search state",
-                                          "script": "import json, re, sys\nstate = json.loads(sys.argv[1] or \"{}\")\nstatus_code = str(sys.argv[2]).strip()\nraw_response = sys.argv[3]\nbody = json.loads(sys.argv[4])\nmax_messages = int(float(sys.argv[5] or \"1000\"))\nstate.setdefault(\"messages\", [])\nstate.setdefault(\"buried\", [])\nstate.setdefault(\"pages\", 0)\nstate.setdefault(\"error\", \"\")\nstate.setdefault(\"truncated\", False)\ntopics = [\n    (\"credential\", r\"password|passcode|account recovery|recover your account|reset your\"),\n    (\"security alert\", r\"security alert|new sign[- ]?in|new log[- ]?in|new device|unusual (activity|sign)|suspicious (activity|sign)\"),\n    (\"mfa\", r\"verification code|one[- ]time|\\bmfa\\b|\\b2fa\\b|two[- ]factor|multi[- ]factor|authenticat\"),\n    (\"payment\", r\"wire transfer|invoice|payment|bank|purchase|order confirm|receipt|refund\"),\n    (\"lure\", r\"docusign|shared a (file|document)|voicemail|microsoft 365|office 365\"),\n]\nhas_more = \"false\"\ntry:\n    if status_code != \"200\":\n        raise ValueError(\"HTTP \" + status_code)\n    response = json.loads(raw_response or \"{}\")\n    known = set(m[0] for m in state[\"messages\"])\n    for msg in ((response.get(\"data\") or {}).get(\"messages\") or []):\n        mid = msg.get(\"id\")\n        if not mid or mid in known:\n            continue\n        if len(state[\"messages\"]) >= max_messages:\n            state[\"truncated\"] = True\n            break\n        known.add(mid)\n        sender = str(msg.get(\"fromAddress\") or msg.get(\"envelopeFrom\") or \"\")\n        domain = sender.rsplit(\"@\", 1)[1].lower().strip(\"> \") if \"@\" in sender else \"unknown\"\n        verdict = msg.get(\"verdict\") or {}\n        label = str(verdict.get(\"latestVerdict\") or verdict.get(\"originalVerdict\") or \"noVerdict\").lower()\n        subject = str(msg.get(\"subject\") or \"\")\n        topic = \"\"\n        for name, pattern in topics:\n            if re.search(pattern, subject, re.IGNORECASE):\n                topic = name\n                break\n        state[\"messages\"].append([mid, domain, label, topic, str(msg.get(\"timestamp\") or \"\")])\n        if topic and len(state[\"buried\"]) < 15:\n            state[\"buried\"].append({\"id\": mid, \"topic\": topic, \"subject\": subject[:120], \"from\": sender[:120],\n                                    \"time\": str(msg.get(\"timestamp\") or \"\"), \"verdict\": label})\n    state[\"pages\"] += 1\n    next_token = response.get(\"nextPageToken\")\n    if next_token and state[\"pages\"] >= 50:\n        state[\"truncated\"] = True\n    elif next_token and not state[\"truncated\"] and len(state[\"messages\"]) < max_messages:\n        body[\"pageToken\"] = next_token\n        has_more = \"true\"\n    elif next_token:\n        state[\"truncated\"] = True\nexcept Exception as exc:\n    state[\"error\"] = \"ETD message search failed on page \" + str(state[\"pages\"] + 1) + \": \" + str(exc)[:200]\nstate_json = json.dumps(state)\nsearch_body = json.dumps(body)\nmessage_count = str(len(state[\"messages\"]))\n",
-                                          "script_arguments": [
-                                            "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_024N9XBRJGFSW6qU7dAF2C2PszBmCHhntHd$",
-                                            "$activity.definition_activity_024TEEMZ3VB8E6SlPxCpI7uR1rIsMLHFc7p.output.status_code$",
-                                            "$activity.definition_activity_024TEEMZ3VB8E6SlPxCpI7uR1rIsMLHFc7p.output.response_body$",
-                                            "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_0239OCPGXVPIA2MYuyuiDT8sEI1NLYQQHwZ$",
-                                            "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02T9D5H9IXPW50D6GrR2q6L0tK92Rmldgv7$"
-                                          ],
-                                          "script_queries": [
-                                            {
-                                              "script_query": "state_json",
-                                              "script_query_name": "state_json",
-                                              "script_query_type": "string"
-                                            },
-                                            {
-                                              "script_query": "search_body",
-                                              "script_query_name": "search_body",
-                                              "script_query_type": "string"
-                                            },
-                                            {
-                                              "script_query": "has_more",
-                                              "script_query_name": "has_more",
-                                              "script_query_type": "string"
-                                            },
-                                            {
-                                              "script_query": "message_count",
-                                              "script_query_name": "message_count",
-                                              "script_query_type": "string"
-                                            }
-                                          ],
-                                          "skip_execution": false
-                                        },
-                                        "object_type": "definition_activity"
-                                      },
-                                      {
-                                        "unique_name": "definition_activity_028PO0LZRUL5I795G7LiP1NCSpfizlLyJ1u",
-                                        "name": "Set Variables",
-                                        "title": "Update paging state",
-                                        "type": "core.set_multiple_variables",
-                                        "base_type": "activity",
-                                        "properties": {
-                                          "continue_on_failure": false,
-                                          "display_name": "Update paging state",
-                                          "skip_execution": false,
-                                          "variables_to_update": [
-                                            {
-                                              "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_024N9XBRJGFSW6qU7dAF2C2PszBmCHhntHd$",
-                                              "variable_value_new": "$activity.definition_activity_02WJF1KP449110bdtg2qKA6Ha9Ru49uaFpS.output.script_queries.state_json$"
-                                            },
-                                            {
-                                              "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_0239OCPGXVPIA2MYuyuiDT8sEI1NLYQQHwZ$",
-                                              "variable_value_new": "$activity.definition_activity_02WJF1KP449110bdtg2qKA6Ha9Ru49uaFpS.output.script_queries.search_body$"
-                                            },
-                                            {
-                                              "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_026BP8YUY8DDB73RtI7p6vlVhxTxUDBQpYO$",
-                                              "variable_value_new": "$activity.definition_activity_02WJF1KP449110bdtg2qKA6Ha9Ru49uaFpS.output.script_queries.has_more$"
-                                            }
-                                          ]
-                                        },
-                                        "object_type": "definition_activity"
-                                      }
-                                    ]
+                                  "display_name": "List ETD response actions",
+                                  "method": "POST",
+                                  "relative_url": "/iroh-response/respond/observables",
+                                  "runtime_user": {
+                                    "target_default": true
+                                  },
+                                  "skip_execution": false,
+                                  "target": {
+                                    "override_workflow_target": true,
+                                    "target_id": "$module_target;Cisco XDR;securex:ao:iroh_api;platform-apis$"
                                   }
-                                ]
+                                },
+                                "object_type": "definition_activity"
                               },
                               {
-                                "unique_name": "definition_activity_02NFWC9N22VQ25AxbVG8AR58VAhEtswmoa3",
+                                "unique_name": "definition_activity_02OXB2SPP3A237HXDMFkDMGsa2EduFUnBP4",
                                 "name": "Execute Python Script",
-                                "title": "Assess flood and write decision card",
+                                "title": "Plan moves and write decision card",
                                 "type": "python3.script",
                                 "base_type": "activity",
                                 "properties": {
                                   "action_timeout": 180,
                                   "continue_on_failure": false,
-                                  "display_name": "Assess flood and write decision card",
-                                  "script": "import hashlib, json, sys\nstate = json.loads(sys.argv[1] or \"{}\")\nmailbox = sys.argv[2]\nprotected = str(sys.argv[3]).lower() == \"true\"\nmin_messages = int(float(sys.argv[4] or \"30\"))\nmin_domains = int(float(sys.argv[5] or \"10\"))\nmin_clean = int(float(sys.argv[6] or \"50\"))\ndry_run = str(sys.argv[7]).lower() != \"false\"\nfolder = (sys.argv[8] or \"quarantine\").strip().lower()\nverdict = (sys.argv[9] or \"graymail\").strip().lower()\nwindow_start, window_end = sys.argv[10], sys.argv[11]\nelevated_above = int(float(sys.argv[12] or \"500\"))\ntrusted = set(d.strip().lower().lstrip(\"@\") for d in (sys.argv[13] or \"\").replace(\";\", \",\").split(\",\") if d.strip())\nif folder not in (\"quarantine\", \"junk\", \"trash\"):\n    raise SystemExit(\"Containment Folder must be quarantine, junk or trash (delete is permanent and is refused)\")\nif verdict not in (\"spam\", \"malicious\", \"phishing\", \"neutral\", \"graymail\", \"bec\", \"scam\"):\n    raise SystemExit(\"Reclassify Verdict is not an ETD verdict: \" + verdict)\nmessages = state.get(\"messages\") or []\nerror = state.get(\"error\") or \"\"\ntruncated = bool(state.get(\"truncated\"))\ntotal = len(messages)\ndomains, verdicts = {}, {}\nfor mid, domain, label, topic, when in messages:\n    domains[domain] = domains.get(domain, 0) + 1\n    verdicts[label] = verdicts.get(label, 0) + 1\nclean = verdicts.get(\"neutral\", 0) + verdicts.get(\"graymail\", 0)\nclean_share = int(round(100.0 * clean / total)) if total else 0\nbad = (\"malicious\", \"phishing\", \"bec\", \"scam\")\nkept = [m for m in messages if (m[3] and m[2] not in bad) or m[1] in trusted]\nkept_ids = set(m[0] for m in kept)\nmove_ids = [m[0] for m in messages if m[0] not in kept_ids]\nqualifies = total >= min_messages and len(domains) >= min_domains and clean_share >= min_clean and bool(move_ids)\nreasons = []\nif protected:\n    reasons.append(\"the mailbox is on the protected list\")\nif len(move_ids) > elevated_above:\n    reasons.append(str(len(move_ids)) + \" messages is above the limit of \" + str(elevated_above) + \" for standard approval\")\nif truncated:\n    reasons.append(\"the search stopped at the collection limit, so the flood is larger than what is listed\")\nelevated = bool(reasons)\nburied = state.get(\"buried\") or []\nhidden_topics = sorted(set(b[\"topic\"] for b in buried if b[\"verdict\"] not in bad))\nbad_count = sum(verdicts.get(b, 0) for b in bad)\nrisk = 70 + (10 if set(hidden_topics) & {\"credential\", \"security alert\", \"mfa\"} else 0) + (10 if bad_count else 0) + (10 if total >= 3 * min_messages else 0)\nrisk = min(risk, 100)\nconfidence = 70 + (10 if clean_share >= 80 and len(domains) >= 2 * min_domains else 0) - (20 if error else 0) - (10 if truncated else 0)\npackage_digest = hashlib.sha256(\"\\n\".join(sorted(move_ids)).encode()).hexdigest()[:16]\ntop = sorted(domains.items(), key=lambda kv: (-kv[1], kv[0]))[:8]\nverdict_text = \", \".join(k + \" \" + str(v) for k, v in sorted(verdicts.items(), key=lambda kv: (-kv[1], kv[0]))) or \"none\"\nfacts = (\"`\" + mailbox + \"`: \" + str(total) + \" inbound messages from \" + str(len(domains)) + \" sender domains between \"\n         + window_start + \" and \" + window_end + \" UTC, \" + str(clean_share) + \"% neutral or graymail\")\nif qualifies:\n    lines = [\"## Email bombing: decision needed\", \"\"]\n    if elevated:\n        lines += [\"**ELEVATED APPROVAL REQUIRED** because \" + \"; \".join(reasons) + \".\", \"\"]\n    lines += [\"**Mode: \" + (\"DRY RUN. Approving moves nothing; the workflow only reports what it would do.\" if dry_run else \"LIVE. Approving moves the messages.\") + \"**\", \"\",\n              \"**Proposed action:** move \" + str(len(move_ids)) + \" messages of the flood to *\" + folder + \"* in Secure Email Threat Defense and reclassify them as *\" + verdict + \"*. Package `\" + package_digest + \"`.\", \"\",\n              \"Risk \" + str(risk) + \"/100. Confidence \" + str(confidence) + \"/100.\", \"\",\n              \"**Evidence**\", \"\",\n              \"1. \" + str(total) + \" inbound messages to `\" + mailbox + \"` between \" + window_start + \" and \" + window_end + \" UTC (threshold \" + str(min_messages) + \").\",\n              \"2. \" + str(len(domains)) + \" different sender domains (threshold \" + str(min_domains) + \"). Largest: \" + \", \".join(\"`\" + d + \"` \" + str(n) for d, n in top) + \".\",\n              \"3. \" + str(clean_share) + \"% of the messages are neutral or graymail (threshold \" + str(min_clean) + \"%). Verdicts: \" + verdict_text + \".\"]\n    if error:\n        lines.append(\"4. Degraded source: \" + error + \". The figures above cover the pages read before the failure.\")\n    lines += [\"\", \"**Not moved (\" + str(len(kept)) + \"):** messages from trusted sender domains and messages a flood is used to hide.\"]\n    for b in buried:\n        if b[\"id\"] in kept_ids:\n            lines.append(\"- [\" + b[\"topic\"] + \"] \" + b[\"subject\"] + \" (from \" + b[\"from\"] + \", \" + b[\"time\"] + \")\")\n    if hidden_topics:\n        lines += [\"\", \"**Check the account:** the flood contains \" + \", \".join(hidden_topics) + \" messages. Review this user's sign-ins, MFA prompts and mailbox rules. This workflow does not change the account.\"]\n    lines += [\"\", \"**Choices:** *Approve* runs the proposed action. *Reject* and *More investigation* change nothing.\"]\n    card = \"\\n\".join(lines)\n    summary = facts + \". Proposed: move \" + str(len(move_ids)) + \" messages to \" + folder + \" (package \" + package_digest + \").\"\nelse:\n    card = \"\"\n    why = error if (error and not total) else \"below the flood thresholds (\" + str(min_messages) + \" messages, \" + str(min_domains) + \" sender domains, \" + str(min_clean) + \"% neutral or graymail)\"\n    summary = facts + \". No action proposed: \" + why + \".\"\nchunks = []\nfor i in range(0, len(move_ids), 100):\n    part = move_ids[i:i + 100]\n    chunks.append({\"body\": json.dumps({\"ids\": part, \"folder\": folder, \"verdict\": verdict}), \"count\": str(len(part))})\nmove_chunks = json.dumps(chunks if qualifies else [])\nmove_count = str(len(move_ids) if qualifies else 0)\nverify_sample = json.dumps([{\"body\": json.dumps({\"id\": mid})} for mid in move_ids[:5]] if qualifies else [])\nqualifies = \"true\" if qualifies else \"false\"\nelevated = \"true\" if elevated else \"false\"\n",
+                                  "display_name": "Plan moves and write decision card",
+                                  "script": "import json, re, sys\nrespond_status, respond_raw = str(sys.argv[1]).strip(), sys.argv[2]\nrequested = json.loads(sys.argv[3] or \"[]\")\nmailbox, evidence = sys.argv[4], sys.argv[5]\nelevated_reasons = json.loads(sys.argv[6] or \"[]\")\ndry_run = str(sys.argv[7]).strip().lower() != \"false\"\nfolder = (sys.argv[8] or \"quarantine\").strip().lower()\ninclude = sys.argv[9] or \".\"\nelevated_above = int(float(sys.argv[10] or \"100\"))\nif folder not in (\"quarantine\", \"junk\", \"trash\"):\n    raise SystemExit(\"Containment Folder must be quarantine, junk or trash (delete is permanent and is refused)\")\nfolder_word = {\"quarantine\": r\"quarantin\", \"junk\": r\"junk|spam folder\", \"trash\": r\"trash\"}[folder]\nundo = (r\"\\b(un|de)-?(isolat|contain|block|quarantin|lock|suspend)|cancel|stop|undo|revert|restor|releas|remov\"\n        r\"|lift|clear|exit|deliver|allow|safe.?list|white.?list|re-?activat|\\b(re-?)?enabl|delet|inbox\"\n        r\"|end (of )?(isolation|containment)|out of|expir|exclud|exempt|bypass|paus|suppress|ignor\")\n\ndef plain(text, limit=80):\n    out = []\n    for char in str(text)[:4 * limit]:\n        out.append(\"'\" if char == '\"' else char if 32 <= ord(char) < 127 and char not in \"*`[]<>|#\\\\~_{}\" else \" \")\n    line = \" \".join(\"\".join(out).split())\n    return (line[:limit] + \"...\") if len(line) > limit else line\n\ndef show(value):\n    line = \"\".join(c if 32 <= ord(c) < 127 and c != \"`\" else \"?\" for c in str(value))\n    return \"`\" + ((line[:200] + \"...\") if len(line) > 200 else line) + \"`\"\n\ndef key_of(kind, value):\n    return str(kind) + \"|\" + str(value).lower()\n\ndef encode(text):\n    out = []\n    for byte in str(text).encode(\"utf-8\", \"replace\"):\n        char = chr(byte)\n        out.append(char if byte < 128 and (char.isalnum() or char in \"-._~\") else \"%%%02X\" % byte)\n    return \"\".join(out)\n\nindex = {}\nfor obs in requested:\n    if isinstance(obs, dict) and obs.get(\"type\") and obs.get(\"value\"):\n        index.setdefault(key_of(obs[\"type\"], obs[\"value\"]), {\"type\": str(obs[\"type\"]), \"value\": str(obs[\"value\"])})\nonly = list(index)[0] if len(index) == 1 else None\nrows = None\nif respond_status == \"200\":\n    try:\n        body = json.loads(respond_raw or \"null\")\n        if isinstance(body, dict):\n            body = body.get(\"data\")\n        rows = [r for r in body if isinstance(r, dict)] if isinstance(body, list) else []\n    except Exception:\n        rows = None\ndegraded = \"\" if rows is not None else \"the list of response actions (HTTP \" + plain(respond_status, 12) + \")\"\noffers = {}\nfor entry in rows or []:\n    action_id = entry.get(\"id\")\n    instance = entry.get(\"module_instance_id\") or entry.get(\"module-instance-id\")\n    if not isinstance(action_id, str) or not isinstance(instance, str):\n        continue\n    if not action_id.strip(\". \") or not instance.strip(\". \") or len(action_id) > 200 or len(instance) > 200:\n        continue  # an empty or dots-only path segment is not an action\n    params = entry.get(\"query-params\") if isinstance(entry.get(\"query-params\"), dict) else {}\n    if params.get(\"observable_type\") is None and params.get(\"observable_value\") is None:\n        key = only\n    else:\n        key = key_of(params.get(\"observable_type\"), params.get(\"observable_value\"))\n        key = key if key in index else None\n    if not key:\n        continue\n    extra = {}\n    for name, value in params.items():\n        reserved = re.sub(r\"[^a-z]\", \"\", str(name).lower()) in (\"observabletype\", \"observablevalue\")\n        if not reserved and re.fullmatch(r\"[A-Za-z0-9_.-]{1,64}\", str(name)) and isinstance(value, (str, int)) \\\n                and not isinstance(value, bool) and len(str(value)) <= 300:\n            extra[str(name)] = str(value)\n    raw_title = entry.get(\"title\") if isinstance(entry.get(\"title\"), str) else \"\"\n    offers.setdefault(key, []).append({\n        \"id\": action_id, \"instance\": instance, \"match\": raw_title.strip()[:400] or action_id,\n        \"title\": plain(raw_title) or plain(action_id),\n        \"module\": plain(entry.get(\"module\") or entry.get(\"module-name\") or entry.get(\"module_name\") or \"module\", 40),\n        \"params\": extra,\n    })\nproposals, unmatched, offered_titles = [], 0, set()\nfor key, obs in index.items():\n    chosen = None\n    for offer in sorted(offers.get(key, []), key=lambda o: (o[\"module\"], o[\"title\"], o[\"id\"], o[\"instance\"])):\n        offered_titles.add(offer[\"title\"] + \" (\" + offer[\"module\"] + \")\")\n        try:\n            wanted = re.search(include, offer[\"match\"], re.I) and re.search(folder_word, offer[\"match\"], re.I) \\\n                and not re.search(undo, offer[\"match\"], re.I)\n        except re.error:\n            raise SystemExit(\"Move Action Pattern is not a valid regular expression: \" + include)\n        if wanted and chosen is None:\n            chosen = offer\n    if chosen is None:\n        unmatched += 1\n        continue\n    url = (\"/iroh-response/respond/trigger/\" + encode(chosen[\"instance\"]) + \"/\" + encode(chosen[\"id\"])\n           + \"?observable_type=\" + encode(obs[\"type\"]) + \"&observable_value=\" + encode(obs[\"value\"]))\n    for name in sorted(chosen[\"params\"]):\n        url += \"&\" + encode(name) + \"=\" + encode(chosen[\"params\"][name])\n    proposals.append({\"url\": url, \"title\": chosen[\"title\"], \"target\": obs[\"value\"], \"kind\": \"move_email\",\n                      \"module\": chosen[\"module\"], \"type\": obs[\"type\"],\n                      \"key\": \"|\".join((chosen[\"id\"], chosen[\"instance\"], obs[\"type\"], obs[\"value\"].lower()))})\nproposals.sort(key=lambda p: p[\"url\"])\nreasons = list(elevated_reasons)\nif len(proposals) > elevated_above:\n    reasons.append(str(len(proposals)) + \" messages is above the limit of \" + str(elevated_above) + \" for standard approval\")\nelevated = bool(reasons) and bool(proposals)\n\ndef digest(text):\n    \"\"\"Short identifier of the package: SHA-256 when the module is present, FNV-1a otherwise.\"\"\"\n    try:\n        import hashlib\n        return hashlib.sha256(text.encode(\"utf-8\")).hexdigest()[:12]\n    except ImportError:\n        value = 0xcbf29ce484222325\n        for byte in text.encode(\"utf-8\"):\n            value = ((value ^ byte) * 0x100000001b3) % (1 << 64)\n        return \"%012x\" % (value % (1 << 48))\n\npackage_digest = digest(json.dumps([p[\"url\"] for p in proposals]))\nused = {}\nfor p in proposals:\n    label = \"\\\"\" + p[\"title\"] + \"\\\" of \" + p[\"module\"]\n    used[label] = used.get(label, 0) + 1\nif proposals:\n    lines = [\"## Email bombing: decision needed\", \"\"]\n    if elevated:\n        lines += [\"**ELEVATED APPROVAL REQUIRED** because \" + \"; \".join(reasons) + \".\", \"\"]\n    lines += [\"**Mode: \" + (\"DRY RUN. Approving moves nothing; the workflow only reports what it would do.\" if dry_run else \"LIVE. Approving moves the messages.\") + \"**\", \"\",\n              \"**Proposed action:** move \" + str(len(proposals)) + \" messages of the flood to *\" + folder\n              + \"* with the Secure Email Threat Defense response action offered through Cisco XDR: \"\n              + \"; \".join(k + \" (\" + str(n) + \" messages)\" for k, n in sorted(used.items())) + \". Package `\" + package_digest + \"`.\", \"\",\n              \"Approve triggers these \" + str(len(proposals)) + \" actions and nothing else. The action names in quotes come from the product and are shown as plain text.\"]\n    if unmatched:\n        lines += [\"\", \"**Not offered:** XDR offers no matching action for \" + str(unmatched) + \" further messages of the flood.\"\n                  + (\" Offered: \" + \"; \".join(sorted(offered_titles)[:6]) + \".\" if offered_titles else \"\") + \" Move them in ETD if needed.\"]\n    if degraded:\n        lines += [\"\", \"**Degraded source:** \" + degraded + \" did not answer.\"]\n    lines += [\"\", evidence, \"\", \"**Choices:** *Approve* runs the proposed action. *Reject* changes nothing.\"]\n    card = \"\\n\".join(lines)\n    summary = (show(mailbox) + \": flood found. Proposed: move \" + str(len(proposals)) + \" messages to \" + folder\n               + \" (package \" + package_digest + \")\" + (\", elevated approval\" if elevated else \"\") + \".\")\nelse:\n    card = \"\"\n    if degraded:\n        why = degraded + \" did not answer\"\n    elif offered_titles:\n        why = (\"XDR offers no response action that moves a message to \" + folder + \" (offered: \"\n               + \"; \".join(sorted(offered_titles)[:6]) + \"). Set the Move Action Pattern input or move the messages in ETD\")\n    else:\n        why = (\"no module offers a response action for these messages. Check that the Secure Email Threat Defense \"\n               \"integration is enabled in XDR, or move the messages in ETD\")\n    summary = show(mailbox) + \": flood found, but no action proposed: \" + why + \".\"\nhas_proposal = \"true\" if proposals else \"false\"\nelevated = \"true\" if elevated else \"false\"\nactions_json = json.dumps([dict((k, p[k]) for k in (\"url\", \"title\", \"target\", \"kind\", \"module\", \"key\")) for p in proposals])\naction_count = str(len(proposals))\nverify_body = json.dumps([{\"type\": p[\"type\"], \"value\": p[\"target\"]} for p in proposals])\n",
                                   "script_arguments": [
-                                    "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_024N9XBRJGFSW6qU7dAF2C2PszBmCHhntHd$",
+                                    "$activity.definition_activity_02Y6TBLGOL6LB5EviubQ8ELSEfEhE7ouyCl.output.status_code$",
+                                    "$activity.definition_activity_02Y6TBLGOL6LB5EviubQ8ELSEfEhE7ouyCl.output.response_body$",
+                                    "$activity.definition_activity_02MRHIQHFWNQU0Sht8LhP8ataXDMtdv5Jtr.output.script_queries.respond_body$",
                                     "$activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].mailbox$",
-                                    "$activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].protected$",
-                                    "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02KW4EGPZA7R34skxvjAIWSyDSwB3ModuR2$",
-                                    "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02FU13FHGV6T15U5p6eyD9bs8ZmkNYQNLKA$",
-                                    "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02FWEAJNM6EQJ0WXw3MAOpLpJlHL79RDxnW$",
+                                    "$activity.definition_activity_02MRHIQHFWNQU0Sht8LhP8ataXDMtdv5Jtr.output.script_queries.evidence$",
+                                    "$activity.definition_activity_02MRHIQHFWNQU0Sht8LhP8ataXDMtdv5Jtr.output.script_queries.elevated_reasons$",
                                     "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02XNISA5IB1H56mRmfZ8lnhZypPaKoG0HZN$",
                                     "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02K39SVNM5YH93T2pu1YHjHCnDTfUlB4Dpw$",
-                                    "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02ASGRU01Q0D91emZyeLJZF1uV9bjP8IC3f$",
-                                    "$activity.definition_activity_02NPN523MBZ294nxmVGBCZdvRaXCVLudG6U.output.script_queries.window_start$",
-                                    "$activity.definition_activity_02NPN523MBZ294nxmVGBCZdvRaXCVLudG6U.output.script_queries.window_end$",
-                                    "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02TDN6N09A42V3BoRcpsl19ZcMW5kZozYOH$",
-                                    "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_0252UYT8CPKXT1scUaEHHiPnFFk1nERdYIo$"
+                                    "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02F576Z7GDUY407WV3rtv7CCY7xUQppVXlE$",
+                                    "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02TDN6N09A42V3BoRcpsl19ZcMW5kZozYOH$"
                                   ],
                                   "script_queries": [
                                     {
-                                      "script_query": "qualifies",
-                                      "script_query_name": "qualifies",
+                                      "script_query": "has_proposal",
+                                      "script_query_name": "has_proposal",
                                       "script_query_type": "string"
                                     },
                                     {
@@ -1114,18 +972,18 @@
                                       "script_query_type": "string"
                                     },
                                     {
-                                      "script_query": "move_chunks",
-                                      "script_query_name": "move_chunks",
+                                      "script_query": "actions_json",
+                                      "script_query_name": "actions_json",
                                       "script_query_type": "string"
                                     },
                                     {
-                                      "script_query": "move_count",
-                                      "script_query_name": "move_count",
+                                      "script_query": "action_count",
+                                      "script_query_name": "action_count",
                                       "script_query_type": "string"
                                     },
                                     {
-                                      "script_query": "verify_sample",
-                                      "script_query_name": "verify_sample",
+                                      "script_query": "verify_body",
+                                      "script_query_name": "verify_body",
                                       "script_query_type": "string"
                                     },
                                     {
@@ -1139,51 +997,51 @@
                                 "object_type": "definition_activity"
                               },
                               {
-                                "unique_name": "definition_activity_02DUH6SU31YDI4eQMNqfickqXUebwshx5dT",
+                                "unique_name": "definition_activity_02U6TODWFMOA661Ea2A10NRanMhy2U28fGQ",
                                 "name": "Condition Block",
-                                "title": "Is it a flood?",
+                                "title": "Can XDR move the messages?",
                                 "type": "logic.if_else",
                                 "base_type": "activity",
                                 "properties": {
                                   "conditions": null,
                                   "continue_on_failure": false,
-                                  "display_name": "Is it a flood?",
+                                  "display_name": "Can XDR move the messages?",
                                   "skip_execution": false
                                 },
                                 "object_type": "definition_activity",
                                 "blocks": [
                                   {
-                                    "unique_name": "definition_activity_02DVL0YMIM3IQ5L56ovDuo3HCEfDmIrUx1F",
+                                    "unique_name": "definition_activity_02U773MITXDCV0uMttBuNSaoLBFsRuRht0i",
                                     "name": "Condition Branch",
-                                    "title": "No flood",
+                                    "title": "No matching action",
                                     "type": "logic.condition_block",
                                     "base_type": "activity",
                                     "properties": {
                                       "condition": {
-                                        "left_operand": "$activity.definition_activity_02NFWC9N22VQ25AxbVG8AR58VAhEtswmoa3.output.script_queries.qualifies$",
+                                        "left_operand": "$activity.definition_activity_02OXB2SPP3A237HXDMFkDMGsa2EduFUnBP4.output.script_queries.has_proposal$",
                                         "operator": "ne",
                                         "right_operand": "true"
                                       },
                                       "continue_on_failure": false,
-                                      "display_name": "No flood",
+                                      "display_name": "No matching action",
                                       "skip_execution": false
                                     },
                                     "object_type": "definition_activity",
                                     "actions": [
                                       {
-                                        "unique_name": "definition_activity_02DC2W8UBNR5H6KluhGrMegrBqqTU7axHZz",
+                                        "unique_name": "definition_activity_02AMAN8MIJB4J72ti36bUCEJCLgowiFBryi",
                                         "name": "Set Variables",
-                                        "title": "Report assessment without proposal",
+                                        "title": "Report flood without action",
                                         "type": "core.set_multiple_variables",
                                         "base_type": "activity",
                                         "properties": {
                                           "continue_on_failure": false,
-                                          "display_name": "Report assessment without proposal",
+                                          "display_name": "Report flood without action",
                                           "skip_execution": false,
                                           "variables_to_update": [
                                             {
                                               "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$",
-                                              "variable_value_new": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$\n- $activity.definition_activity_02NFWC9N22VQ25AxbVG8AR58VAhEtswmoa3.output.script_queries.summary$"
+                                              "variable_value_new": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$\n- $activity.definition_activity_02OXB2SPP3A237HXDMFkDMGsa2EduFUnBP4.output.script_queries.summary$"
                                             }
                                           ]
                                         },
@@ -1192,19 +1050,19 @@
                                     ]
                                   },
                                   {
-                                    "unique_name": "definition_activity_02BL1QNADB6SY09B3IR16KlLDeuMlsln9tU",
+                                    "unique_name": "definition_activity_022SMH0LS6K1W3j8GYy8w7AWY4dYGnjFnEe",
                                     "name": "Condition Branch",
-                                    "title": "Flood",
+                                    "title": "Moves proposed",
                                     "type": "logic.condition_block",
                                     "base_type": "activity",
                                     "properties": {
                                       "condition": {
-                                        "left_operand": "$activity.definition_activity_02NFWC9N22VQ25AxbVG8AR58VAhEtswmoa3.output.script_queries.qualifies$",
+                                        "left_operand": "$activity.definition_activity_02OXB2SPP3A237HXDMFkDMGsa2EduFUnBP4.output.script_queries.has_proposal$",
                                         "operator": "eq",
                                         "right_operand": "true"
                                       },
                                       "continue_on_failure": false,
-                                      "display_name": "Flood",
+                                      "display_name": "Moves proposed",
                                       "skip_execution": false
                                     },
                                     "object_type": "definition_activity",
@@ -1222,7 +1080,7 @@
                                           "variables_to_update": [
                                             {
                                               "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$",
-                                              "variable_value_new": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$\n- $activity.definition_activity_02NFWC9N22VQ25AxbVG8AR58VAhEtswmoa3.output.script_queries.summary$"
+                                              "variable_value_new": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$\n- $activity.definition_activity_02OXB2SPP3A237HXDMFkDMGsa2EduFUnBP4.output.script_queries.summary$"
                                             }
                                           ]
                                         },
@@ -1273,7 +1131,7 @@
                                                   "variables_to_update": [
                                                     {
                                                       "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$",
-                                                      "variable_value_new": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$\n- `$activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].mailbox$`: AUDIT ONLY. No approval task was raised and nothing was changed (package $activity.definition_activity_02NFWC9N22VQ25AxbVG8AR58VAhEtswmoa3.output.script_queries.package_digest$)."
+                                                      "variable_value_new": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$\n- `$activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].mailbox$`: AUDIT ONLY. No approval task was raised and nothing was changed (package $activity.definition_activity_02OXB2SPP3A237HXDMFkDMGsa2EduFUnBP4.output.script_queries.package_digest$)."
                                                     }
                                                   ]
                                                 },
@@ -1321,7 +1179,7 @@
                                                     "base_type": "activity",
                                                     "properties": {
                                                       "condition": {
-                                                        "left_operand": "$activity.definition_activity_02NFWC9N22VQ25AxbVG8AR58VAhEtswmoa3.output.script_queries.elevated$",
+                                                        "left_operand": "$activity.definition_activity_02OXB2SPP3A237HXDMFkDMGsa2EduFUnBP4.output.script_queries.elevated$",
                                                         "operator": "eq",
                                                         "right_operand": "true"
                                                       },
@@ -1341,17 +1199,16 @@
                                                           "approval_choices_holder": {
                                                             "approval_choices": [
                                                               "Approve",
-                                                              "Reject",
-                                                              "More investigation"
+                                                              "Reject"
                                                             ],
-                                                            "is_custom_approval_choices": true,
-                                                            "is_default_approval_choices": false
+                                                            "is_custom_approval_choices": false,
+                                                            "is_default_approval_choices": true
                                                           },
                                                           "approval_title": "ELEVATED APPROVAL REQUIRED - Email bombing: move flood for $activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].mailbox$",
                                                           "assignee_roles": [
                                                             "admin"
                                                           ],
-                                                          "body_text": "$activity.definition_activity_02NFWC9N22VQ25AxbVG8AR58VAhEtswmoa3.output.script_queries.card$",
+                                                          "body_text": "$activity.definition_activity_02OXB2SPP3A237HXDMFkDMGsa2EduFUnBP4.output.script_queries.card$",
                                                           "continue_on_failure": false,
                                                           "display_name": "Request elevated approval",
                                                           "due_date": {
@@ -1408,7 +1265,7 @@
                                                     "base_type": "activity",
                                                     "properties": {
                                                       "condition": {
-                                                        "left_operand": "$activity.definition_activity_02NFWC9N22VQ25AxbVG8AR58VAhEtswmoa3.output.script_queries.elevated$",
+                                                        "left_operand": "$activity.definition_activity_02OXB2SPP3A237HXDMFkDMGsa2EduFUnBP4.output.script_queries.elevated$",
                                                         "operator": "ne",
                                                         "right_operand": "true"
                                                       },
@@ -1428,18 +1285,17 @@
                                                           "approval_choices_holder": {
                                                             "approval_choices": [
                                                               "Approve",
-                                                              "Reject",
-                                                              "More investigation"
+                                                              "Reject"
                                                             ],
-                                                            "is_custom_approval_choices": true,
-                                                            "is_default_approval_choices": false
+                                                            "is_custom_approval_choices": false,
+                                                            "is_default_approval_choices": true
                                                           },
                                                           "approval_title": "Email bombing: move flood for $activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].mailbox$",
                                                           "assignee_roles": [
                                                             "admin",
                                                             "user"
                                                           ],
-                                                          "body_text": "$activity.definition_activity_02NFWC9N22VQ25AxbVG8AR58VAhEtswmoa3.output.script_queries.card$",
+                                                          "body_text": "$activity.definition_activity_02OXB2SPP3A237HXDMFkDMGsa2EduFUnBP4.output.script_queries.card$",
                                                           "continue_on_failure": false,
                                                           "display_name": "Request standard approval",
                                                           "due_date": {
@@ -1567,7 +1423,7 @@
                                                                   "variables_to_update": [
                                                                     {
                                                                       "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$",
-                                                                      "variable_value_new": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$\n- `$activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].mailbox$`: APPROVED in DRY RUN. Would move $activity.definition_activity_02NFWC9N22VQ25AxbVG8AR58VAhEtswmoa3.output.script_queries.move_count$ messages to $workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02K39SVNM5YH93T2pu1YHjHCnDTfUlB4Dpw$ (package $activity.definition_activity_02NFWC9N22VQ25AxbVG8AR58VAhEtswmoa3.output.script_queries.package_digest$). Nothing was changed."
+                                                                      "variable_value_new": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$\n- `$activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].mailbox$`: APPROVED in DRY RUN. Would move $activity.definition_activity_02OXB2SPP3A237HXDMFkDMGsa2EduFUnBP4.output.script_queries.action_count$ messages to $workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02K39SVNM5YH93T2pu1YHjHCnDTfUlB4Dpw$ (package $activity.definition_activity_02OXB2SPP3A237HXDMFkDMGsa2EduFUnBP4.output.script_queries.package_digest$). Nothing was changed."
                                                                     }
                                                                   ]
                                                                 },
@@ -1594,27 +1450,43 @@
                                                             "object_type": "definition_activity",
                                                             "actions": [
                                                               {
-                                                                "unique_name": "definition_activity_02DTWXJC74P5F2E8emuxBy61DZxUWa2EqIC",
+                                                                "unique_name": "definition_activity_02ZIUMQRZ6B3W1gnA3pHghEd9R1qMVihaxH",
                                                                 "name": "Read Table from JSON",
-                                                                "title": "Move requests table",
+                                                                "title": "Approved moves table",
                                                                 "type": "corejava.read_table_from_json",
                                                                 "base_type": "activity",
                                                                 "properties": {
                                                                   "action_timeout": 180,
                                                                   "continue_on_failure": false,
-                                                                  "display_name": "Move requests table",
-                                                                  "input_json": "$activity.definition_activity_02NFWC9N22VQ25AxbVG8AR58VAhEtswmoa3.output.script_queries.move_chunks$",
+                                                                  "display_name": "Approved moves table",
+                                                                  "input_json": "$activity.definition_activity_02OXB2SPP3A237HXDMFkDMGsa2EduFUnBP4.output.script_queries.actions_json$",
                                                                   "jsonpath_query": "$.*",
                                                                   "persist_output": false,
                                                                   "populate_columns": false,
                                                                   "skip_execution": false,
                                                                   "table_columns": [
                                                                     {
-                                                                      "column_name": "body",
+                                                                      "column_name": "url",
                                                                       "column_type": "string"
                                                                     },
                                                                     {
-                                                                      "column_name": "count",
+                                                                      "column_name": "title",
+                                                                      "column_type": "string"
+                                                                    },
+                                                                    {
+                                                                      "column_name": "target",
+                                                                      "column_type": "string"
+                                                                    },
+                                                                    {
+                                                                      "column_name": "kind",
+                                                                      "column_type": "string"
+                                                                    },
+                                                                    {
+                                                                      "column_name": "module",
+                                                                      "column_type": "string"
+                                                                    },
+                                                                    {
+                                                                      "column_name": "key",
                                                                       "column_type": "string"
                                                                     }
                                                                   ]
@@ -1622,23 +1494,24 @@
                                                                 "object_type": "definition_activity"
                                                               },
                                                               {
-                                                                "unique_name": "definition_activity_02RCOGJ22M7240q631P42uTuspq4sQeScpO",
+                                                                "unique_name": "definition_activity_02U7Y3QG2G3BK4pQbFMioAR4Ub0AbVDSiYB",
                                                                 "name": "For Each",
-                                                                "title": "For each chunk of up to 100 messages",
+                                                                "title": "For each approved move",
                                                                 "type": "logic.for_each",
                                                                 "base_type": "activity",
                                                                 "properties": {
                                                                   "continue_on_failure": false,
-                                                                  "display_name": "For each chunk of up to 100 messages",
+                                                                  "description": "Triggers one response action that was listed on the decision card.",
+                                                                  "display_name": "For each approved move",
                                                                   "skip_execution": false,
-                                                                  "source_array": "$activity.definition_activity_02DTWXJC74P5F2E8emuxBy61DZxUWa2EqIC.output.read_table_from_json$"
+                                                                  "source_array": "$activity.definition_activity_02ZIUMQRZ6B3W1gnA3pHghEd9R1qMVihaxH.output.read_table_from_json$"
                                                                 },
                                                                 "object_type": "definition_activity",
                                                                 "actions": [
                                                                   {
-                                                                    "unique_name": "definition_activity_027QX7NVYIDW64nj4QF3iR3W5tE9PcGl12k",
+                                                                    "unique_name": "definition_activity_02A6MBOH5BF4X5QUz83lUESgwSZaOK6c97A",
                                                                     "name": "HTTP Request",
-                                                                    "title": "Move approved messages",
+                                                                    "title": "Move approved message",
                                                                     "type": "web-service.http_request",
                                                                     "base_type": "activity",
                                                                     "properties": {
@@ -1646,30 +1519,19 @@
                                                                       "action_timeout": 180,
                                                                       "allow_auto_redirect": true,
                                                                       "allow_headers_redirect": false,
-                                                                      "body": "$activity.definition_activity_02RCOGJ22M7240q631P42uTuspq4sQeScpO.input.source_array[@].body$",
                                                                       "content_type": "application/json",
                                                                       "continue_on_error_status_code": true,
                                                                       "continue_on_failure": false,
-                                                                      "custom_headers": [
-                                                                        {
-                                                                          "name": "Authorization",
-                                                                          "value": "Bearer $workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02VIDLP0RXK4X2N0XrPSqvqDwEZO2JmE33J$"
-                                                                        },
-                                                                        {
-                                                                          "name": "x-api-key",
-                                                                          "value": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_0261CQA1TYKVH1l0NEEPHyfJ89URWZHd9eh$"
-                                                                        }
-                                                                      ],
-                                                                      "display_name": "Move approved messages",
+                                                                      "display_name": "Move approved message",
                                                                       "method": "POST",
-                                                                      "relative_url": "/messages/move",
+                                                                      "relative_url": "$activity.definition_activity_02U7Y3QG2G3BK4pQbFMioAR4Ub0AbVDSiYB.input.source_array[@].url$",
                                                                       "runtime_user": {
                                                                         "target_default": true
                                                                       },
                                                                       "skip_execution": false,
                                                                       "target": {
                                                                         "override_workflow_target": true,
-                                                                        "target_id": "definition_target_02SPOB1KIT3NG5Z8B55k2YzQ4jlB1hSNpRu"
+                                                                        "target_id": "$module_target;Cisco XDR;securex:ao:iroh_api;platform-apis$"
                                                                       }
                                                                     },
                                                                     "object_type": "definition_activity"
@@ -1684,12 +1546,14 @@
                                                                       "action_timeout": 180,
                                                                       "continue_on_failure": false,
                                                                       "display_name": "Record move result",
-                                                                      "script": "import json, sys\ntally = json.loads(sys.argv[1] or \"{}\")\nstatus_code = str(sys.argv[2]).strip()\nraw_response = sys.argv[3]\ncount = int(float(sys.argv[4] or \"0\"))\ntally.setdefault(\"queued\", 0)\ntally.setdefault(\"failed\", 0)\ntally.setdefault(\"errors\", [])\ndef flags(node, found):\n    if isinstance(node, dict):\n        if isinstance(node.get(\"queueSuccess\"), bool):\n            found.append(node[\"queueSuccess\"])\n        for value in node.values():\n            flags(value, found)\n    elif isinstance(node, list):\n        for value in node:\n            flags(value, found)\n    return found\nif status_code == \"200\":\n    try:\n        found = flags(json.loads(raw_response or \"{}\"), [])\n    except Exception:\n        found = []\n    if found:\n        tally[\"queued\"] += sum(1 for f in found if f)\n        tally[\"failed\"] += sum(1 for f in found if not f)\n    else:\n        tally[\"queued\"] += count\nelse:\n    tally[\"failed\"] += count\n    if len(tally[\"errors\"]) < 5:\n        tally[\"errors\"].append(\"HTTP \" + status_code + (\" (403 means ETD has no Microsoft 365 write permission)\" if status_code == \"403\" else \"\"))\ntally_json = json.dumps(tally)\n",
+                                                                      "script": "import json, sys\ntally = json.loads(sys.argv[1] or \"{}\")\nstatus_code = str(sys.argv[2]).strip()\nraw_response = sys.argv[3]\ntitle, target, key = sys.argv[4], sys.argv[5], sys.argv[6]\n\ndef plain(text, limit=160):\n    line = \"\".join(c if 32 <= ord(c) < 127 and c not in \"*`[]<>|#\\\\~_{}\" else \" \" for c in str(text)[:4 * limit])\n    return \" \".join(line.split())[:limit]\n\nok, detail = False, \"\"\nif status_code == \"200\":\n    try:\n        body = json.loads(raw_response or \"{}\")\n    except Exception:\n        body = {}\n    data = body.get(\"data\") if isinstance(body, dict) and isinstance(body.get(\"data\"), dict) else {}\n    state = data.get(\"status\")\n    ok = state == \"success\"\n    if not ok:\n        errors = body.get(\"errors\") if isinstance(body, dict) else None\n        parts = []\n        for error in (errors if isinstance(errors, list) else [])[:3]:\n            parts.append(str(error.get(\"message\") or error.get(\"error\") or error) if isinstance(error, dict) else str(error))\n        detail = \"XDR reported \" + plain(state or \"no status\", 30) + (\": \" + plain(\"; \".join(parts)) if parts else \"\")\nelse:\n    detail = \"HTTP \" + plain(status_code, 12)\ntally.setdefault(\"results\", []).append({\"key\": key, \"title\": title, \"target\": target, \"ok\": ok, \"detail\": detail})\ntally_json = json.dumps(tally)\n",
                                                                       "script_arguments": [
-                                                                        "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02T71E6EQ0TWP04qiOXLPclNIPdNX2KpnHT$",
-                                                                        "$activity.definition_activity_027QX7NVYIDW64nj4QF3iR3W5tE9PcGl12k.output.status_code$",
-                                                                        "$activity.definition_activity_027QX7NVYIDW64nj4QF3iR3W5tE9PcGl12k.output.response_body$",
-                                                                        "$activity.definition_activity_02RCOGJ22M7240q631P42uTuspq4sQeScpO.input.source_array[@].count$"
+                                                                        "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02F9RJGLDC4RG4nLzlWn3ISNmUJ2gxw8UiX$",
+                                                                        "$activity.definition_activity_02A6MBOH5BF4X5QUz83lUESgwSZaOK6c97A.output.status_code$",
+                                                                        "$activity.definition_activity_02A6MBOH5BF4X5QUz83lUESgwSZaOK6c97A.output.response_body$",
+                                                                        "$activity.definition_activity_02U7Y3QG2G3BK4pQbFMioAR4Ub0AbVDSiYB.input.source_array[@].title$",
+                                                                        "$activity.definition_activity_02U7Y3QG2G3BK4pQbFMioAR4Ub0AbVDSiYB.input.source_array[@].target$",
+                                                                        "$activity.definition_activity_02U7Y3QG2G3BK4pQbFMioAR4Ub0AbVDSiYB.input.source_array[@].key$"
                                                                       ],
                                                                       "script_queries": [
                                                                         {
@@ -1714,7 +1578,7 @@
                                                                       "skip_execution": false,
                                                                       "variables_to_update": [
                                                                         {
-                                                                          "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02T71E6EQ0TWP04qiOXLPclNIPdNX2KpnHT$",
+                                                                          "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02F9RJGLDC4RG4nLzlWn3ISNmUJ2gxw8UiX$",
                                                                           "variable_value_new": "$activity.definition_activity_02AYI76FN6GO920tMVvLE6CLVfGqplaxhYg.output.script_queries.tally_json$"
                                                                         }
                                                                       ]
@@ -1724,130 +1588,33 @@
                                                                 ]
                                                               },
                                                               {
-                                                                "unique_name": "definition_activity_02J2PHIJV9Z350JbEZqR0M4v1XKkj66glyU",
-                                                                "name": "Read Table from JSON",
-                                                                "title": "Verification sample table",
-                                                                "type": "corejava.read_table_from_json",
+                                                                "unique_name": "definition_activity_0259YL96ZLAOR3g7Uars9vKr8BBefOrtEYy",
+                                                                "name": "HTTP Request",
+                                                                "title": "List ETD response actions again",
+                                                                "type": "web-service.http_request",
                                                                 "base_type": "activity",
                                                                 "properties": {
+                                                                  "accept": "application/json",
                                                                   "action_timeout": 180,
+                                                                  "allow_auto_redirect": true,
+                                                                  "allow_headers_redirect": false,
+                                                                  "body": "$activity.definition_activity_02OXB2SPP3A237HXDMFkDMGsa2EduFUnBP4.output.script_queries.verify_body$",
+                                                                  "content_type": "application/json",
+                                                                  "continue_on_error_status_code": true,
                                                                   "continue_on_failure": false,
-                                                                  "display_name": "Verification sample table",
-                                                                  "input_json": "$activity.definition_activity_02NFWC9N22VQ25AxbVG8AR58VAhEtswmoa3.output.script_queries.verify_sample$",
-                                                                  "jsonpath_query": "$.*",
-                                                                  "persist_output": false,
-                                                                  "populate_columns": false,
+                                                                  "display_name": "List ETD response actions again",
+                                                                  "method": "POST",
+                                                                  "relative_url": "/iroh-response/respond/observables",
+                                                                  "runtime_user": {
+                                                                    "target_default": true
+                                                                  },
                                                                   "skip_execution": false,
-                                                                  "table_columns": [
-                                                                    {
-                                                                      "column_name": "body",
-                                                                      "column_type": "string"
-                                                                    }
-                                                                  ]
+                                                                  "target": {
+                                                                    "override_workflow_target": true,
+                                                                    "target_id": "$module_target;Cisco XDR;securex:ao:iroh_api;platform-apis$"
+                                                                  }
                                                                 },
                                                                 "object_type": "definition_activity"
-                                                              },
-                                                              {
-                                                                "unique_name": "definition_activity_029RAK23XIQSB3IgqF83eDJR6UQUnmxPJp3",
-                                                                "name": "For Each",
-                                                                "title": "For each sampled message",
-                                                                "type": "logic.for_each",
-                                                                "base_type": "activity",
-                                                                "properties": {
-                                                                  "continue_on_failure": false,
-                                                                  "display_name": "For each sampled message",
-                                                                  "skip_execution": false,
-                                                                  "source_array": "$activity.definition_activity_02J2PHIJV9Z350JbEZqR0M4v1XKkj66glyU.output.read_table_from_json$"
-                                                                },
-                                                                "object_type": "definition_activity",
-                                                                "actions": [
-                                                                  {
-                                                                    "unique_name": "definition_activity_02BH32ZMI6A3D1CiAUDZYorEPaqP1VDCfTG",
-                                                                    "name": "HTTP Request",
-                                                                    "title": "Read message status",
-                                                                    "type": "web-service.http_request",
-                                                                    "base_type": "activity",
-                                                                    "properties": {
-                                                                      "accept": "application/json",
-                                                                      "action_timeout": 180,
-                                                                      "allow_auto_redirect": true,
-                                                                      "allow_headers_redirect": false,
-                                                                      "body": "$activity.definition_activity_029RAK23XIQSB3IgqF83eDJR6UQUnmxPJp3.input.source_array[@].body$",
-                                                                      "content_type": "application/json",
-                                                                      "continue_on_error_status_code": true,
-                                                                      "continue_on_failure": false,
-                                                                      "custom_headers": [
-                                                                        {
-                                                                          "name": "Authorization",
-                                                                          "value": "Bearer $workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02VIDLP0RXK4X2N0XrPSqvqDwEZO2JmE33J$"
-                                                                        },
-                                                                        {
-                                                                          "name": "x-api-key",
-                                                                          "value": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_0261CQA1TYKVH1l0NEEPHyfJ89URWZHd9eh$"
-                                                                        }
-                                                                      ],
-                                                                      "display_name": "Read message status",
-                                                                      "method": "POST",
-                                                                      "relative_url": "/messages/status",
-                                                                      "runtime_user": {
-                                                                        "target_default": true
-                                                                      },
-                                                                      "skip_execution": false,
-                                                                      "target": {
-                                                                        "override_workflow_target": true,
-                                                                        "target_id": "definition_target_02SPOB1KIT3NG5Z8B55k2YzQ4jlB1hSNpRu"
-                                                                      }
-                                                                    },
-                                                                    "object_type": "definition_activity"
-                                                                  },
-                                                                  {
-                                                                    "unique_name": "definition_activity_023GTKKMSBZ2B7lBrktgC8soVFrNpdlGADX",
-                                                                    "name": "Execute Python Script",
-                                                                    "title": "Record verification",
-                                                                    "type": "python3.script",
-                                                                    "base_type": "activity",
-                                                                    "properties": {
-                                                                      "action_timeout": 180,
-                                                                      "continue_on_failure": false,
-                                                                      "display_name": "Record verification",
-                                                                      "script": "import json, sys\ntally = json.loads(sys.argv[1] or \"{}\")\nstatus_code = str(sys.argv[2]).strip()\nraw_response = sys.argv[3]\nexpected = (sys.argv[4] or \"\").strip().lower()\nfor key in (\"verified\", \"not_verified\", \"unable\"):\n    tally.setdefault(key, 0)\ndef folders(node, key, seen):\n    if isinstance(node, dict):\n        for k, v in node.items():\n            folders(v, str(k).lower(), seen)\n    elif isinstance(node, list):\n        for v in node:\n            folders(v, key, seen)\n    elif isinstance(node, str) and (\"folder\" in key or \"action\" in key):\n        for name in (\"quarantine\", \"junk\", \"trash\", \"inbox\", \"delete\"):\n            if name in node.lower():\n                seen.add(name)\n    return seen\nseen = set()\nif status_code == \"200\":\n    try:\n        seen = folders(json.loads(raw_response or \"{}\"), \"\", set())\n    except Exception:\n        seen = set()\nif seen == {expected}:\n    tally[\"verified\"] += 1\nelif seen and expected not in seen:\n    tally[\"not_verified\"] += 1\nelse:\n    tally[\"unable\"] += 1\ntally_json = json.dumps(tally)\n",
-                                                                      "script_arguments": [
-                                                                        "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02T71E6EQ0TWP04qiOXLPclNIPdNX2KpnHT$",
-                                                                        "$activity.definition_activity_02BH32ZMI6A3D1CiAUDZYorEPaqP1VDCfTG.output.status_code$",
-                                                                        "$activity.definition_activity_02BH32ZMI6A3D1CiAUDZYorEPaqP1VDCfTG.output.response_body$",
-                                                                        "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02K39SVNM5YH93T2pu1YHjHCnDTfUlB4Dpw$"
-                                                                      ],
-                                                                      "script_queries": [
-                                                                        {
-                                                                          "script_query": "tally_json",
-                                                                          "script_query_name": "tally_json",
-                                                                          "script_query_type": "string"
-                                                                        }
-                                                                      ],
-                                                                      "skip_execution": false
-                                                                    },
-                                                                    "object_type": "definition_activity"
-                                                                  },
-                                                                  {
-                                                                    "unique_name": "definition_activity_02BLP4J1I72LU00aSUDf84eoYrSAdfInq8n",
-                                                                    "name": "Set Variables",
-                                                                    "title": "Store verification tally",
-                                                                    "type": "core.set_multiple_variables",
-                                                                    "base_type": "activity",
-                                                                    "properties": {
-                                                                      "continue_on_failure": false,
-                                                                      "display_name": "Store verification tally",
-                                                                      "skip_execution": false,
-                                                                      "variables_to_update": [
-                                                                        {
-                                                                          "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02T71E6EQ0TWP04qiOXLPclNIPdNX2KpnHT$",
-                                                                          "variable_value_new": "$activity.definition_activity_023GTKKMSBZ2B7lBrktgC8soVFrNpdlGADX.output.script_queries.tally_json$"
-                                                                        }
-                                                                      ]
-                                                                    },
-                                                                    "object_type": "definition_activity"
-                                                                  }
-                                                                ]
                                                               },
                                                               {
                                                                 "unique_name": "definition_activity_02JETEGLFYXE86RcijLHruBpBUGyuYGuwzG",
@@ -1859,12 +1626,13 @@
                                                                   "action_timeout": 180,
                                                                   "continue_on_failure": false,
                                                                   "display_name": "Build containment result",
-                                                                  "script": "import json, sys\nmailbox, folder, digest = sys.argv[1], sys.argv[2], sys.argv[3]\ntally = json.loads(sys.argv[4] or \"{}\")\nqueued, failed = tally.get(\"queued\", 0), tally.get(\"failed\", 0)\nverified, not_verified, unable = tally.get(\"verified\", 0), tally.get(\"not_verified\", 0), tally.get(\"unable\", 0)\nsampled = verified + not_verified + unable\nif sampled and verified == sampled:\n    check = \"VERIFIED on a sample of \" + str(sampled)\nelif not_verified:\n    check = \"NOT VERIFIED: \" + str(not_verified) + \" of \" + str(sampled) + \" sampled messages are not in \" + folder + \" yet (ETD applies moves from a queue; check again in ETD)\"\nelse:\n    check = \"UNABLE TO VERIFY from the ETD status response; check in ETD\"\nresult = (\"`\" + mailbox + \"`: APPROVED and executed. \" + str(queued) + \" messages queued for move to \" + folder\n          + \", \" + str(failed) + \" failed (package \" + digest + \"). Verification: \" + check + \".\")\nif tally.get(\"errors\"):\n    result += \" Errors: \" + \"; \".join(tally[\"errors\"]) + \".\"\nif folder != \"trash\":\n    result += \" To undo, move the messages back to the inbox in ETD; that needs its own approval.\"\n",
+                                                                  "script": "import json, sys\nname, digest = json.loads(sys.argv[1]).get(\"name\", \"Incident\"), sys.argv[2]\ntally = json.loads(sys.argv[3] or \"{}\")\nverify_status, verify_raw = str(sys.argv[4]).strip(), sys.argv[5]\nresults = tally.get(\"results\") if isinstance(tally, dict) and isinstance(tally.get(\"results\"), list) else []\nresults = [r for r in results if isinstance(r, dict)]\n\ndef show(value):\n    line = \"\".join(c if 32 <= ord(c) < 127 and c != \"`\" else \"?\" for c in str(value))\n    return \"`\" + line[:200] + \"`\"\n\n# What XDR offers now, per module: the exact action for the exact observable, or, when the answer does\n# not say which observable an offer is for, the action of that module for any observable.\nanswered, exact, loose = None, set(), set()\nif verify_status == \"200\":\n    try:\n        body = json.loads(verify_raw or \"null\")\n        if isinstance(body, dict):\n            body = body.get(\"data\")\n        if isinstance(body, list):\n            answered = set()\n            for entry in body:\n                if not isinstance(entry, dict):\n                    continue\n                instance = str(entry.get(\"module_instance_id\") or entry.get(\"module-instance-id\"))\n                answered.add(instance)\n                params = entry.get(\"query-params\") if isinstance(entry.get(\"query-params\"), dict) else {}\n                if params.get(\"observable_type\") is None and params.get(\"observable_value\") is None:\n                    loose.add(str(entry.get(\"id\")) + \"|\" + instance)\n                else:\n                    exact.add(\"|\".join((str(entry.get(\"id\")), instance, str(params.get(\"observable_type\")),\n                                        str(params.get(\"observable_value\")).lower())))\n    except Exception:\n        answered = None\nsucceeded = [r for r in results if r.get(\"ok\")]\nfailed = [r for r in results if not r.get(\"ok\")]\nlines = []\nfor r in results:\n    line = \"\\\"\" + str(r.get(\"title\")) + \"\\\" on \" + show(r.get(\"target\")) + \": \"\n    fields = str(r.get(\"key\")).split(\"|\")\n    if not r.get(\"ok\"):\n        line += \"FAILED (\" + str(r.get(\"detail\") or \"no detail\") + \")\"\n    elif answered is None or len(fields) < 4 or fields[1] not in answered:\n        line += \"XDR reported success; UNABLE TO VERIFY (the module did not list its actions afterwards)\"\n    elif r.get(\"key\") in exact or fields[0] + \"|\" + fields[1] in loose:\n        line += \"XDR reported success; the action is still offered, so the change is NOT CONFIRMED\"\n    else:\n        line += \"XDR reported success and no longer offers the action (consistent with the change being applied)\"\n    lines.append(line)\nresult = (name + \": APPROVED and executed (package \" + digest + \"). \" + str(len(succeeded)) + \" of \" + str(len(results))\n          + \" actions reported success\" + (\", \" + str(len(failed)) + \" failed\" if failed else \"\") + \". \"\n          + \" | \".join(lines)\n          + \" | The XDR trigger reports only success or failure: confirm each change in the product console. \"\n          + \"To undo an action, use the matching restore task of the incident playbook; that is a separate decision.\")\n",
                                                                   "script_arguments": [
-                                                                    "$activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].mailbox$",
-                                                                    "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.input.variable_workflow_02K39SVNM5YH93T2pu1YHjHCnDTfUlB4Dpw$",
-                                                                    "$activity.definition_activity_02NFWC9N22VQ25AxbVG8AR58VAhEtswmoa3.output.script_queries.package_digest$",
-                                                                    "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02T71E6EQ0TWP04qiOXLPclNIPdNX2KpnHT$"
+                                                                    "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02HIM5Q351ILM3JZ0Q30TOjDopSUa7UdYNv$",
+                                                                    "$activity.definition_activity_02OXB2SPP3A237HXDMFkDMGsa2EduFUnBP4.output.script_queries.package_digest$",
+                                                                    "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02F9RJGLDC4RG4nLzlWn3ISNmUJ2gxw8UiX$",
+                                                                    "$activity.definition_activity_0259YL96ZLAOR3g7Uars9vKr8BBefOrtEYy.output.status_code$",
+                                                                    "$activity.definition_activity_0259YL96ZLAOR3g7Uars9vKr8BBefOrtEYy.output.response_body$"
                                                                   ],
                                                                   "script_queries": [
                                                                     {
@@ -1890,7 +1658,7 @@
                                                                   "variables_to_update": [
                                                                     {
                                                                       "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$",
-                                                                      "variable_value_new": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$\n- $activity.definition_activity_02JETEGLFYXE86RcijLHruBpBUGyuYGuwzG.output.script_queries.result$"
+                                                                      "variable_value_new": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$\n- `$activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].mailbox$`: $activity.definition_activity_02JETEGLFYXE86RcijLHruBpBUGyuYGuwzG.output.script_queries.result$"
                                                                     }
                                                                   ]
                                                                 },
@@ -1933,7 +1701,7 @@
                                                           "variables_to_update": [
                                                             {
                                                               "variable_to_update": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$",
-                                                              "variable_value_new": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$\n- `$activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].mailbox$`: decision \"$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02WE0QPHZJ15F21Tyl3F1meMnKBNEoQPPLF$\". Nothing was changed (package $activity.definition_activity_02NFWC9N22VQ25AxbVG8AR58VAhEtswmoa3.output.script_queries.package_digest$)."
+                                                              "variable_value_new": "$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.output.workflow_results$\n- `$activity.definition_activity_02LH2XLL0BQVZ03GjwxbYJjyMTIDdfFHfgo.input.source_array[@].mailbox$`: decision \"$workflow.definition_workflow_02Z4AR352O6QR6IidwMvYIOOo7bQvF5hrUW.local.variable_workflow_02WE0QPHZJ15F21Tyl3F1meMnKBNEoQPPLF$\". Nothing was changed (package $activity.definition_activity_02OXB2SPP3A237HXDMFkDMGsa2EduFUnBP4.output.script_queries.package_digest$)."
                                                             }
                                                           ]
                                                         },
@@ -2044,60 +1812,11 @@
     ],
     "template_type": "template_workflow.incident_response"
   },
-  "targets": {
-    "definition_target_02ZZNHFZ8C4OD5sCwUVtyv2qrlFfpHoyKgY": {
-      "unique_name": "definition_target_02ZZNHFZ8C4OD5sCwUVtyv2qrlFfpHoyKgY",
-      "name": "Email Bombing - ETD Token",
-      "title": "Email Bombing - ETD Token",
-      "type": "web-service.endpoint",
-      "base_type": "target",
-      "object_type": "definition_target",
-      "properties": {
-        "default_runtime_user_id": "definition_runtime_user_02LH44PSGWTGU3AaTWctvwRyGO806bBsGlm",
-        "description": "ETD token endpoint, called with the API client. Regional hosts: api.us, api.de, api.au, api.in or api.ae .etd.cisco.com.",
-        "disable_certificate_validation": false,
-        "display_name": "Email Bombing - ETD Token",
-        "host": "api.us.etd.cisco.com",
-        "ignore_proxy": false,
-        "no_runtime_user": false,
-        "path": "/v1",
-        "protocol": "https"
-      }
-    },
-    "definition_target_02SPOB1KIT3NG5Z8B55k2YzQ4jlB1hSNpRu": {
-      "unique_name": "definition_target_02SPOB1KIT3NG5Z8B55k2YzQ4jlB1hSNpRu",
-      "name": "Email Bombing - ETD API",
-      "title": "Email Bombing - ETD API",
-      "type": "web-service.endpoint",
-      "base_type": "target",
-      "object_type": "definition_target",
-      "properties": {
-        "description": "ETD message search, move and status, called with the token. Regional hosts: api.us, api.de, api.au, api.in or api.ae .etd.cisco.com.",
-        "disable_certificate_validation": false,
-        "display_name": "Email Bombing - ETD API",
-        "host": "api.us.etd.cisco.com",
-        "ignore_proxy": false,
-        "no_runtime_user": true,
-        "path": "/v1",
-        "protocol": "https"
-      }
+  "module_targets": [
+    {
+      "module_type": "Cisco XDR",
+      "external_id": "securex:ao:iroh_api",
+      "proxy_endpoint_metadata_id": "platform-apis"
     }
-  },
-  "runtime_users": {
-    "definition_runtime_user_02LH44PSGWTGU3AaTWctvwRyGO806bBsGlm": {
-      "unique_name": "definition_runtime_user_02LH44PSGWTGU3AaTWctvwRyGO806bBsGlm",
-      "name": "Email Bombing - ETD API Client",
-      "title": "Email Bombing - ETD API Client",
-      "type": "runtime_user.web-service_basic_credentials",
-      "base_type": "runtime_user",
-      "object_type": "definition_runtime_user",
-      "properties": {
-        "auth_option": "Basic",
-        "basic_password": "",
-        "basic_username": "",
-        "description": "Secure Email Threat Defense API client. Username: client ID. Password: client secret.",
-        "display_name": "Email Bombing - ETD API Client"
-      }
-    }
-  }
+  ]
 }

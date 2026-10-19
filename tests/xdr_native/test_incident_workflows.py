@@ -154,8 +154,10 @@ def test_approval_requests_follow_the_org_export(document, spec):
         if activity["title"] == "Request standard approval":
             assert set(activity["properties"]) == set(standard["properties"])
     for request in (standard, elevated):
-        assert request["properties"]["approval_choices_holder"]["approval_choices"] == [
-            "Approve", "Reject", "More investigation"]
+        # XDR showed an empty "Approval choices array" for a custom list, so the default pair is used.
+        assert request["properties"]["approval_choices_holder"] == {
+            "approval_choices": ["Approve", "Reject"], "is_custom_approval_choices": False,
+            "is_default_approval_choices": True}
         assert request["properties"]["wait_for_request_approval_response"] is True
 
 
@@ -1014,7 +1016,7 @@ def _gate_branch_outside_a_condition_block(document):
 def _script_edited(document):
     name = "Assess and write decision card" if any(
         a["title"] == "Assess and write decision card" for a, _ in validate.walk(document["workflow"]["actions"])) \
-        else "Assess flood and write decision card"
+        else "Plan moves and write decision card"
     _find(document, name)[0]["properties"]["script"] += "card = 'Nothing will change.'\n"
 
 
@@ -1130,7 +1132,7 @@ def test_a_loop_that_clears_the_decision_each_pass_is_accepted(ransomware):
 
 def test_every_exported_script_is_one_of_the_repository_scripts():
     known = validate.known_scripts()
-    assert len(known) == 11
+    assert len(known) == 9  # Email Bombing reuses the trigger record and result steps
     for workflow in build_tool.workflows(email_bombing.Settings()):
         for activity, _ in validate.walk(workflow.export()["workflow"]["actions"]):
             if activity["type"] == "python3.script":
@@ -1226,7 +1228,6 @@ def test_org_settings_become_the_input_defaults_of_every_workflow(tmp_path, monk
     _write_settings(tmp_path, """
 approver_roles: [user]
 elevated_approvals: 3
-etd_host: api.de.etd.cisco.com
 internal_domain_suffixes: [corp.example.com, example.com]
 protected_assets: ["DC-*", "ceo@example.com"]
 never_act_on: [example.com, 192.0.2.0/28]
@@ -1244,7 +1245,7 @@ trusted_sender_domains: [partner.example]
         if written["workflow"]["name"] == "Email Bombing":
             assert _variable(written, "Protected Mailboxes")["value"] == "@finance.example.com"
             assert _variable(written, "Trusted Sender Domains")["value"] == "partner.example"
-            assert {t["properties"]["host"] for t in written["targets"].values()} == {"api.de.etd.cisco.com"}
+            assert set(written) == {"workflow", "module_targets"}  # no ETD target or account key
         else:
             assert _variable(written, "Internal Domain Suffixes")["value"] == "corp.example.com, example.com"
             assert _variable(written, "Protected Assets")["value"] == "DC-*, ceo@example.com"
@@ -1255,8 +1256,7 @@ trusted_sender_domains: [partner.example]
 
 def test_committed_settings_file_changes_nothing_until_it_is_filled_in():
     values = build_tool.load_settings(ROOT / build_tool.SETTINGS_FILE)
-    assert values == {"approver_roles": ["admin", "user"], "elevated_roles": ["admin"], "elevated_approvals": 2,
-                      "etd_host": "api.us.etd.cisco.com"}
+    assert values == {"approver_roles": ["admin", "user"], "elevated_roles": ["admin"], "elevated_approvals": 2}
     assert email_bombing.Settings(**values) == email_bombing.Settings()
 
 
@@ -1268,7 +1268,8 @@ def test_committed_settings_file_changes_nothing_until_it_is_filled_in():
     ("approver_roles: [everyone]", "XDR roles"),
     ("elevated_approvals: 0", "at least 1"),
     ("never_act_on: ['$workflow.x.local.y$']", "dollar sign"),
-    ("etd_host: \"api.us.etd.cisco.com\\nx\"", "one line"),
+    ("never_act_on: [\"a\\nb\"]", "one line"),
+    ("etd_host: api.us.etd.cisco.com", "unknown settings"),
 ])
 def test_settings_file_is_checked(tmp_path, monkeypatch, text, message):
     monkeypatch.setattr(build_tool, "ROOT", tmp_path)
@@ -1277,11 +1278,13 @@ def test_settings_file_is_checked(tmp_path, monkeypatch, text, message):
         build_tool.main([])
 
 
-def test_an_unknown_etd_host_is_refused_by_the_validator(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(build_tool, "ROOT", tmp_path)
-    assert build_tool.main(["--etd-host", "evil.example"]) == 1
-    assert "not a known HTTPS host and path" in capsys.readouterr().err
-    assert not list((tmp_path / "xdr").rglob(f"{email_bombing.WORKFLOW_ID}.json"))
+def test_no_workflow_exports_a_vendor_target_or_account_key():
+    """XDR asks for a username and password on import when a workflow carries an account key."""
+    for workflow in build_tool.workflows(email_bombing.Settings()):
+        document = workflow.export()
+        assert set(document) == {"workflow", "module_targets"}
+        document["targets"] = {}
+        assert any("envelope key 'targets'" in problem for problem in validate.check_structure(document))
 
 
 def test_rule_guide_covers_every_workflow_once(tmp_path, monkeypatch, capsys):

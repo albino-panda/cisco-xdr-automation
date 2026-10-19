@@ -150,8 +150,12 @@ test bed, or be removed.
    the answer (assumed `response`), and that the wait is not cut by the documented 30-minute run-time limit.
 3. **ETD has no automatic target.** XDR creates Automation targets for Entra ID, Defender for Endpoint,
    Defender for Office 365, Intune, Meraki, Umbrella, Secure Endpoint, Secure Malware Analytics and Secure
-   Cloud Analytics, but not for Secure Email Threat Defense. The ETD target and account key are created
-   by hand in XDR.
+   Cloud Analytics, but not for Secure Email Threat Defense. A hand-made ETD target needs an account key,
+   which XDR asks for on import, so `Email Bombing` reads ETD through the XDR platform APIs instead
+   (section 8).
+   **Approval choices.** A custom choice list (*Approve*, *Reject*, *More investigation*) imported with an
+   empty "Approval choices array", and Cisco does not document its format. All 22 workflows use the default
+   *Approve* / *Reject* pair; *Reject* changes nothing.
 4. **Python module set.** The script activity has a fixed module list (`help("modules")` shows it). The ported
    logic must use only those modules.
 5. **Limits to confirm in the org:** maximum workflow run time and activity count, 100 variables per workflow,
@@ -166,9 +170,11 @@ is not generated: undoing an action uses the restore tasks of the Cisco incident
 
 **Two workflow bodies.**
 
-- `Email Bombing` reads Secure Email Threat Defense directly, because measuring a flood needs the ETD message
-  search. Its four requests match Cisco's own ETD atomics, exported from the org
-  ([xdr-catalog/atomic-interfaces.md](xdr-catalog/atomic-interfaces.md)).
+- `Email Bombing` measures the flood from the Secure Email Threat Defense sightings of the mailbox
+  (`observe/observables`), lists the ETD response actions on offer for the messages to move
+  (`respond/observables`) and, after approval, triggers them (`respond/trigger`). It uses the ETD integration
+  connected in XDR. An earlier version called the ETD API through hand-made targets; XDR then asked for the
+  ETD client ID and secret on import, which the owner did not want.
 - The other 21 attack types share the *incident response workflow* (`src/xdr_native/incident.py`), which calls
   only the Cisco XDR platform APIs of [integrations.md](integrations.md) section 2.1: verdicts
   (`deliberate/observables`), sightings (`observe/observables`), the response actions on offer
@@ -182,8 +188,8 @@ is not generated: undoing an action uses the restore tasks of the Cisco incident
 |---|---|---|
 | Call the Cisco-managed atomics | Their workflow IDs are public ([xdr-catalog/README.md](xdr-catalog/README.md)), but a call is wired by input and output variable IDs, which Cisco does not publish. An exported copy of an atomic carries new IDs | Not used. The exported copies document the request shapes instead |
 | Call `XDR - Contain Incident: ...` | The catalog says each one ends unless a playbook task started it | Not used |
-| Vendor APIs through HTTP targets | Needs a target and credentials per product and per org | Used only for ETD, where XDR has no equivalent read |
-| XDR enrich and response APIs | VERIFIED endpoints, one built-in target, and the response actions are whatever the org's modules offer | Used for the 21 attack types |
+| Vendor APIs through HTTP targets | Needs a target and credentials per product and per org; XDR asks for them on import | Not used |
+| XDR enrich and response APIs | VERIFIED endpoints, one built-in target, and the response actions are whatever the org's modules offer | Used for all 22 workflows |
 
 **What this changes against sections 2 to 4.**
 

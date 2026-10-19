@@ -1,15 +1,18 @@
 """The Email Bombing workflow, built on the ``Email Bombing`` workflow exported from the target XDR org.
 
+It reads Secure Email Threat Defense (ETD) through the Cisco XDR platform APIs, so it uses the ETD
+integration already connected in XDR: no ETD target, account key or API key is exported or configured.
+
 Lifecycle inside one XDR workflow, per mailbox:
 
-1. investigate (reads only): search Secure Email Threat Defense for inbound mail to the mailbox;
-2. recommend: a script measures the flood, sets aside the messages a flood is used to hide and writes
-   the decision card;
+1. investigate (reads only): ask XDR for the ETD sightings of the mailbox;
+2. recommend: a script measures the flood and sets aside the messages a flood is used to hide; the
+   response actions XDR offers for the remaining messages are listed and the decision card is written;
 3. approve: a person with the assigned XDR role answers a Request Approval task (an elevated task,
    needing two approvals, for protected mailboxes and large floods);
-4. contain: only inside the ``Decision = Approve`` and ``Dry Run = false`` branches, move exactly the
-   messages listed before the approval;
-5. verify: read the status of a sample of the moved messages;
+4. contain: only inside the ``Decision = Approve`` and ``Dry Run = false`` branches, trigger exactly the
+   response actions listed before the approval;
+5. verify: list the response actions again and report which ones XDR no longer offers;
 6. record: the outcome goes to the incident worklog through the template's ``workflow_results``.
 
 ``validate.check_approval_gate`` proves point 4 on the generated JSON.
@@ -18,8 +21,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from . import scripts
-from .builder import APPROVAL_RESPONSE, Activity, Workflow, cond, item, out
+from . import incident_scripts, scripts
+from .builder import APPROVAL_RESPONSE, DEFAULT_CHOICES, Activity, Workflow, cond, item, out
 
 #: Identifiers of the "Email Bombing" workflow and of the template activities kept from its export, so
 #: that importing the generated file updates that workflow instead of creating a second one.
@@ -35,7 +38,12 @@ TEMPLATE_IDS = {
 RESPONSE_CATEGORY = "category_1BMfMXSnJMyt5Ihqi7rWJr5N8cf"
 
 APPROVE = "Approve"
-CHOICES = [APPROVE, "Reject", "More investigation"]
+#: XDR's default choices. A custom choice list imported with an empty "Approval choices array" in the
+#: target org, and Cisco does not document its format. *Reject* already changes nothing.
+CHOICES = list(DEFAULT_CHOICES)
+#: Default text looked for in the title of the ETD response action that moves a message (case-insensitive
+#: regular expression). The title must also name the Containment Folder. Titles are not documented.
+MOVE_PATTERN = "^(move|quarantine|remediate)"
 
 
 @dataclass(frozen=True)
@@ -47,7 +55,6 @@ class Settings:
     #: Roles asked when a protected mailbox or a large flood is involved, and how many must approve.
     elevated_roles: list[str] = field(default_factory=lambda: ["admin"])
     elevated_approvals: int = 2
-    etd_host: str = "api.us.etd.cisco.com"
     #: Defaults of the org lists, written into every workflow so they are set once and not per workflow.
     #: Comma-separated. They stay inputs: a rule or a playbook task can still override them.
     internal_domain_suffixes: str = ""
@@ -58,7 +65,7 @@ class Settings:
 
     def __post_init__(self) -> None:
         for name in ("internal_domain_suffixes", "protected_assets", "never_act_on", "protected_mailboxes",
-                     "trusted_sender_domains", "etd_host"):
+                     "trusted_sender_domains"):
             value = getattr(self, name)
             if not isinstance(value, str) or "$" in value or "\n" in value or len(value) > 4000:
                 raise ValueError(f"{name}: one line of text without a dollar sign is expected")
@@ -68,10 +75,11 @@ def build(settings: Settings | None = None) -> Workflow:
     settings = settings or Settings()
     wf = Workflow(
         "Email-Bombing", "Email Bombing",
-        "Responds to an email or subscription bombing incident. For each mailbox it searches Secure Email "
-        "Threat Defense, measures the flood, lists the messages the flood may hide and asks an administrator or incident responder "
-        "to approve moving the flood out of the inbox. Nothing is moved without that approval, and nothing "
-        "is moved while Dry Run is true.",
+        "Responds to an email or subscription bombing incident. For each mailbox it reads the Secure Email "
+        "Threat Defense sightings through Cisco XDR, measures the flood, lists the messages the flood may hide "
+        "and asks an administrator or incident responder to approve moving the flood out of the inbox with "
+        "the ETD response action XDR offers. Nothing is moved without that approval, and nothing is moved "
+        "while Dry Run is true.",
         unique_name=WORKFLOW_ID,
     )
     wf.properties = {
@@ -81,6 +89,7 @@ def build(settings: Settings | None = None) -> Workflow:
     }
     wf.categories = [RESPONSE_CATEGORY]
     wf.template_type = "template_workflow.incident_response"
+    platform = wf.module_target()
 
     # -- variables ---------------------------------------------------------------------------------
     dry_run = wf.var("Dry Run", "boolean", "input", True,
@@ -92,54 +101,44 @@ def build(settings: Settings | None = None) -> Workflow:
     mailbox_in = wf.var("Mailbox", "string", "input",
                         description="Optional. A mailbox to assess when the workflow is started by hand.")
     lookback = wf.var("Lookback Minutes", "integer", "input", 60,
-                      description="How far back to search for the flood (5 to 1440).")
+                      description="How far back to count the flood (5 to 1440).")
     min_messages = wf.var("Minimum Messages", "integer", "input", 30,
                           description="Fewer inbound messages than this is not a flood.")
     min_domains = wf.var("Minimum Sender Domains", "integer", "input", 10,
                          description="Fewer different sender domains than this is not a flood.")
     min_clean = wf.var("Minimum Clean Percent", "integer", "input", 50,
-                       description="Share of neutral or graymail messages a subscription flood must reach.")
-    max_messages = wf.var("Maximum Messages", "integer", "input", 1000,
-                          description="Collection limit per mailbox. A larger flood needs elevated approval "
-                                      "and a second run.")
-    elevated_above = wf.var("Elevated Approval Above", "integer", "input", 500,
+                       description="Share of neutral or graymail messages a subscription flood must reach, among "
+                                   "the messages whose sighting names an ETD verdict.")
+    max_messages = wf.var("Maximum Messages", "integer", "input", 200,
+                          description="Collection limit per mailbox. Each message is moved by its own XDR response "
+                                      "action. A larger flood needs elevated approval and a second run.")
+    elevated_above = wf.var("Elevated Approval Above", "integer", "input", 100,
                             description="Moving more messages than this needs elevated approval.")
     folder = wf.var("Containment Folder", "string", "input", "quarantine",
-                    description="Where approved messages go: quarantine, junk or trash. Delete is refused.")
-    verdict = wf.var("Reclassify Verdict", "string", "input", "graymail",
-                     description="ETD verdict recorded with the move (the ETD API requires one).")
+                    description="Where approved messages go: quarantine, junk or trash. Delete is refused. The "
+                                "ETD response action used must name this folder.")
+    pattern = wf.var("Move Action Pattern", "string", "input", MOVE_PATTERN,
+                     description="Text of the ETD response action that moves a message (regular expression on its "
+                                 "title, case-insensitive). The worklog lists the titles on offer when nothing "
+                                 "matches.")
     protected = wf.var("Protected Mailboxes", "string", "input", settings.protected_mailboxes,
                        description="Comma-separated addresses or @domains that always need elevated approval "
                                    "(executives, finance, shared and service mailboxes).")
     trusted = wf.var("Trusted Sender Domains", "string", "input", settings.trusted_sender_domains,
                      description="Comma-separated sender domains whose messages are never moved.")
-    api_key = wf.var("ETD API Key", "secure_string", "local",
-                     description="Secure Email Threat Defense API key, sent as x-api-key. Set it in the editor.")
-    token = wf.var("ETD Access Token", "secure_string", "local",
-                   description="Short-lived ETD token obtained by the workflow.")
+    # Script steps in real exports receive variable references, not literal JSON, so the name is a variable.
+    identity = wf.var("Workflow Rules", "string", "local", '{"name": "Email Bombing"}',
+                      description="Name used in the result line. Generated: do not edit here.")
     candidates = wf.var("Candidate Observables", "string", "local")
-    search_body = wf.var("Search Body", "string", "local")
-    state = wf.var("Search State", "string", "local", "{}")
-    has_more = wf.var("Has More Pages", "string", "local", "false")
     decision = wf.var("Decision", "string", "local",
                       description="Answer of the approval task for the mailbox being processed.")
-    tally = wf.var("Containment Tally", "string", "local", "{}")
+    tally = wf.var("Action Tally", "string", "local", "{}")
     results = wf.template_output("workflow_results")
     started_by = wf.template_output("started_by_type")
 
     def report(title: str, text: str) -> Activity:
         """Append one line to the note the template writes to the incident worklog."""
         return wf.set_vars(title, [(results, f"{results}\n- {text}")])
-
-    # -- targets -----------------------------------------------------------------------------------
-    client = wf.runtime_user("Email Bombing - ETD API Client",
-                             "Secure Email Threat Defense API client. Username: client ID. Password: client secret.")
-    regions = "Regional hosts: api.us, api.de, api.au, api.in or api.ae .etd.cisco.com."
-    token_target = wf.target("Email Bombing - ETD Token", settings.etd_host, path="/v1", runtime_user_id=client,
-                             description="ETD token endpoint, called with the API client. " + regions)
-    api_target = wf.target("Email Bombing - ETD API", settings.etd_host, path="/v1",
-                           description="ETD message search, move and status, called with the token. " + regions)
-    etd_headers = [("Authorization", f"Bearer {token}"), ("x-api-key", api_key)]
 
     # -- 1. collect the observables the template hands over -----------------------------------------
     selected = wf.for_each(
@@ -169,44 +168,40 @@ def build(settings: Settings | None = None) -> Workflow:
                        description="Investigates one mailbox, asks for approval and acts on the answer.")
     mailbox, is_protected = item(each, "mailbox"), item(each, "protected")
 
-    reset = wf.set_vars("Reset state for this mailbox", [
-        (decision, ""), (state, "{}"), (tally, "{}"), (has_more, "true")])
-    build_search = wf.python("Build ETD search", scripts.BUILD_SEARCH, [mailbox, lookback],
-                             [("search_body", "string"), ("window_start", "string"), ("window_end", "string")])
-    window_start = out(build_search, "script_queries.window_start")
-    window_end = out(build_search, "script_queries.window_end")
-    store_search = wf.set_vars("Store search body", [(search_body, out(build_search, "script_queries.search_body"))])
-    # Same request as Cisco's "Secure Email Threat Defense - Get Access Token" atomic: no body, JSON content type.
-    get_token = wf.http("Get ETD access token", method="POST", target_id=token_target, relative_url="/oauth/token",
-                        headers=[("x-api-key", api_key)])
-    extract_token = wf.jsonpath("Extract ETD access token", out(get_token, "response_body"),
-                                [("$.accessToken", "access_token", "secure_string")])
-    store_token = wf.set_vars("Store ETD access token",
-                              [(token, out(extract_token, "jsonpath_queries.access_token"))])
-    search = wf.http("Search ETD messages", method="POST", target_id=api_target, relative_url="/messages/search",
-                     body=search_body, headers=etd_headers)
-    merge = wf.python("Merge page into search state", scripts.MERGE_PAGE,
-                      [state, out(search, "status_code"), out(search, "response_body"), search_body, max_messages],
-                      [("state_json", "string"), ("search_body", "string"), ("has_more", "string"),
-                       ("message_count", "string")])
-    pages = wf.while_loop("Page through ETD results", cond(has_more, "eq", "true"), [
-        search, merge,
-        wf.set_vars("Update paging state", [(state, out(merge, "script_queries.state_json")),
-                                            (search_body, out(merge, "script_queries.search_body")),
-                                            (has_more, out(merge, "script_queries.has_more"))]),
-    ])
+    reset = wf.set_vars("Reset state for this mailbox", [(decision, ""), (tally, "{}")])
+    build_observe = wf.python("Build sightings query", scripts.BUILD_OBSERVE, [mailbox, lookback],
+                              [("observe_body", "string"), ("window_start", "string"), ("window_end", "string")])
+    window_start = out(build_observe, "script_queries.window_start")
+    window_end = out(build_observe, "script_queries.window_end")
+    sightings = wf.http("Get ETD sightings through XDR", method="POST", target_id=platform,
+                        relative_url="/iroh-enrich/observe/observables",
+                        body=out(build_observe, "script_queries.observe_body"))
+    collect = wf.python("Collect messages from sightings", scripts.COLLECT_SIGHTINGS,
+                        [out(sightings, "status_code"), out(sightings, "response_body"), mailbox, window_start,
+                         window_end, max_messages],
+                        [("state_json", "string"), ("message_count", "string")])
 
     # -- 3. recommend ------------------------------------------------------------------------------
     assess = wf.python(
-        "Assess flood and write decision card", scripts.ASSESS,
-        [state, mailbox, is_protected, min_messages, min_domains, min_clean, dry_run, folder, verdict,
-         window_start, window_end, elevated_above, trusted],
-        [("qualifies", "string"), ("elevated", "string"), ("card", "string"), ("summary", "string"),
-         ("move_chunks", "string"), ("move_count", "string"), ("verify_sample", "string"),
+        "Assess flood", scripts.ASSESS,
+        [out(collect, "script_queries.state_json"), mailbox, is_protected, min_messages, min_domains, min_clean,
+         window_start, window_end, trusted],
+        [("qualifies", "string"), ("summary", "string"), ("evidence", "string"), ("respond_body", "string"),
+         ("move_count", "string"), ("elevated_reasons", "string")])
+    offered = wf.http("List ETD response actions", method="POST", target_id=platform,
+                      relative_url="/iroh-response/respond/observables",
+                      body=out(assess, "script_queries.respond_body"))
+    plan = wf.python(
+        "Plan moves and write decision card", scripts.PLAN_MOVES,
+        [out(offered, "status_code"), out(offered, "response_body"), out(assess, "script_queries.respond_body"),
+         mailbox, out(assess, "script_queries.evidence"), out(assess, "script_queries.elevated_reasons"),
+         dry_run, folder, pattern, elevated_above],
+        [("has_proposal", "string"), ("elevated", "string"), ("card", "string"), ("summary", "string"),
+         ("actions_json", "string"), ("action_count", "string"), ("verify_body", "string"),
          ("package_digest", "string")])
-    card = out(assess, "script_queries.card")
-    summary = out(assess, "script_queries.summary")
-    digest = out(assess, "script_queries.package_digest")
+    card = out(plan, "script_queries.card")
+    digest = out(plan, "script_queries.package_digest")
+    count = out(plan, "script_queries.action_count")
 
     # -- 4. approve --------------------------------------------------------------------------------
     def approval(level: str, roles: list[str], minimum: int, title: str) -> list[Activity]:
@@ -215,46 +210,43 @@ def build(settings: Settings | None = None) -> Workflow:
         return [request, wf.set_vars(f"Record {level} decision", [(decision, out(request, APPROVAL_RESPONSE))])]
 
     approve = wf.if_else("Which approval level?", [
-        wf.branch("Elevated", cond(out(assess, "script_queries.elevated"), "eq", "true"),
+        wf.branch("Elevated", cond(out(plan, "script_queries.elevated"), "eq", "true"),
                   approval("elevated", settings.elevated_roles, settings.elevated_approvals,
                            f"ELEVATED APPROVAL REQUIRED - Email bombing: move flood for {mailbox}")),
-        wf.branch("Standard", cond(out(assess, "script_queries.elevated"), "ne", "true"),
+        wf.branch("Standard", cond(out(plan, "script_queries.elevated"), "ne", "true"),
                   approval("standard", settings.approver_roles, 1, f"Email bombing: move flood for {mailbox}")),
     ])
 
     # -- 5. contain and verify: only after Approve, only when Dry Run is false -----------------------
-    chunks = wf.read_table("Move requests table", out(assess, "script_queries.move_chunks"), ["body", "count"])
-    each_chunk = wf.for_each("For each chunk of up to 100 messages", out(chunks, "read_table_from_json"))
-    move = wf.http("Move approved messages", method="POST", target_id=api_target, relative_url="/messages/move",
-                   body=item(each_chunk, "body"), headers=etd_headers)
-    record_move = wf.python("Record move result", scripts.RECORD_MOVE,
-                            [tally, out(move, "status_code"), out(move, "response_body"), item(each_chunk, "count")],
-                            [("tally_json", "string")])
-    each_chunk["actions"] = [move, record_move, wf.set_vars(
-        "Store move tally", [(tally, out(record_move, "script_queries.tally_json"))])]
-    sample = wf.read_table("Verification sample table", out(assess, "script_queries.verify_sample"), ["body"])
-    each_sample = wf.for_each("For each sampled message", out(sample, "read_table_from_json"))
-    status = wf.http("Read message status", method="POST", target_id=api_target, relative_url="/messages/status",
-                     body=item(each_sample, "body"), headers=etd_headers)
-    record_status = wf.python("Record verification", scripts.RECORD_VERIFICATION,
-                              [tally, out(status, "status_code"), out(status, "response_body"), folder],
-                              [("tally_json", "string")])
-    each_sample["actions"] = [status, record_status, wf.set_vars(
-        "Store verification tally", [(tally, out(record_status, "script_queries.tally_json"))])]
-    contain_result = wf.python("Build containment result", scripts.CONTAINMENT_RESULT,
-                               [mailbox, folder, digest, tally], [("result", "string")])
+    actions = wf.read_table("Approved moves table", out(plan, "script_queries.actions_json"),
+                            ["url", "title", "target", "kind", "module", "key"])
+    each_action = wf.for_each("For each approved move", out(actions, "read_table_from_json"),
+                              description="Triggers one response action that was listed on the decision card.")
+    trigger = wf.http("Move approved message", method="POST", target_id=platform,
+                      relative_url=item(each_action, "url"))
+    record = wf.python("Record move result", incident_scripts.RECORD_TRIGGER,
+                       [tally, out(trigger, "status_code"), out(trigger, "response_body"), item(each_action, "title"),
+                        item(each_action, "target"), item(each_action, "key")], [("tally_json", "string")])
+    each_action["actions"] = [trigger, record,
+                              wf.set_vars("Store move tally", [(tally, out(record, "script_queries.tally_json"))])]
+    recheck = wf.http("List ETD response actions again", method="POST", target_id=platform,
+                      relative_url="/iroh-response/respond/observables",
+                      body=out(plan, "script_queries.verify_body"))
+    outcome = wf.python("Build containment result", incident_scripts.RESULT,
+                        [identity, digest, tally, out(recheck, "status_code"), out(recheck, "response_body")],
+                        [("result", "string")])
 
     act = wf.if_else("What did the approver decide?", [
         wf.branch("Approved", cond(decision, "eq", APPROVE), [
             wf.if_else("Dry run?", [
                 wf.branch("Dry run: report only", cond(dry_run, "eq", True), [
                     report("Report dry run",
-                           f"`{mailbox}`: APPROVED in DRY RUN. Would move {out(assess, 'script_queries.move_count')} "
-                           f"messages to {folder} (package {digest}). Nothing was changed."),
+                           f"`{mailbox}`: APPROVED in DRY RUN. Would move {count} messages to {folder} "
+                           f"(package {digest}). Nothing was changed."),
                 ]),
                 wf.branch("Live: execute the approved package", cond(dry_run, "eq", False), [
-                    chunks, each_chunk, sample, each_sample, contain_result,
-                    report("Report containment", out(contain_result, "script_queries.result")),
+                    actions, each_action, recheck, outcome,
+                    report("Report containment", f"`{mailbox}`: {out(outcome, 'script_queries.result')}"),
                 ]),
             ]),
         ]),
@@ -265,25 +257,23 @@ def build(settings: Settings | None = None) -> Workflow:
     ])
 
     each["actions"] = [
-        reset, build_search, store_search, get_token,
-        wf.if_else("Did ETD issue a token?", [
-            wf.branch("No token", cond(out(get_token, "status_code"), "ne", 200), [
-                report("Report ETD token failure",
-                       f"`{mailbox}`: Secure Email Threat Defense refused the token request (HTTP "
-                       f"{out(get_token, 'status_code')}). Not assessed, nothing changed."),
-            ]),
-            wf.branch("Token issued", cond(out(get_token, "status_code"), "eq", 200), [
-                extract_token, store_token, pages, assess,
-                wf.if_else("Is it a flood?", [
-                    wf.branch("No flood", cond(out(assess, "script_queries.qualifies"), "ne", "true"),
-                              [report("Report assessment without proposal", summary)]),
-                    wf.branch("Flood", cond(out(assess, "script_queries.qualifies"), "eq", "true"), [
-                        report("Report proposal", summary),
+        reset, build_observe, sightings, collect, assess,
+        wf.if_else("Is it a flood?", [
+            wf.branch("No flood", cond(out(assess, "script_queries.qualifies"), "ne", "true"),
+                      [report("Report assessment without proposal", out(assess, "script_queries.summary"))]),
+            wf.branch("Flood", cond(out(assess, "script_queries.qualifies"), "eq", "true"), [
+                report("Report flood", out(assess, "script_queries.summary")),
+                offered, plan,
+                wf.if_else("Can XDR move the messages?", [
+                    wf.branch("No matching action", cond(out(plan, "script_queries.has_proposal"), "ne", "true"),
+                              [report("Report flood without action", out(plan, "script_queries.summary"))]),
+                    wf.branch("Moves proposed", cond(out(plan, "script_queries.has_proposal"), "eq", "true"), [
+                        report("Report proposal", out(plan, "script_queries.summary")),
                         wf.if_else("Audit only?", [
                             wf.branch("Audit only: no approval task", cond(audit_only, "eq", True), [
                                 report("Report audit only",
-                                       f"`{mailbox}`: AUDIT ONLY. No approval task was raised and nothing was changed "
-                                       f"(package {digest})."),
+                                       f"`{mailbox}`: AUDIT ONLY. No approval task was raised and nothing was "
+                                       f"changed (package {digest})."),
                             ]),
                             wf.branch("Ask for approval", cond(audit_only, "eq", False), [approve, act]),
                         ]),

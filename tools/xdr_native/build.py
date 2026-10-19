@@ -3,12 +3,11 @@
     python tools/xdr_native/build.py            # write xdr/**.json and xdr/RULES.md
     python tools/xdr_native/build.py --check    # exit 1 when a committed file is stale or invalid
 
-What differs per org is read from ``config/xdr-native.yaml``: the approver roles, the ETD region used by
-Email Bombing, and the lists every workflow needs (your own domain suffixes, protected assets, values
-never to act on). Fill that file in once and regenerate; the values become the defaults of the workflow
-inputs. A flag overrides the file:
+What differs per org is read from ``config/xdr-native.yaml``: the approver roles and the lists every
+workflow needs (your own domain suffixes, protected assets, values never to act on). Fill that file in
+once and regenerate; the values become the defaults of the workflow inputs. A flag overrides the file:
 
-    python tools/xdr_native/build.py --out build/xdr --etd-host api.de.etd.cisco.com \\
+    python tools/xdr_native/build.py --out build/xdr \\
         --approver-role admin --approver-role user --elevated-role admin --elevated-approvals 2
 """
 from __future__ import annotations
@@ -51,7 +50,7 @@ def load_settings(path: Path) -> dict[str, Any]:
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict):
         raise SystemExit(f"{path}: a mapping of settings is expected")
-    known = {*LIST_KEYS, *ROLE_KEYS, "elevated_approvals", "etd_host"}
+    known = {*LIST_KEYS, *ROLE_KEYS, "elevated_approvals"}
     unknown = sorted(set(data) - known)
     if unknown:
         raise SystemExit(f"{path}: unknown settings {unknown}; known: {sorted(known)}")
@@ -90,12 +89,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--elevated-role", action="append", choices=sorted(validate.KNOWN_ROLES),
                         help="XDR role asked for an elevated approval (repeatable; default admin)")
     parser.add_argument("--elevated-approvals", type=int, help="approvals an elevated request needs (default 2)")
-    parser.add_argument("--etd-host", help="regional ETD API host, for example api.de.etd.cisco.com")
     args = parser.parse_args(argv)
 
     values = load_settings(ROOT / args.settings)
     for key, flag in (("approver_roles", args.approver_role), ("elevated_roles", args.elevated_role),
-                      ("elevated_approvals", args.elevated_approvals), ("etd_host", args.etd_host)):
+                      ("elevated_approvals", args.elevated_approvals)):
         if flag:
             values[key] = flag
     try:

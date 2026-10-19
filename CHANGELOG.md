@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed (XDR-native)
+- `Email Bombing` made XDR ask for a username and password on import (the ETD client ID and secret of its
+  hand-made targets). It now reads ETD through the Cisco XDR platform APIs, using the ETD integration
+  connected in XDR: the flood is measured from the ETD sightings of the mailbox, the ETD response actions on
+  offer are listed on the decision card, and only those are triggered after approval. No workflow exports a
+  target, account key or API key any more, and the validator refuses one. `etd_host` is gone from the
+  settings and `build.py`.
+- XDR showed an empty "Approval choices array" for the custom choice list (*Approve*, *Reject*, *More
+  investigation*). All 22 workflows use the default *Approve* / *Reject* pair; *Reject* changes nothing.
 - XDR refused the import with "invalid unique_name format": generated identifiers had a letter or any digit
   in 14th place, where XDR requires a digit 0 to 7. `make_id` now produces that shape, the validator
   enforces it, and the 21 incident response workflows have new IDs (`Email Bombing` keeps its own).

@@ -524,7 +524,7 @@ if proposals:
     for number, p in enumerate(proposals, 1):
         lines.append(str(number) + ". " + labels[p["kind"]] + " " + show(p["target"]) + " with the XDR response action \"" + p["title"] + "\" of " + p["module"] + " (action ID " + p["shown_id"] + "). Why: " + p["reason"] + ". Rule: " + p["rule"] + "."
                      + (" Other matching actions of this module, not used: " + p["extra"] + "." if p["extra"] != "0" else ""))
-    lines += ["", "Approve runs the " + str(len(proposals)) + " numbered actions above and nothing else. The action names in quotes come from the products and are shown as plain text. To run fewer, answer *More investigation* and start the workflow again with fewer observables or with kinds on the Excluded Actions input."]
+    lines += ["", "Approve runs the " + str(len(proposals)) + " numbered actions above and nothing else. The action names in quotes come from the products and are shown as plain text. *Reject* changes nothing. To run fewer, reject and start the workflow again with fewer observables or with kinds on the Excluded Actions input."]
     if manual:
         lines += ["", "**Needed but not available as an XDR response action (" + str(len(manual)) + "):**"] + ["- " + m for m in manual[:20]]
     if spec.get("manual"):

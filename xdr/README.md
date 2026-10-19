@@ -10,12 +10,12 @@ The folder is laid out for XDR's Git import (Code Path `xdr`):
 publishes no schema for workflow JSON, so every shape is copied from a real export (table at the end).
 Import one workflow and run the test steps below before importing the rest.
 
-There are two kinds of workflow here:
+All 22 call only the Cisco XDR platform APIs, which every org has, and reach your products through the
+integrations connected in XDR. None needs a target, an account key or a secret. There are two kinds:
 
-- **`Email Bombing`** reads Secure Email Threat Defense (ETD) directly, because measuring a mail flood needs
-  the ETD message search. It needs an ETD target and account key.
-- **The other 21** share one workflow body, the *incident response workflow*. They call only the Cisco XDR
-  platform APIs, which every org has. They need no target, no account key and no secret.
+- **`Email Bombing`** measures a mail flood from the Secure Email Threat Defense (ETD) sightings of the
+  mailbox and moves it with the ETD response action XDR offers.
+- **The other 21** share one workflow body, the *incident response workflow*.
 
 ## Before you start testing
 
@@ -74,7 +74,8 @@ What each attack type proposes, and when, is in [`src/xdr_native/specs.py`](../s
   digest). Nothing is searched or computed again after the approval.
 - A protected asset or a large package is not skipped: it goes to the elevated approvers, needs two
   approvals, and the task says **ELEVATED APPROVAL REQUIRED**.
-- *Reject*, *More investigation*, an expired task or any other answer changes nothing.
+- *Reject*, an expired task or any other answer changes nothing. The approval tasks use XDR's default
+  choices, *Approve* and *Reject*: a custom choice list imported with an empty "Approval choices array".
 - *Dry Run* is true by default: an approval then only reports what would be done.
 - The exports contain no credentials.
 
@@ -155,23 +156,16 @@ can still pass other values.
    python tools/xdr_native/build.py
    ```
 
-   The file holds the approver roles, the ETD host and your lists. ETD hosts: `api.us`, `api.de`, `api.au`,
-   `api.in` or `api.ae` followed by `.etd.cisco.com`. Any other host is refused.
+   The file holds the approver roles and your lists.
 2. In XDR: **Automate > Workflows > Import Workflow**, paste the JSON, **Import**. The `Email Bombing` file
    keeps the ID of the existing workflow, so it replaces that workflow unless you tick *Import as a new
    workflow*. The other 21 have new IDs.
 3. **Validate** in the editor.
-4. Only for `Email Bombing`, configure once:
 
-   | Object | Where | Value |
-   |---|---|---|
-   | Account key `Email Bombing - ETD API Client` | Automate > Account Keys | ETD API client ID and client secret (ETD: Administration > API Clients) |
-   | Targets `Email Bombing - ETD Token` and `Email Bombing - ETD API` | Automate > Targets | Your regional ETD host, path `/v1` |
-   | Variable `ETD API Key` | Workflow editor > Variables | ETD API key (secure string) |
-   | Inputs `Protected Mailboxes`, `Trusted Sender Domains` | Workflow editor, or the rule or playbook that starts it | Your lists |
-
-   ETD is not one of the integrations for which XDR creates an Automation target, so this target is
-   created by hand. Moving messages needs ETD in Microsoft 365 *Read/Write* mode.
+No workflow asks for a target, an account key, a username, a password or an API key. All 22 call only the
+Cisco XDR platform APIs, which reach your products through the integrations already connected in XDR.
+`Email Bombing` needs the Secure Email Threat Defense integration enabled in XDR; moving messages needs ETD
+in Microsoft 365 *Read/Write* mode.
 
 ## Test the incident response workflow in this order
 
@@ -199,20 +193,25 @@ Start with one workflow, for example `Malware`. Every step runs with *Dry Run* =
 
 Every step runs with *Dry Run* = true until the last one.
 
-1. **Import and validate.**
+1. **Import and validate.** No credential prompt is expected.
 2. **Run by hand** with *Mailbox* set to a mailbox that received little mail. Expected worklog result:
-   "No action proposed: below the flood thresholds".
+   "No action proposed: below the flood thresholds". The evidence line "Sightings by module" must name
+   Secure Email Threat Defense; if it says "none", XDR returned no ETD sightings for the mailbox.
 3. **Run by hand on a flooded test mailbox** (lower *Minimum Messages* and *Minimum Sender Domains* if
-   needed). Expected: an approval task with the decision card. Answer *Reject*, then run again and answer
-   *Approve*. Expected: "APPROVED in DRY RUN. Would move N messages".
+   needed). Expected: an approval task with the decision card, naming the ETD response action it will use.
+   If the worklog says "XDR offers no response action that moves a message" and lists what is offered, put
+   the right text in *Move Action Pattern* and send the titles. If it says the messages carry no message
+   ID, or names no sender, send one sighting of the mailbox from XDR Investigate: the field names of ETD's
+   sightings are not documented. Answer *Reject*, then run again and answer *Approve*. Expected: "APPROVED
+   in DRY RUN. Would move N messages".
 4. **Leave one approval task unanswered for more than 30 minutes, then approve.** This shows whether the
    wait outlives the workflow run-time limit. If the run has ended, the design switches to two workflows
    joined by an approval task rule. The answer applies to all 22 workflows.
 5. **Protected mailbox:** put the test mailbox in *Protected Mailboxes*. Expected: the elevated task, two
    approvals needed.
 6. **Playbook task and incident rule:** start it from an incident with an email observable.
-7. **Live:** *Dry Run* = false on the test mailbox. Check the messages in ETD and the verification line
-   in the result.
+7. **Live:** *Dry Run* = false on the test mailbox. Check the messages in ETD and the result line in the
+   worklog.
 
 ## Not built yet
 
@@ -228,7 +227,11 @@ Every step runs with *Dry Run* = true until the last one.
 
 | Point | Why it matters | Covered by |
 |---|---|---|
-| Import of generated identifiers, of the module target and of the ETD targets and account key | Not documented by Cisco | Test step 1 |
+| Import of generated identifiers and of the module target | Not documented by Cisco | Test step 1 |
+| Format of a custom approval choice list | It imported as an empty "Approval choices array", so the default *Approve* / *Reject* pair is used | Test step 4 |
+| Fields of ETD's sightings (message ID type, sender relation, verdict text, subject) | Taken from the CTIM model; ETD's own sightings were not read from this org | Email Bombing test steps 2 and 3 |
+| Titles of ETD's response actions and the observable type they take | Moves are matched by title and folder name | Email Bombing test step 3; *Move Action Pattern* |
+| How many sightings XDR returns per module | A partial answer makes the flood look smaller; the card then says so and asks for elevated approval | Email Bombing test step 3 |
 | Whether `wait for approval` survives the 30-minute run-time limit, and the unit of its timeout | The reference export waits in the same workflow | Email Bombing test step 4 |
 | `output.response` of the approval activity, also when two approvals are needed | The output name is not documented | Test steps 4 and 5 |
 | Titles of the response actions each product offers | Actions are matched by title, and titles are not documented | Test step 3; the *Action Pattern* inputs |
@@ -237,18 +240,16 @@ Every step runs with *Dry Run* = true until the last one.
 | Fields of the observables in `selected_observables` and `targets.data` beyond `value` | The template only shows `value`; the workflows use only `value` | Test step 6 |
 | Value of `started_by_type` for a manual start | Anything other than `incident_rule` counts as started by a person | Test step 3 |
 | Size limit of a script argument | Sightings of a busy host can be large | *Collect Sightings* = false |
-| Field names of the ETD status response | Email Bombing looks for the folder name; otherwise it reports UNABLE TO VERIFY | Email Bombing test step 7 |
-| The ETD token is visible in the run history of the token request | Inherent to an HTTP token request in XDR; the token lives 60 minutes | Restrict who can view runs |
 
 ## Where each shape comes from
 
 | Shape | Source |
 |---|---|
 | Workflow envelope, `wf_metadata`, `started_by_type`, `workflow_results`, the two observable loops, `task.request_approval` | The `Email Bombing` incident response template exported from the target XDR org |
-| `python3.script`, HTTP request with custom headers, secure string variables, targets and account keys, `logic.while`, read table and for-each, compound conditions, and the HTTP request to the XDR platform through the module target `Cisco XDR; securex:ao:iroh_api; platform-apis` with the `module_targets` envelope | `ciscomanagedservices/ciscolive25-xdr-automate` (Cisco Sample Code License 1.1) |
-| `corejava.jsonpathquery`, the import procedure, the shared response category ID | `ciscotee/CiscoSecureEndpoint-FindDuplicateGUID` (MIT) |
+| `python3.script`, read table and for-each, compound conditions, and the HTTP request to the XDR platform through the module target `Cisco XDR; securex:ao:iroh_api; platform-apis` with the `module_targets` envelope | `ciscomanagedservices/ciscolive25-xdr-automate` (Cisco Sample Code License 1.1) |
+| The import procedure, the shared response category ID | `ciscotee/CiscoSecureEndpoint-FindDuplicateGUID` (MIT) |
 | Enrich and response API paths, the verdict numbers and the trigger result | [docs/integrations.md](../docs/integrations.md) section 2.1 (VERIFIED against Cisco's API documentation) and the reference adapter `src/xdr_response/integrations/cisco_xdr/` |
-| ETD token, message search, move and status requests | [docs/integrations.md](../docs/integrations.md) section 2.3, and Cisco's own ETD atomics exported from the org ([docs/xdr-catalog/atomic-interfaces.md](../docs/xdr-catalog/atomic-interfaces.md)) |
+| Fields of a sighting (`observables`, `relations`, `observed_time`) | The CTIM model behind the XDR enrich API ([docs/integrations.md](../docs/integrations.md) section 2.1) |
 | Script steps: outputs are strings only, and every argument is one variable reference | In 92 real exports no script step declares an integer output or receives literal JSON. Counts are strings, decisions are `true` or `false`, and the rules of an attack type are a workflow variable |
 | Python modules used by the script steps (`json`, `re`, `sys`; `hashlib` when present, for the package digest) | The script steps of 80 Cisco atomics exported from the org and of the Cisco Live exports import `json`, `re`, `sys`, `datetime` and `urllib.parse` |
 
