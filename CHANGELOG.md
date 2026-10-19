@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed (XDR-native)
+- `Email Bombing` failed with "Action payload size limit reached" (4.7 MB, limit 4 MB): the sightings query
+  asked every module. It now looks up the Secure Email Threat Defense module type
+  (`GET /iroh-int/module-type`) and asks email modules only (`observe/observables?product_categories=...`).
+  When no ETD module type is found it stops with a worklog line instead. The *ETD Product Category* input
+  sets the category by hand.
 - `Email Bombing` made XDR ask for a username and password on import (the ETD client ID and secret of its
   hand-made targets). It now reads ETD through the Cisco XDR platform APIs, using the ETD integration
   connected in XDR: the flood is measured from the ETD sightings of the mailbox, the ETD response actions on

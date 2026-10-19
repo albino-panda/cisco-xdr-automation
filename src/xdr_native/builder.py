@@ -36,6 +36,9 @@ APPROVAL_RESPONSE = "response"
 #: external ID and endpoint. XDR provides it in every org, so it needs no host, no account key and no
 #: org-specific identifier. Relative URLs start below ``/iroh``.
 PLATFORM_APIS = ("Cisco XDR", "securex:ao:iroh_api", "platform-apis")
+#: Lists the module types whose title matches Secure Email Threat Defense (read-only; module types carry no
+#: org credential). Used to limit the sightings query to email modules.
+MODULE_TYPE_LOOKUP = "/iroh-int/module-type?query=Email%20Threat%20Defense&limit=20"
 
 
 def module_target_ref(module: tuple[str, str, str]) -> str:

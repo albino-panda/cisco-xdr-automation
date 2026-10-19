@@ -194,8 +194,10 @@ Start with one workflow, for example `Malware`. Every step runs with *Dry Run* =
 Every step runs with *Dry Run* = true until the last one.
 
 1. **Import and validate.** No credential prompt is expected.
-2. **Run by hand** with *Mailbox* set to a mailbox that received little mail. Expected worklog result:
-   "No action proposed: below the flood thresholds". The evidence line "Sightings by module" must name
+2. **Run by hand** with *Mailbox* set to a mailbox that received little mail. The first worklog line names
+   the email modules asked ("sightings from Secure Email Threat Defense: <category>"). If it says no
+   Secure Email Threat Defense module was found, send that line, or set *ETD Product Category*. Expected
+   result: "No action proposed: below the flood thresholds". The evidence line "Sightings by module" must name
    Secure Email Threat Defense; if it says "none", XDR returned no ETD sightings for the mailbox.
 3. **Run by hand on a flooded test mailbox** (lower *Minimum Messages* and *Minimum Sender Domains* if
    needed). Expected: an approval task with the decision card, naming the ETD response action it will use.
@@ -229,6 +231,7 @@ Every step runs with *Dry Run* = true until the last one.
 |---|---|---|
 | Import of generated identifiers and of the module target | Not documented by Cisco | Test step 1 |
 | Format of a custom approval choice list | It imported as an empty "Approval choices array", so the default *Approve* / *Reject* pair is used | Test step 4 |
+| How `GET /iroh-int/module-type?query=...` matches titles, and ETD's product category | Sightings are asked of email modules only, because all modules answered over XDR's 4 MB activity limit | Email Bombing test step 2; *ETD Product Category* |
 | Fields of ETD's sightings (message ID type, sender relation, verdict text, subject) | Taken from the CTIM model; ETD's own sightings were not read from this org | Email Bombing test steps 2 and 3 |
 | Titles of ETD's response actions and the observable type they take | Moves are matched by title and folder name | Email Bombing test step 3; *Move Action Pattern* |
 | How many sightings XDR returns per module | A partial answer makes the flood look smaller; the card then says so and asks for elevated approval | Email Bombing test step 3 |

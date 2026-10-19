@@ -34,7 +34,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from . import incident_scripts, scripts
-from .builder import APPROVAL_RESPONSE, PLATFORM_APIS, TEMPLATE_OUTPUTS, module_target_ref
+from .builder import APPROVAL_RESPONSE, MODULE_TYPE_LOOKUP, PLATFORM_APIS, TEMPLATE_OUTPUTS, module_target_ref
 
 Activity = dict[str, Any]
 
@@ -57,9 +57,18 @@ MAX_ACTIVITIES = 200  # documented XDR limit per workflow
 #: offer. Triggering a response action is state-changing.
 PLATFORM_READS = frozenset({
     ("POST", "/iroh-enrich/deliberate/observables"), ("POST", "/iroh-enrich/observe/observables"),
-    ("POST", "/iroh-response/respond/observables"),
+    ("POST", "/iroh-response/respond/observables"), ("GET", MODULE_TYPE_LOOKUP),
 })
 READ_REQUESTS = PLATFORM_READS
+#: The sightings query limited to some product categories: the fixed path, then exactly one script output
+#: named ``module_filter`` as the query string. Asking every module can exceed XDR's 4 MB activity limit.
+_FILTERED_OBSERVE = re.compile(r"/iroh-enrich/observe/observables\?\$activity\.[A-Za-z0-9_]+\.output\.script_queries\.module_filter\$")
+
+
+def is_read(request: tuple[str, Any]) -> bool:
+    """True for a known read of the XDR platform."""
+    return request in READ_REQUESTS or (request[0] == "POST" and isinstance(request[1], str)
+                                        and bool(_FILTERED_OBSERVE.fullmatch(request[1])))
 #: Activity types that call other workflows. None is allowed outside the gate; there is no allow-list.
 CALL_TYPES = frozenset({"workflow.sub_workflow", "workflow.atomic_workflow"})
 FORBIDDEN_KEYS = frozenset({"auto_approve", "skip_approval", "bypass_approval", "approval_required"})
@@ -161,7 +170,7 @@ def is_state_changing(activity: Activity) -> bool:
         return True
     if activity.get("type") != "web-service.http_request":
         return False
-    return _request(activity) not in READ_REQUESTS
+    return not is_read(_request(activity))
 
 
 def _children(activity: Activity) -> list[tuple[str, list[Activity]]]:
@@ -250,7 +259,7 @@ def check_structure(document: dict[str, Any]) -> list[str]:
             headers = properties.get("custom_headers") or []
             if target_id in module_refs:
                 trigger = request[0] == "POST" and isinstance(request[1], str) and _ITEM_URL.fullmatch(request[1])
-                if request not in PLATFORM_READS and not trigger:
+                if not is_read(request) and not trigger:
                     problems.append(f"{where}: {request[0]} {request[1]} is not a known request to the XDR platform")
                 if headers:
                     problems.append(f"{where}: a request to the XDR platform carries no custom header")

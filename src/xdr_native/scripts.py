@@ -48,6 +48,57 @@ mailbox_count = str(len(rows))
 skipped_count = str(skipped)
 '''
 
+#: Outputs: module_filter, found, modules_text.
+#: Reads ``GET /iroh/iroh-int/module-type`` (module types carry no org credential, unlike module instances)
+#: and keeps the ``product_categories`` of Secure Email Threat Defense, so the sightings query asks email
+#: modules only. Asking every module returned more than XDR's 4 MB limit for one activity. A category in
+#: the *ETD Product Category* input is used instead when set.
+FIND_EMAIL_MODULES = r'''
+import json, re, sys
+status_code = str(sys.argv[1]).strip()
+raw_response = sys.argv[2]
+override = sys.argv[3] or ""
+valid = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,59}$")
+
+def plain(text, limit=60):
+    line = "".join(c if 32 <= ord(c) < 127 and c not in "*`[]<>|#\\~_{}" else " " for c in str(text)[:4 * limit])
+    return " ".join(line.split())[:limit]
+
+categories, titles, note = [], [], ""
+for value in re.split(r"[,;\s]+", override.strip().lower()):
+    if value and valid.match(value) and value not in categories:
+        categories.append(value)
+if categories:
+    note = "set in the ETD Product Category input"
+else:
+    rows = []
+    if status_code == "200":
+        try:
+            body = json.loads(raw_response or "null")
+            if isinstance(body, dict):
+                body = body.get("data")
+            rows = [r for r in body if isinstance(r, dict)] if isinstance(body, list) else []
+        except Exception:
+            rows = []
+        note = "read from the XDR module types"
+    else:
+        note = "the XDR module type list did not answer (HTTP " + plain(status_code, 12) + ")"
+    for row in rows:
+        title = str(row.get("title") or row.get("default_name") or "")
+        if not re.search(r"email threat defense|\betd\b", title, re.IGNORECASE):
+            continue
+        titles.append(plain(title))
+        found_categories = row.get("product_categories")
+        for value in found_categories if isinstance(found_categories, list) else []:
+            value = str(value).strip().lower()
+            if valid.match(value) and value not in categories:
+                categories.append(value)
+module_filter = "&".join("product_categories=" + c for c in categories)
+found = "true" if categories else "false"
+modules_text = ((", ".join(titles) + ": " if titles else "") + (", ".join(categories) or "no product category")
+                + " (" + note + ")")
+'''
+
 #: Outputs: observe_body, window_start, window_end.
 BUILD_OBSERVE = r'''
 import datetime, json, sys

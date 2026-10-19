@@ -5,7 +5,8 @@ integration already connected in XDR: no ETD target, account key or API key is e
 
 Lifecycle inside one XDR workflow, per mailbox:
 
-1. investigate (reads only): ask XDR for the ETD sightings of the mailbox;
+1. investigate (reads only): find the product category of the ETD module type, then ask XDR for the
+   sightings of the mailbox from email modules only (all modules answered over XDR's 4 MB limit);
 2. recommend: a script measures the flood and sets aside the messages a flood is used to hide; the
    response actions XDR offers for the remaining messages are listed and the decision card is written;
 3. approve: a person with the assigned XDR role answers a Request Approval task (an elevated task,
@@ -22,7 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from . import incident_scripts, scripts
-from .builder import APPROVAL_RESPONSE, DEFAULT_CHOICES, Activity, Workflow, cond, item, out
+from .builder import APPROVAL_RESPONSE, DEFAULT_CHOICES, MODULE_TYPE_LOOKUP, Activity, Workflow, cond, item, out
 
 #: Identifiers of the "Email Bombing" workflow and of the template activities kept from its export, so
 #: that importing the generated file updates that workflow instead of creating a second one.
@@ -126,6 +127,9 @@ def build(settings: Settings | None = None) -> Workflow:
                                    "(executives, finance, shared and service mailboxes).")
     trusted = wf.var("Trusted Sender Domains", "string", "input", settings.trusted_sender_domains,
                      description="Comma-separated sender domains whose messages are never moved.")
+    category = wf.var("ETD Product Category", "string", "input",
+                      description="Optional. XDR product category of the Secure Email Threat Defense module, used to ask "
+                                  "email modules only for sightings. Empty: read from the XDR module types.")
     # Script steps in real exports receive variable references, not literal JSON, so the name is a variable.
     identity = wf.var("Workflow Rules", "string", "local", '{"name": "Email Bombing"}',
                       description="Name used in the result line. Generated: do not edit here.")
@@ -173,8 +177,13 @@ def build(settings: Settings | None = None) -> Workflow:
                               [("observe_body", "string"), ("window_start", "string"), ("window_end", "string")])
     window_start = out(build_observe, "script_queries.window_start")
     window_end = out(build_observe, "script_queries.window_end")
+    lookup = wf.http("List ETD module types", method="GET", target_id=platform, relative_url=MODULE_TYPE_LOOKUP,
+                     content_type=None)
+    modules = wf.python("Find email modules", scripts.FIND_EMAIL_MODULES,
+                        [out(lookup, "status_code"), out(lookup, "response_body"), category],
+                        [("module_filter", "string"), ("found", "string"), ("modules_text", "string")])
     sightings = wf.http("Get ETD sightings through XDR", method="POST", target_id=platform,
-                        relative_url="/iroh-enrich/observe/observables",
+                        relative_url="/iroh-enrich/observe/observables?" + out(modules, "script_queries.module_filter"),
                         body=out(build_observe, "script_queries.observe_body"))
     collect = wf.python("Collect messages from sightings", scripts.COLLECT_SIGHTINGS,
                         [out(sightings, "status_code"), out(sightings, "response_body"), mailbox, window_start,
@@ -300,8 +309,22 @@ def build(settings: Settings | None = None) -> Workflow:
                 report("Report nothing to assess",
                        "No email address observable to assess. Nothing was changed."),
             ]),
-            wf.branch("Mailboxes found", cond(out(select, "script_queries.has_mailboxes"), "eq", "true"),
-                      [table, each]),
+            wf.branch("Mailboxes found", cond(out(select, "script_queries.has_mailboxes"), "eq", "true"), [
+                lookup, modules,
+                wf.if_else("Email modules found?", [
+                    wf.branch("No email module", cond(out(modules, "script_queries.found"), "ne", "true"), [
+                        report("Report no email module",
+                               "Email Bombing: no Secure Email Threat Defense module found in XDR ("
+                               f"{out(modules, 'script_queries.modules_text')}). Nothing was assessed or changed. "
+                               "Check that the integration is enabled, or set the ETD Product Category input."),
+                    ]),
+                    wf.branch("Email modules found", cond(out(modules, "script_queries.found"), "eq", "true"), [
+                        report("Report email modules",
+                               f"Email Bombing: sightings from {out(modules, 'script_queries.modules_text')}."),
+                        table, each,
+                    ]),
+                ]),
+            ]),
         ]),
         wf.if_else("Started from a playbook task?", [
             wf.branch("Playbook task: report", cond(started_by, "eq", "playbook_task"), [answered]),
