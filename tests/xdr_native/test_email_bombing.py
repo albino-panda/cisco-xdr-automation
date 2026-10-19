@@ -39,6 +39,13 @@ def test_committed_export_is_current_and_valid(document):
     assert validate.check(document) == []
 
 
+def test_identifier_needs_a_digit_0_to_7_in_14th_place(document):
+    # XDR refused "variable_workflow_02XNISA5IB1H5SM7mfZ8lnhZypPaKoG0HZN": invalid unique_name format.
+    variable = document["workflow"]["variables"][0]
+    variable["unique_name"] = "variable_workflow_02XNISA5IB1H5SM7mfZ8lnhZypPaKoG0HZN"
+    assert "malformed identifier variable_workflow_02XNISA5IB1H5SM7mfZ8lnhZypPaKoG0HZN" in validate.check(document)
+
+
 def test_export_keeps_the_tenant_template(document):
     workflow = document["workflow"]
     assert workflow["unique_name"] == email_bombing.WORKFLOW_ID

@@ -74,7 +74,7 @@ LOOP_TYPES = frozenset({"logic.for_each", "logic.while"})
 SCRIPT_OUTPUT_TYPES = frozenset({"string", "secure_string", "boolean"})
 
 _ID = re.compile(r"^(definition_workflow|definition_activity|variable_workflow|definition_target|"
-                 r"definition_runtime_user)_0[0-9A-Za-z]{34}$")
+                 r"definition_runtime_user)_0[12][0-9A-Z]{11}[0-7][0-9A-Za-z]{21}$")
 _WORKFLOW_REF = re.compile(r"\$workflow\.([A-Za-z0-9_]+)\.([a-z]+)\.([A-Za-z0-9_]+)\$")
 _ACTIVITY_REF = re.compile(r"\$activity\.([A-Za-z0-9_]+)\.(?:output|input)\.[^$]*\$")
 #: A value that is one activity reference and nothing else.

@@ -21,6 +21,7 @@ import textwrap
 from typing import Any
 
 _UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+_OCTAL = "01234567"
 _MIXED = _UPPER + "abcdefghijklmnopqrstuvwxyz"
 
 #: Variables the incident response template provides without declaring them (referenced by name).
@@ -45,11 +46,16 @@ Activity = dict[str, Any]
 
 
 def make_id(kind: str, *parts: str) -> str:
-    """Deterministic identifier in the style XDR uses: ``<kind>_02`` plus 33 characters."""
+    """Deterministic identifier in the format XDR accepts.
+
+    ``<kind>_02``, 11 upper-case letters or digits, one digit 0 to 7, then 21 letters or digits. All 1781
+    identifiers in the org's exports and the Cisco Live exports have this shape, and XDR refuses an import
+    whose 14th character is not a digit 0 to 7 ("invalid unique_name format").
+    """
     digest = hashlib.sha512("|".join((kind, *parts)).encode()).digest()
-    head = "".join(_UPPER[b % len(_UPPER)] for b in digest[:14])
-    tail = "".join(_MIXED[b % len(_MIXED)] for b in digest[14:33])
-    return f"{kind}_02{head}{tail}"
+    head = "".join(_UPPER[b % len(_UPPER)] for b in digest[:11])
+    tail = "".join(_MIXED[b % len(_MIXED)] for b in digest[12:33])
+    return f"{kind}_02{head}{_OCTAL[digest[11] % len(_OCTAL)]}{tail}"
 
 
 def cond(left: Any, operator: str, right: Any) -> dict[str, Any]:

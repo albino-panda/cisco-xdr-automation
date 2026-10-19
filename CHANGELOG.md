@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (XDR-native)
+- XDR refused the import with "invalid unique_name format": generated identifiers had a letter or any digit
+  in 14th place, where XDR requires a digit 0 to 7. `make_id` now produces that shape, the validator
+  enforces it, and the 21 incident response workflows have new IDs (`Email Bombing` keeps its own).
+
 ### Added (XDR-native)
 - Owner requirement: the solution must run strictly inside Cisco XDR. `docs/xdr-native-design.md` maps the
   lifecycle onto XDR Automation and states what gets weaker than `src/xdr_response/`.
