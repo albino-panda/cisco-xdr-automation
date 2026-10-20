@@ -60,15 +60,24 @@ PLATFORM_READS = frozenset({
     ("POST", "/iroh-response/respond/observables"), ("GET", MODULE_TYPE_LOOKUP),
 })
 READ_REQUESTS = PLATFORM_READS
-#: The sightings query limited to some product categories: the fixed path, then exactly one script output
-#: named ``module_filter`` as the query string. Asking every module can exceed XDR's 4 MB activity limit.
+#: The sightings query limited to some modules: the fixed path, then exactly one script output named
+#: ``module_filter`` as the query string. Asking every module can exceed XDR's 4 MB activity limit.
 _FILTERED_OBSERVE = re.compile(r"/iroh-enrich/observe/observables\?\$activity\.[A-Za-z0-9_]+\.output\.script_queries\.module_filter\$")
+#: The module instances of one module type: the fixed path, then the ``id`` column of a for-each item.
+_INSTANCE_LOOKUP = re.compile(r"/iroh-int/module-instance\?module_type_id=\$activity\.[A-Za-z0-9_]+\.input\.source_array\[@\]\.id\$")
 
 
 def is_read(request: tuple[str, Any]) -> bool:
     """True for a known read of the XDR platform."""
-    return request in READ_REQUESTS or (request[0] == "POST" and isinstance(request[1], str)
-                                        and bool(_FILTERED_OBSERVE.fullmatch(request[1])))
+    method, url = request
+    if request in READ_REQUESTS:
+        return True
+    if not isinstance(url, str):
+        return False
+    return (method == "POST" and bool(_FILTERED_OBSERVE.fullmatch(url))) or (
+        method == "GET" and bool(_INSTANCE_LOOKUP.fullmatch(url)))
+
+
 #: Activity types that call other workflows. None is allowed outside the gate; there is no allow-list.
 CALL_TYPES = frozenset({"workflow.sub_workflow", "workflow.atomic_workflow"})
 FORBIDDEN_KEYS = frozenset({"auto_approve", "skip_approval", "bypass_approval", "approval_required"})

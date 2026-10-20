@@ -48,55 +48,91 @@ mailbox_count = str(len(rows))
 skipped_count = str(skipped)
 '''
 
-#: Outputs: module_filter, found, modules_text.
-#: Reads ``GET /iroh/iroh-int/module-type`` (module types carry no org credential, unlike module instances)
-#: and keeps the ``product_categories`` of Secure Email Threat Defense, so the sightings query asks email
-#: modules only. Asking every module returned more than XDR's 4 MB limit for one activity. A category in
-#: the *ETD Product Category* input is used instead when set.
-FIND_EMAIL_MODULES = r'''
+#: Outputs: types_json, types_text.
+#: Reads ``GET /iroh/iroh-int/module-type`` and keeps the module types whose title names Secure Email Threat
+#: Defense (the org showed two: "Secure Email Threat Defense" and its "(Beta)"). Their module instances are
+#: looked up next, so the sightings query can ask ETD only (``mids``): asking every module returned more
+#: than XDR's 4 MB limit for one activity, and the ETD module types name no product category to filter on.
+FIND_ETD_TYPES = r'''
 import json, re, sys
 status_code = str(sys.argv[1]).strip()
 raw_response = sys.argv[2]
-override = sys.argv[3] or ""
-valid = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,59}$")
+valid = re.compile(r"^[A-Za-z0-9_-]{1,100}$")
 
 def plain(text, limit=60):
     line = "".join(c if 32 <= ord(c) < 127 and c not in "*`[]<>|#\\~_{}" else " " for c in str(text)[:4 * limit])
     return " ".join(line.split())[:limit]
 
-categories, titles, note = [], [], ""
-for value in re.split(r"[,;\s]+", override.strip().lower()):
-    if value and valid.match(value) and value not in categories:
-        categories.append(value)
-if categories:
-    note = "set in the ETD Product Category input"
+rows, types, titles = [], [], []
+if status_code == "200":
+    try:
+        body = json.loads(raw_response or "null")
+        if isinstance(body, dict):
+            body = body.get("data")
+        rows = [r for r in body if isinstance(r, dict)] if isinstance(body, list) else []
+    except Exception:
+        rows = []
+for row in rows:
+    title = str(row.get("title") or row.get("default_name") or "")
+    type_id = str(row.get("id") or "")
+    if re.search(r"email threat defense|\betd\b", title, re.IGNORECASE) and valid.match(type_id):
+        if {"id": type_id} not in types:
+            types.append({"id": type_id})
+            titles.append(plain(title))
+types_json = json.dumps(types)
+if status_code != "200":
+    types_text = "the XDR module type list did not answer (HTTP " + plain(status_code, 12) + ")"
 else:
-    rows = []
-    if status_code == "200":
-        try:
-            body = json.loads(raw_response or "null")
-            if isinstance(body, dict):
-                body = body.get("data")
-            rows = [r for r in body if isinstance(r, dict)] if isinstance(body, list) else []
-        except Exception:
-            rows = []
-        note = "read from the XDR module types"
-    else:
-        note = "the XDR module type list did not answer (HTTP " + plain(status_code, 12) + ")"
-    for row in rows:
-        title = str(row.get("title") or row.get("default_name") or "")
-        if not re.search(r"email threat defense|\betd\b", title, re.IGNORECASE):
-            continue
-        titles.append(plain(title))
-        found_categories = row.get("product_categories")
-        for value in found_categories if isinstance(found_categories, list) else []:
-            value = str(value).strip().lower()
-            if valid.match(value) and value not in categories:
-                categories.append(value)
-module_filter = "&".join("product_categories=" + c for c in categories)
-found = "true" if categories else "false"
-modules_text = ((", ".join(titles) + ": " if titles else "") + (", ".join(categories) or "no product category")
-                + " (" + note + ")")
+    types_text = ", ".join(titles) or "no module type named Secure Email Threat Defense"
+'''
+
+#: Outputs: instances_json.
+#: Adds the IDs of the enabled module instances in one ``GET /iroh/iroh-int/module-instance?module_type_id=``
+#: answer to the list collected so far. Only the IDs are kept.
+COLLECT_INSTANCES = r'''
+import json, re, sys
+collected = json.loads(sys.argv[1] or "[]")
+status_code = str(sys.argv[2]).strip()
+raw_response = sys.argv[3]
+valid = re.compile(r"^[A-Za-z0-9_-]{1,100}$")
+collected = [c for c in collected if isinstance(c, str) and valid.match(c)] if isinstance(collected, list) else []
+if status_code == "200":
+    try:
+        body = json.loads(raw_response or "null")
+        if isinstance(body, dict):
+            body = body.get("data")
+        for row in body if isinstance(body, list) else []:
+            if isinstance(row, dict) and row.get("enabled") is not False:
+                instance = str(row.get("id") or "")
+                if valid.match(instance) and instance not in collected:
+                    collected.append(instance)
+    except Exception:
+        pass
+instances_json = json.dumps(collected[:10])
+'''
+
+#: Outputs: module_filter, found, modules_text.
+#: The query string that limits the sightings query to ETD: ``mids=<id>`` per module instance. IDs in the
+#: *ETD Module Instance ID* input are used instead of the looked-up ones when set.
+MODULE_FILTER = r'''
+import json, re, sys
+override = sys.argv[1] or ""
+collected = json.loads(sys.argv[2] or "[]")
+types_text = sys.argv[3]
+valid = re.compile(r"^[A-Za-z0-9_-]{1,100}$")
+ids = []
+for value in re.split(r"[,;\s]+", override.strip()):
+    if value and valid.match(value) and value not in ids:
+        ids.append(value)
+if ids:
+    source = "set in the ETD Module Instance ID input"
+else:
+    ids = [c for c in collected if isinstance(c, str) and valid.match(c)] if isinstance(collected, list) else []
+    source = "looked up in XDR"
+module_filter = "&".join("mids=" + i for i in ids[:10])
+found = "true" if ids else "false"
+modules_text = types_text + ": " + (str(len(ids)) + " module instance" + ("s" if len(ids) != 1 else "") + " (" + source + ")"
+                                    if ids else "no enabled module instance")
 '''
 
 #: Outputs: observe_body, window_start, window_end.

@@ -506,43 +506,61 @@ def test_trigger_results_use_the_incident_steps():
 # -- staying under XDR's 4 MB activity limit ----------------------------------------------------------
 
 
-def _module_types(*rows: dict) -> str:
-    return json.dumps(list(rows))
+def test_find_etd_types_keeps_both_etd_module_types():
+    raw = json.dumps([{"id": "etd-type-1", "title": "Secure Email Threat Defense"},
+                      {"id": "etd-beta", "title": "Secure Email Threat Defense (Beta)"},
+                      {"id": "se-type", "title": "Secure Endpoint"},
+                      {"id": "bad id/../x", "title": "Secure Email Threat Defense"}])
+    result = run(scripts.FIND_ETD_TYPES, 200, raw)
+    assert json.loads(result["types_json"]) == [{"id": "etd-type-1"}, {"id": "etd-beta"}]
+    assert "Secure Email Threat Defense (Beta)" in result["types_text"]
+    assert "HTTP 401" in run(scripts.FIND_ETD_TYPES, 401, "Unauthorized")["types_text"]
+    assert run(scripts.FIND_ETD_TYPES, 200, "[]")["types_json"] == "[]"
 
 
-def test_find_email_modules_reads_the_etd_module_type():
-    raw = _module_types({"title": "Secure Email Threat Defense", "product_categories": ["email-security", "Bad Value!"]},
-                        {"title": "Secure Endpoint", "product_categories": ["edr"]})
-    result = run(scripts.FIND_EMAIL_MODULES, 200, raw, "")
-    assert result["found"] == "true" and result["module_filter"] == "product_categories=email-security"
-    assert "Secure Email Threat Defense" in result["modules_text"] and "edr" not in result["module_filter"]
+def test_collect_instances_keeps_only_enabled_ids():
+    raw = json.dumps([{"id": "inst-1", "enabled": True, "settings": {"secret": "x"}},
+                      {"id": "inst-2", "enabled": False}, {"id": "inst-3"}, {"id": "bad&mids=x"}])
+    collected = run(scripts.COLLECT_INSTANCES, "[]", 200, raw)["instances_json"]
+    assert json.loads(collected) == ["inst-1", "inst-3"] and "secret" not in collected
+    again = run(scripts.COLLECT_INSTANCES, collected, 500, "error")["instances_json"]
+    assert json.loads(again) == ["inst-1", "inst-3"]
 
 
-def test_find_email_modules_prefers_the_input_and_reports_nothing_found():
-    assert run(scripts.FIND_EMAIL_MODULES, 200, "[]", "Email, other-cat")["module_filter"] == (
-        "product_categories=email&product_categories=other-cat")
-    missing = run(scripts.FIND_EMAIL_MODULES, 200, _module_types({"title": "Umbrella", "product_categories": ["dns"]}), "")
-    assert missing["found"] == "false" and missing["module_filter"] == ""
-    failed = run(scripts.FIND_EMAIL_MODULES, 401, "Unauthorized", "")
-    assert failed["found"] == "false" and "HTTP 401" in failed["modules_text"]
-    assert run(scripts.FIND_EMAIL_MODULES, 200, "[]", "x&mids=1")["module_filter"] == ""  # not a category
+def test_module_filter_prefers_the_input_and_reports_nothing_found():
+    looked_up = run(scripts.MODULE_FILTER, "", '["inst-1", "inst-3"]', "Secure Email Threat Defense")
+    assert looked_up["module_filter"] == "mids=inst-1&mids=inst-3" and looked_up["found"] == "true"
+    assert "2 module instances (looked up in XDR)" in looked_up["modules_text"]
+    manual = run(scripts.MODULE_FILTER, " abc-123 ", '["inst-1"]', "Secure Email Threat Defense")
+    assert manual["module_filter"] == "mids=abc-123" and "input" in manual["modules_text"]
+    none = run(scripts.MODULE_FILTER, "", "[]", "no module type named Secure Email Threat Defense")
+    assert none["found"] == "false" and none["module_filter"] == ""
+    assert run(scripts.MODULE_FILTER, "x&flags=y", "[]", "")["module_filter"] == ""  # not an ID
 
 
-def test_sightings_ask_email_modules_only(document):
+def test_sightings_ask_etd_only(document):
     sightings, ancestors = _find(document, "Get ETD sightings through XDR")
-    modules, _ = _find(document, "Find email modules")
+    modules, _ = _find(document, "Build ETD module filter")
     assert sightings["properties"]["relative_url"] == (
         f"/iroh-enrich/observe/observables?$activity.{modules['unique_name']}.output.script_queries.module_filter$")
     assert "Email modules found" in [a["title"] for a in ancestors]
-    lookup, _ = _find(document, "List ETD module types")
-    assert lookup["properties"]["method"] == "GET" and "content_type" not in lookup["properties"]
-    assert not validate.is_state_changing(sightings) and not validate.is_state_changing(lookup)
+    lookup, lookup_ancestors = _find(document, "List ETD module types")
+    instances, _ = _find(document, "List ETD module instances")
+    loop, _ = _find(document, "For each ETD module type")
+    assert lookup["properties"]["method"] == instances["properties"]["method"] == "GET"
+    assert instances["properties"]["relative_url"] == (
+        f"/iroh-int/module-instance?module_type_id=$activity.{loop['unique_name']}.input.source_array[@].id$")
+    assert "Look up the ETD module instances" in [a["title"] for a in lookup_ancestors]  # skipped when the input is set
+    for activity in (sightings, lookup, instances):
+        assert not validate.is_state_changing(activity)
 
 
-def test_validator_accepts_only_the_exact_filtered_query(document):
-    for url in ("/iroh-enrich/observe/observables?mids=x",
-                "/iroh-enrich/observe/observables?$activity.definition_activity_02AAAAAAAAAAA0aaaaaaaaaaaaaaaaaaaaa.output.script_queries.card$",
-                "/iroh-int/module-instance"):
+def test_validator_accepts_only_the_exact_lookups(document):
+    for title, url in (("Get ETD sightings through XDR", "/iroh-enrich/observe/observables?mids=x"),
+                       ("Get ETD sightings through XDR", "/iroh-enrich/observe/observables?"
+                        "$activity.definition_activity_02AAAAAAAAAAA0aaaaaaaaaaaaaaaaaaaaa.output.script_queries.card$"),
+                       ("List ETD module instances", "/iroh-int/module-instance"),
+                       ("List ETD module instances", "/iroh-int/module-instance/abc")):
         changed = copy.deepcopy(document)
-        _find(changed, "Get ETD sightings through XDR")[0]["properties"]["relative_url"] = url
+        _find(changed, title)[0]["properties"]["relative_url"] = url
         assert any("not a known request" in p for p in validate.check_structure(changed)), url

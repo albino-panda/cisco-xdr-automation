@@ -5,8 +5,8 @@ integration already connected in XDR: no ETD target, account key or API key is e
 
 Lifecycle inside one XDR workflow, per mailbox:
 
-1. investigate (reads only): find the product category of the ETD module type, then ask XDR for the
-   sightings of the mailbox from email modules only (all modules answered over XDR's 4 MB limit);
+1. investigate (reads only): find the ETD module instances, then ask XDR for the sightings of the
+   mailbox from ETD only (all modules answered over XDR's 4 MB limit for one activity);
 2. recommend: a script measures the flood and sets aside the messages a flood is used to hide; the
    response actions XDR offers for the remaining messages are listed and the decision card is written;
 3. approve: a person with the assigned XDR role answers a Request Approval task (an elevated task,
@@ -127,9 +127,14 @@ def build(settings: Settings | None = None) -> Workflow:
                                    "(executives, finance, shared and service mailboxes).")
     trusted = wf.var("Trusted Sender Domains", "string", "input", settings.trusted_sender_domains,
                      description="Comma-separated sender domains whose messages are never moved.")
-    category = wf.var("ETD Product Category", "string", "input",
-                      description="Optional. XDR product category of the Secure Email Threat Defense module, used to ask "
-                                  "email modules only for sightings. Empty: read from the XDR module types.")
+    instance_in = wf.var("ETD Module Instance ID", "string", "input",
+                         description="Optional. ID of your Secure Email Threat Defense integration in XDR (module "
+                                     "instance), so sightings are asked of ETD only. Empty: looked up in XDR on each "
+                                     "run, which shows that integration's record in the run history.")
+    instances = wf.var("ETD Module Instances", "string", "local", "[]",
+                       description="Module instance IDs of ETD found by the lookup.")
+    types_text = wf.var("ETD Module Types", "string", "local", "Secure Email Threat Defense",
+                        description="Titles of the ETD module types found by the lookup, for the worklog.")
     # Script steps in real exports receive variable references, not literal JSON, so the name is a variable.
     identity = wf.var("Workflow Rules", "string", "local", '{"name": "Email Bombing"}',
                       description="Name used in the result line. Generated: do not edit here.")
@@ -177,10 +182,32 @@ def build(settings: Settings | None = None) -> Workflow:
                               [("observe_body", "string"), ("window_start", "string"), ("window_end", "string")])
     window_start = out(build_observe, "script_queries.window_start")
     window_end = out(build_observe, "script_queries.window_end")
+    # Sightings are asked of ETD only (mids): all modules answered over XDR's 4 MB limit for one activity, and
+    # the ETD module types name no product category to filter on.
     lookup = wf.http("List ETD module types", method="GET", target_id=platform, relative_url=MODULE_TYPE_LOOKUP,
                      content_type=None)
-    modules = wf.python("Find email modules", scripts.FIND_EMAIL_MODULES,
-                        [out(lookup, "status_code"), out(lookup, "response_body"), category],
+    find_types = wf.python("Find ETD module types", scripts.FIND_ETD_TYPES,
+                           [out(lookup, "status_code"), out(lookup, "response_body")],
+                           [("types_json", "string"), ("types_text", "string")])
+    types_table = wf.read_table("ETD module types table", out(find_types, "script_queries.types_json"), ["id"])
+    each_type = wf.for_each("For each ETD module type", out(types_table, "read_table_from_json"),
+                            description="Collects the enabled module instances of one ETD module type.")
+    list_instances = wf.http("List ETD module instances", method="GET", target_id=platform,
+                             relative_url="/iroh-int/module-instance?module_type_id=" + item(each_type, "id"),
+                             content_type=None)
+    collect_instances = wf.python("Collect ETD module instances", scripts.COLLECT_INSTANCES,
+                                  [instances, out(list_instances, "status_code"), out(list_instances, "response_body")],
+                                  [("instances_json", "string")])
+    each_type["actions"] = [list_instances, collect_instances, wf.set_vars(
+        "Store ETD module instances", [(instances, out(collect_instances, "script_queries.instances_json"))])]
+    find_instances = wf.if_else("ETD Module Instance ID set?", [
+        wf.branch("Look up the ETD module instances", cond(instance_in, "eq", ""), [
+            lookup, find_types,
+            wf.set_vars("Store ETD module types", [(types_text, out(find_types, "script_queries.types_text"))]),
+            types_table, each_type,
+        ]),
+    ])
+    modules = wf.python("Build ETD module filter", scripts.MODULE_FILTER, [instance_in, instances, types_text],
                         [("module_filter", "string"), ("found", "string"), ("modules_text", "string")])
     sightings = wf.http("Get ETD sightings through XDR", method="POST", target_id=platform,
                         relative_url="/iroh-enrich/observe/observables?" + out(modules, "script_queries.module_filter"),
@@ -310,13 +337,13 @@ def build(settings: Settings | None = None) -> Workflow:
                        "No email address observable to assess. Nothing was changed."),
             ]),
             wf.branch("Mailboxes found", cond(out(select, "script_queries.has_mailboxes"), "eq", "true"), [
-                lookup, modules,
+                find_instances, modules,
                 wf.if_else("Email modules found?", [
                     wf.branch("No email module", cond(out(modules, "script_queries.found"), "ne", "true"), [
                         report("Report no email module",
-                               "Email Bombing: no Secure Email Threat Defense module found in XDR ("
+                               "Email Bombing: no enabled Secure Email Threat Defense integration found in XDR ("
                                f"{out(modules, 'script_queries.modules_text')}). Nothing was assessed or changed. "
-                               "Check that the integration is enabled, or set the ETD Product Category input."),
+                               "Check that the integration is enabled, or set the ETD Module Instance ID input."),
                     ]),
                     wf.branch("Email modules found", cond(out(modules, "script_queries.found"), "eq", "true"), [
                         report("Report email modules",

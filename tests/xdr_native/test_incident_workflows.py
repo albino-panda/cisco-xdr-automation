@@ -1132,7 +1132,7 @@ def test_a_loop_that_clears_the_decision_each_pass_is_accepted(ransomware):
 
 def test_every_exported_script_is_one_of_the_repository_scripts():
     known = validate.known_scripts()
-    assert len(known) == 10  # Email Bombing reuses the trigger record and result steps
+    assert len(known) == 12  # Email Bombing reuses the trigger record and result steps
     for workflow in build_tool.workflows(email_bombing.Settings()):
         for activity, _ in validate.walk(workflow.export()["workflow"]["actions"]):
             if activity["type"] == "python3.script":
