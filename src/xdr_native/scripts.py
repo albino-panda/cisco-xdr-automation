@@ -174,7 +174,7 @@ message_types = ("email_messageid", "cisco_mid")
 verdict_words = ("malicious", "phishing", "bec", "scam", "spam", "graymail", "neutral")
 mail_module = re.compile(r"e-?mail|\betd\b|threat defense", re.IGNORECASE)
 state = {"messages": [], "buried": [], "error": "", "truncated": False, "modules": {}, "other_modules": {},
-         "no_id": 0, "outside": 0}
+         "no_id": 0, "outside": 0, "types_seen": {}}
 
 def plain(text, limit=120):
     out = []
@@ -238,7 +238,14 @@ try:
             if stamp and start and end and not (start <= stamp <= end):
                 state["outside"] += 1
                 continue
-            found = [(t, v) for t, v in pairs if t in message_types and v and len(v) <= 500]
+            for t, v in pairs:
+                if t and v and len(state["types_seen"]) < 30:
+                    name = re.sub(r"[^a-z0-9_]", "", t)[:40]
+                    state["types_seen"][name] = state["types_seen"].get(name, 0) + 1
+            found = []
+            for t, v in pairs:
+                if t in message_types and v and len(v) <= 500 and [t, v] not in found:
+                    found.append([t, v])
             mid = found[0] if found else ("", "")
             key = (mid[0] + "|" + mid[1].lower()) if mid[1] else "sighting|" + str(doc.get("id") or len(known))
             if key in known:
@@ -260,7 +267,8 @@ try:
                     topic = name
                     break
             moment = stamp.strftime("%Y-%m-%dT%H:%M:%SZ") if stamp else ""
-            state["messages"].append([mid[0], mid[1], domain, label, topic, moment])
+            # Every message-ID form the sighting names: ETD may take another one than the first for its actions.
+            state["messages"].append([mid[0], mid[1], domain, label, topic, moment, found[:4]])
             if topic and len(state["buried"]) < 15:
                 state["buried"].append({"topic": topic, "subject": plain(subject), "from": plain(sender),
                                         "time": moment, "verdict": label})
@@ -270,7 +278,7 @@ state_json = json.dumps(state)
 message_count = str(len(state["messages"]))
 '''
 
-#: Outputs: qualifies, summary, evidence, respond_body, move_count, elevated_reasons.
+#: Outputs: qualifies, summary, evidence, respond_body, move_json, move_count, elevated_reasons.
 ASSESS = r'''
 import json, sys
 state = json.loads(sys.argv[1] or "{}")
@@ -291,16 +299,26 @@ error = state.get("error") or ""
 truncated = bool(state.get("truncated"))
 total = len(messages)
 domains, verdicts = {}, {}
-for kind, value, domain, label, topic, when in messages:
-    domains[domain] = domains.get(domain, 0) + 1
-    verdicts[label] = verdicts.get(label, 0) + 1
+for m in messages:
+    domains[m[2]] = domains.get(m[2], 0) + 1
+    verdicts[m[3]] = verdicts.get(m[3], 0) + 1
 senders = len([d for d in domains if d != "unknown"])
 rated = total - verdicts.get("noverdict", 0)
 clean = verdicts.get("neutral", 0) + verdicts.get("graymail", 0)
 clean_share = int(round(100.0 * clean / rated)) if rated else None
 bad = ("malicious", "phishing", "bec", "scam")
 kept = set(i for i, m in enumerate(messages) if (m[4] and m[3] not in bad) or m[2] in trusted)
-move = [{"type": m[0], "value": m[1]} for i, m in enumerate(messages) if i not in kept and m[1]]
+# One group per message to move: every message-ID form its sighting names.
+groups = []
+for i, m in enumerate(messages):
+    if i not in kept and m[1]:
+        forms = m[6] if len(m) > 6 and isinstance(m[6], list) and m[6] else [[m[0], m[1]]]
+        groups.append([{"type": str(f[0]), "value": str(f[1])} for f in forms if isinstance(f, list) and len(f) == 2])
+move = []
+for group in groups:
+    for form in group:
+        if form not in move:
+            move.append(form)
 unmovable = sum(1 for i, m in enumerate(messages) if i not in kept and not m[1])
 qualifies = (total >= min_messages and senders >= min_domains
              and (clean_share is None or clean_share >= min_clean) and bool(move))
@@ -327,6 +345,9 @@ if clean_share is None:
 else:
     lines.append("3. " + share_text + " (threshold " + str(min_clean) + "%). Verdicts: " + verdict_text + ".")
 lines.append("4. Sightings by module: " + (", ".join(m + " " + str(n) for m, n in sorted(modules.items())) or "none") + ".")
+seen_types = state.get("types_seen") or {}
+if seen_types:
+    lines.append("Observable types in the sightings: " + ", ".join(t + " " + str(n) for t, n in sorted(seen_types.items())[:15]) + ".")
 if others:
     lines.append("5. Sightings of other modules, not counted: " + ", ".join(m + " " + str(n) for m, n in sorted(others.items())[:8]) + ".")
 if error:
@@ -346,7 +367,7 @@ if hidden_topics:
     lines += ["", "**Check the account:** the flood contains " + ", ".join(hidden_topics) + " messages. Review this user's sign-ins, MFA prompts and mailbox rules. This workflow does not change the account."]
 evidence = "\n".join(lines)
 if qualifies:
-    summary = facts + ". Flood found: " + str(len(move)) + " messages can be moved."
+    summary = facts + ". Flood found: " + str(len(groups)) + " messages can be moved."
 elif error and not total:
     summary = facts + ". No action proposed: " + error + "."
 elif total >= min_messages and senders >= min_domains and not move:
@@ -355,7 +376,8 @@ else:
     summary = (facts + ". No action proposed: below the flood thresholds (" + str(min_messages) + " messages, "
                + str(min_domains) + " sender domains, " + str(min_clean) + "% neutral or graymail).")
 respond_body = json.dumps(move if qualifies else [])
-move_count = str(len(move) if qualifies else 0)
+move_json = json.dumps(groups if qualifies else [])
+move_count = str(len(groups) if qualifies else 0)
 elevated_reasons = json.dumps(reasons)
 qualifies = "true" if qualifies else "false"
 '''
@@ -367,7 +389,7 @@ qualifies = "true" if qualifies else "false"
 PLAN_MOVES = r'''
 import json, re, sys
 respond_status, respond_raw = str(sys.argv[1]).strip(), sys.argv[2]
-requested = json.loads(sys.argv[3] or "[]")
+groups = json.loads(sys.argv[3] or "[]")
 mailbox, evidence = sys.argv[4], sys.argv[5]
 elevated_reasons = json.loads(sys.argv[6] or "[]")
 dry_run = str(sys.argv[7]).strip().lower() != "false"
@@ -392,8 +414,9 @@ def show(value):
     line = "".join(c if 32 <= ord(c) < 127 and c != "`" else "?" for c in str(value))
     return "`" + ((line[:200] + "...") if len(line) > 200 else line) + "`"
 
-def key_of(kind, value):
-    return str(kind) + "|" + str(value).lower()
+def norm(value):
+    """A message ID compared without case, spaces or the angle brackets some products add."""
+    return str(value).strip().strip("<>").strip().lower()
 
 def encode(text):
     out = []
@@ -402,11 +425,21 @@ def encode(text):
         out.append(char if byte < 128 and (char.isalnum() or char in "-._~") else "%%%02X" % byte)
     return "".join(out)
 
-index = {}
-for obs in requested:
-    if isinstance(obs, dict) and obs.get("type") and obs.get("value"):
-        index.setdefault(key_of(obs["type"], obs["value"]), {"type": str(obs["type"]), "value": str(obs["value"])})
-only = list(index)[0] if len(index) == 1 else None
+# One entry per message to move, holding every message-ID form its sighting named.
+messages, by_value = [], {}
+for group in groups if isinstance(groups, list) else []:
+    forms = [{"type": str(f["type"]), "value": str(f["value"])} for f in (group if isinstance(group, list) else [])
+             if isinstance(f, dict) and f.get("type") and f.get("value")]
+    if not forms:
+        continue
+    for form in forms:
+        by_value.setdefault(norm(form["value"]), len(messages))
+    messages.append(forms)
+only = 0 if len(messages) == 1 else None
+sent_types = {}
+for forms in messages:
+    for form in forms:
+        sent_types[form["type"]] = sent_types.get(form["type"], 0) + 1
 rows = None
 if respond_status == "200":
     try:
@@ -417,7 +450,7 @@ if respond_status == "200":
     except Exception:
         rows = None
 degraded = "" if rows is not None else "the list of response actions (HTTP " + plain(respond_status, 12) + ")"
-offers = {}
+offers, entries, unnamed, foreign, all_titles = {}, 0, 0, 0, set()
 for entry in rows or []:
     action_id = entry.get("id")
     instance = entry.get("module_instance_id") or entry.get("module-instance-id")
@@ -425,13 +458,19 @@ for entry in rows or []:
         continue
     if not action_id.strip(". ") or not instance.strip(". ") or len(action_id) > 200 or len(instance) > 200:
         continue  # an empty or dots-only path segment is not an action
+    entries += 1
+    all_titles.add(plain(entry.get("title") or action_id) + " ("
+                   + plain(entry.get("module") or entry.get("module-name") or entry.get("module_name") or "module", 40) + ")")
     params = entry.get("query-params") if isinstance(entry.get("query-params"), dict) else {}
     if params.get("observable_type") is None and params.get("observable_value") is None:
         key = only
+        unnamed += key is None
     else:
-        key = key_of(params.get("observable_type"), params.get("observable_value"))
-        key = key if key in index else None
-    if not key:
+        # Matched on the value only: the module may name another ID type than the one asked for. The trigger
+        # still carries the message's own ID form, never the value the response names.
+        key = by_value.get(norm(params.get("observable_value")))
+        foreign += key is None
+    if key is None:
         continue
     extra = {}
     for name, value in params.items():
@@ -444,10 +483,10 @@ for entry in rows or []:
         "id": action_id, "instance": instance, "match": raw_title.strip()[:400] or action_id,
         "title": plain(raw_title) or plain(action_id),
         "module": plain(entry.get("module") or entry.get("module-name") or entry.get("module_name") or "module", 40),
-        "params": extra,
+        "params": extra, "named_type": str(params.get("observable_type") or ""),
     })
 proposals, unmatched, offered_titles = [], 0, set()
-for key, obs in index.items():
+for key, forms in enumerate(messages):
     chosen = None
     for offer in sorted(offers.get(key, []), key=lambda o: (o["module"], o["title"], o["id"], o["instance"])):
         offered_titles.add(offer["title"] + " (" + offer["module"] + ")")
@@ -461,6 +500,8 @@ for key, obs in index.items():
     if chosen is None:
         unmatched += 1
         continue
+    # The message's own ID form of the type the action names, else its first form.
+    obs = next((f for f in forms if f["type"] == chosen["named_type"]), forms[0])
     url = ("/iroh-response/respond/trigger/" + encode(chosen["instance"]) + "/" + encode(chosen["id"])
            + "?observable_type=" + encode(obs["type"]) + "&observable_value=" + encode(obs["value"]))
     for name in sorted(chosen["params"]):
@@ -518,6 +559,13 @@ else:
     else:
         why = ("no module offers a response action for these messages. Check that the Secure Email Threat Defense "
                "integration is enabled in XDR, or move the messages in ETD")
+    # What XDR answered, so the next change can follow what ETD expects.
+    why += (". Diagnostics: asked for " + str(len(messages)) + " messages with ID types "
+            + (", ".join(t + " " + str(n) for t, n in sorted(sent_types.items())) or "none") + "; XDR answered "
+            + str(entries) + " response actions")
+    if entries:
+        why += (" (" + str(foreign) + " for other observables, " + str(unnamed) + " naming no observable; titles: "
+                + "; ".join(sorted(all_titles)[:6]) + ")")
     summary = show(mailbox) + ": flood found, but no action proposed: " + why + "."
 has_proposal = "true" if proposals else "false"
 elevated = "true" if elevated else "false"

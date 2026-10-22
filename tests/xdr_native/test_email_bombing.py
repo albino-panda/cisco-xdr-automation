@@ -340,7 +340,7 @@ def _offers(assessed: dict, *, title: str = "Move to Quarantine", **params) -> s
 
 def _plan(assessed: dict, respond: str, *, status: int = 200, dry_run: str = "True", folder: str = "quarantine",
           pattern: str = email_bombing.MOVE_PATTERN, elevated_above: int = 100) -> dict:
-    return run(scripts.PLAN_MOVES, status, respond, assessed["respond_body"], MAILBOX, assessed["evidence"],
+    return run(scripts.PLAN_MOVES, status, respond, assessed["move_json"], MAILBOX, assessed["evidence"],
                assessed["elevated_reasons"], dry_run, folder, pattern, elevated_above)
 
 
@@ -374,7 +374,7 @@ def test_collect_reads_etd_sightings_and_ignores_other_modules():
     assert len(state["messages"]) == 50  # outbound, outside the window and duplicate left out
     assert state["outside"] == 1 and state["other_modules"] == {"Secure Endpoint": 7}
     assert state["modules"] == {"Secure Email Threat Defense": 53} and not state["truncated"] and not state["error"]
-    kind, value, domain, label, topic, when = state["messages"][0]
+    kind, value, domain, label, topic, when, forms = state["messages"][0]
     assert (kind, value, domain, label, when) == ("email_messageid", "<msg-0000@mail.example>", "list0.example",
                                                   "neutral", "2026-01-01T10:00:00Z")
 
@@ -564,3 +564,44 @@ def test_validator_accepts_only_the_exact_lookups(document):
         changed = copy.deepcopy(document)
         _find(changed, title)[0]["properties"]["relative_url"] = url
         assert any("not a known request" in p for p in validate.check_structure(changed)), url
+
+
+# -- matching ETD's actions to the messages ------------------------------------------------------------
+
+
+def test_every_message_id_form_is_asked_and_kept_together():
+    doc = _sighting(1)
+    doc["observables"].append({"type": "cisco_mid", "value": "12345"})
+    assessed = _assess(_collect([doc] + _flood(40)))
+    asked = json.loads(assessed["respond_body"])
+    assert {"type": "cisco_mid", "value": "12345"} in asked
+    groups = json.loads(assessed["move_json"])
+    assert [{"type": "email_messageid", "value": "<msg-0001@mail.example>"}, {"type": "cisco_mid", "value": "12345"}] in groups
+    assert assessed["move_count"] == str(len(groups)) == "40"  # one group per message
+    assert "Observable types in the sightings: " in assessed["evidence"] and "cisco_mid 1" in assessed["evidence"]
+
+
+def test_plan_matches_an_action_by_any_id_form_without_brackets_or_case():
+    doc = _sighting(1)
+    doc["observables"].append({"type": "cisco_mid", "value": "12345"})
+    assessed = _assess(_collect([doc] + _flood(40)))
+    offers = [{"id": "move-q", "title": "Move to Quarantine", "module": "Secure Email Threat Defense",
+               "module_instance_id": "etd-1", "query-params": {"observable_type": "cisco_mid", "observable_value": "12345"}},
+              {"id": "move-q", "title": "Move to Quarantine", "module": "Secure Email Threat Defense",
+               "module_instance_id": "etd-1", "query-params": {"observable_type": "email_messageid",
+                                                                "observable_value": "MSG-0002@MAIL.EXAMPLE"}}]
+    result = _plan(assessed, json.dumps({"data": offers}))
+    urls = [parse_qs(urlsplit(a["url"]).query) for a in json.loads(result["actions_json"])]
+    assert {"observable_type": ["cisco_mid"], "observable_value": ["12345"]} in urls
+    # The trigger carries the message's own form, not the value the response wrote.
+    assert {"observable_type": ["email_messageid"], "observable_value": ["<msg-0002@mail.example>"]} in urls
+
+
+def test_plan_explains_what_xdr_answered_when_nothing_matches():
+    assessed = _assess(_collect(_flood(40)))
+    other = {"id": "block", "title": "Block Sender", "module": "Secure Email Threat Defense", "module_instance_id": "etd-1",
+             "query-params": {"observable_type": "email", "observable_value": "someone@else.example"}}
+    summary = _plan(assessed, json.dumps({"data": [other]}))["summary"]
+    assert "asked for 40 messages with ID types email_messageid 40" in summary
+    assert "XDR answered 1 response actions (1 for other observables" in summary and "Block Sender" in summary
+    assert "XDR answered 0 response actions" in _plan(assessed, json.dumps({"data": []}))["summary"]

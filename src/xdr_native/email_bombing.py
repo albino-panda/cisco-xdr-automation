@@ -223,13 +223,14 @@ def build(settings: Settings | None = None) -> Workflow:
         [out(collect, "script_queries.state_json"), mailbox, is_protected, min_messages, min_domains, min_clean,
          window_start, window_end, trusted],
         [("qualifies", "string"), ("summary", "string"), ("evidence", "string"), ("respond_body", "string"),
+         ("move_json", "string"),
          ("move_count", "string"), ("elevated_reasons", "string")])
     offered = wf.http("List ETD response actions", method="POST", target_id=platform,
                       relative_url="/iroh-response/respond/observables",
                       body=out(assess, "script_queries.respond_body"))
     plan = wf.python(
         "Plan moves and write decision card", scripts.PLAN_MOVES,
-        [out(offered, "status_code"), out(offered, "response_body"), out(assess, "script_queries.respond_body"),
+        [out(offered, "status_code"), out(offered, "response_body"), out(assess, "script_queries.move_json"),
          mailbox, out(assess, "script_queries.evidence"), out(assess, "script_queries.elevated_reasons"),
          dry_run, folder, pattern, elevated_above],
         [("has_proposal", "string"), ("elevated", "string"), ("card", "string"), ("summary", "string"),

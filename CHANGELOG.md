@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed (XDR-native)
+- `Email Bombing` measured a flood (30 messages, 11 sender domains) but found "no module offers a response
+  action". Each message now carries every message-ID form its sighting names; all are asked for, and an
+  offered action is matched to the message by any form, ignoring case and angle brackets. The trigger still
+  carries the message's own ID. When nothing matches, the worklog lists the ID types asked for, how many
+  actions XDR returned and their titles, and the evidence lists the observable types in the sightings.
 - `Email Bombing` failed with "Action payload size limit reached" (4.7 MB, limit 4 MB): the sightings query
   asked every module. It now looks up the Secure Email Threat Defense module types
   (`GET /iroh-int/module-type`) and their enabled module instances (`GET /iroh-int/module-instance`), and
