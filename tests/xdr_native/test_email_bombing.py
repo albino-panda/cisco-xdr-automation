@@ -605,3 +605,24 @@ def test_plan_explains_what_xdr_answered_when_nothing_matches():
     assert "asked for 40 messages with ID types email_messageid 40" in summary
     assert "XDR answered 1 response actions (1 for other observables" in summary and "Block Sender" in summary
     assert "XDR answered 0 response actions" in _plan(assessed, json.dumps({"data": []}))["summary"]
+
+
+def test_plan_uses_etd_actions_that_name_no_message():
+    """What the org's ETD answered: two actions per message asked, with no observable in their query-params."""
+    assessed = _assess(_collect(_flood(30)))
+    module = "Secure Email Threat Defense - TARGET HOSPITALITY"
+    rows = []
+    for _ in json.loads(assessed["move_json"]):
+        rows += [{"id": "etd-quarantine", "title": "Quarantine messages", "module": module, "module_instance_id": "etd-1",
+                  "query-params": {}},
+                 {"id": "etd-inbox", "title": "Move to inbox", "module": module, "module_instance_id": "etd-1",
+                  "query-params": {}}]
+    result = _plan(assessed, json.dumps({"data": rows}))
+    actions = json.loads(result["actions_json"])
+    assert result["has_proposal"] == "true" and len(actions) == 30
+    assert {a["title"] for a in actions} == {"Quarantine messages"}  # "Move to inbox" undoes a containment
+    targets = {parse_qs(urlsplit(a["url"]).query)["observable_value"][0] for a in actions}
+    assert targets == {group[0]["value"] for group in json.loads(assessed["move_json"])}
+    assert all(urlsplit(a["url"]).path == "/iroh-response/respond/trigger/etd-1/etd-quarantine" for a in actions)
+    assert "\"Quarantine messages\" of Secure Email Threat Defense" in result["card"]
+    assert _plan(assessed, json.dumps({"data": rows}), folder="junk")["has_proposal"] == "false"

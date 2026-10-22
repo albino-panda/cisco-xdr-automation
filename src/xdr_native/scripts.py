@@ -463,8 +463,10 @@ for entry in rows or []:
                    + plain(entry.get("module") or entry.get("module-name") or entry.get("module_name") or "module", 40) + ")")
     params = entry.get("query-params") if isinstance(entry.get("query-params"), dict) else {}
     if params.get("observable_type") is None and params.get("observable_value") is None:
-        key = only
-        unnamed += key is None
+        # ETD lists its actions once per message asked without naming the message ("Quarantine messages",
+        # "Move to inbox"): such an action is offered for every message, and the trigger names the message.
+        key = only if only is not None else "*"
+        unnamed += key == "*"
     else:
         # Matched on the value only: the module may name another ID type than the one asked for. The trigger
         # still carries the message's own ID form, never the value the response names.
@@ -479,16 +481,19 @@ for entry in rows or []:
                 and not isinstance(value, bool) and len(str(value)) <= 300:
             extra[str(name)] = str(value)
     raw_title = entry.get("title") if isinstance(entry.get("title"), str) else ""
-    offers.setdefault(key, []).append({
+    offer = {
         "id": action_id, "instance": instance, "match": raw_title.strip()[:400] or action_id,
         "title": plain(raw_title) or plain(action_id),
         "module": plain(entry.get("module") or entry.get("module-name") or entry.get("module_name") or "module", 40),
         "params": extra, "named_type": str(params.get("observable_type") or ""),
-    })
+    }
+    if offer not in offers.get(key, []):
+        offers.setdefault(key, []).append(offer)
 proposals, unmatched, offered_titles = [], 0, set()
 for key, forms in enumerate(messages):
     chosen = None
-    for offer in sorted(offers.get(key, []), key=lambda o: (o["module"], o["title"], o["id"], o["instance"])):
+    candidates = offers.get(key, []) + offers.get("*", [])
+    for offer in sorted(candidates, key=lambda o: (o["module"], o["title"], o["id"], o["instance"])):
         offered_titles.add(offer["title"] + " (" + offer["module"] + ")")
         try:
             wanted = re.search(include, offer["match"], re.I) and re.search(folder_word, offer["match"], re.I) \

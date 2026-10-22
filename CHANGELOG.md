@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed (XDR-native)
+- `Email Bombing` still proposed nothing: the org's ETD lists its actions ("Quarantine messages", "Move to
+  inbox") once per message asked, without naming the message, and such actions were only used when one
+  message was asked. An action that names no observable is now offered for every message, and the trigger
+  names the message. "Move to inbox" is never chosen.
 - `Email Bombing` measured a flood (30 messages, 11 sender domains) but found "no module offers a response
   action". Each message now carries every message-ID form its sighting names; all are asked for, and an
   offered action is matched to the message by any form, ignoring case and angle brackets. The trigger still
