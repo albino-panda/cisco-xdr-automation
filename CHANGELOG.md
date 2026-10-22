@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed (XDR-native)
+- `Email Bombing` proposed quarantining a normal day of mail (36 messages over 24 hours, 16 of them from
+  colleagues): the thresholds were applied to the whole lookback and internal mail counted. The thresholds
+  now apply to the busiest stretch of *Burst Minutes* (default 60) within *Lookback Minutes* (default now
+  240), and only messages in that stretch are proposed. Mail from the mailbox's own domain and from the new
+  *Internal Domain Suffixes* input (default from `config/xdr-native.yaml`) is never counted or moved.
 - `Email Bombing` still proposed nothing: the org's ETD lists its actions ("Quarantine messages", "Move to
   inbox") once per message asked, without naming the message, and such actions were only used when one
   message was asked. An action that names no observable is now offered for every message, and the trigger

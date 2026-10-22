@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -320,13 +321,15 @@ def _observe(docs: list[dict], *, count: int | None = None, module: str = "Secur
     return json.dumps({"data": rows + (extra or [])})
 
 
-def _collect(docs: list[dict], *, status: int = 200, max_messages: int = 200, **kwargs) -> dict:
+def _collect(docs: list[dict], *, status: int = 200, max_messages: int = 200, window: tuple[str, str] = WINDOW,
+             **kwargs) -> dict:
     raw = docs if isinstance(docs, str) else _observe(docs, **kwargs)
-    return json.loads(run(scripts.COLLECT_SIGHTINGS, status, raw, MAILBOX, *WINDOW, max_messages)["state_json"])
+    return json.loads(run(scripts.COLLECT_SIGHTINGS, status, raw, MAILBOX, *window, max_messages)["state_json"])
 
 
-def _assess(state: dict, *, protected: str = "false", trusted: str = "") -> dict:
-    return run(scripts.ASSESS, json.dumps(state), MAILBOX, protected, 30, 10, 50, *WINDOW, trusted)
+def _assess(state: dict, *, protected: str = "false", trusted: str = "", internal: str = "", burst: int = 60,
+            window: tuple[str, str] = WINDOW) -> dict:
+    return run(scripts.ASSESS, json.dumps(state), MAILBOX, protected, 30, 10, 50, *window, trusted, internal, burst)
 
 
 def _offers(assessed: dict, *, title: str = "Move to Quarantine", **params) -> str:
@@ -626,3 +629,45 @@ def test_plan_uses_etd_actions_that_name_no_message():
     assert all(urlsplit(a["url"]).path == "/iroh-response/respond/trigger/etd-1/etd-quarantine" for a in actions)
     assert "\"Quarantine messages\" of Secure Email Threat Defense" in result["card"]
     assert _plan(assessed, json.dumps({"data": rows}), folder="junk")["has_proposal"] == "false"
+
+
+# -- a flood is a burst of external mail, not a day of normal mail -------------------------------------
+
+DAY = ("2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z")
+
+
+def _at(minutes: int) -> str:
+    return (datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def test_a_normal_day_is_not_a_flood():
+    """The owner's first live run: 36 messages over 24 hours, 16 of them from colleagues, 20 external."""
+    docs = [_sighting(i, sender=f"colleague{i}@example.com", when=_at(i * 40)) for i in range(16)]
+    docs += [_sighting(100 + i, sender=f"alerts@vendor{i % 15}.example", when=_at(20 + i * 70)) for i in range(20)]
+    result = _assess(_collect(docs, window=DAY), window=DAY)
+    assert result["qualifies"] == "false" and result["respond_body"] == "[]"
+    assert "below the flood thresholds" in result["summary"] and "16 from your own domains" in result["summary"]
+
+
+def test_internal_mail_is_never_counted_or_moved():
+    burst = [_sighting(i, when=_at(600 + i)) for i in range(40)]
+    colleagues = [_sighting(200 + i, sender=f"it{i}@corp.example", when=_at(600 + i)) for i in range(40)]
+    own = [_sighting(300 + i, sender=f"hr{i}@example.com", when=_at(600 + i)) for i in range(10)]
+    result = _assess(_collect(burst + colleagues + own, window=DAY), window=DAY, internal="corp.example")
+    moved = {obs["value"] for obs in json.loads(result["respond_body"])}
+    assert result["qualifies"] == "true" and result["move_count"] == "40"
+    assert not any("msg-02" in v or "msg-03" in v for v in moved)
+    assert "Not counted and never moved: 50 messages from your own domains" in result["evidence"]
+    only_colleagues = _assess(_collect(colleagues + own, window=DAY), window=DAY, internal="corp.example")
+    assert only_colleagues["qualifies"] == "false"
+
+
+def test_only_the_burst_is_proposed_within_a_long_window():
+    normal = [_sighting(i, sender=f"alerts@vendor{i}.example", when=_at(i * 60)) for i in range(14)]  # until 13:00
+    flood = [_sighting(100 + i, when=_at(900 + i // 2)) for i in range(45)]  # 45 messages in 23 minutes
+    result = _assess(_collect(normal + flood, window=DAY), window=DAY)
+    moved = {obs["value"] for obs in json.loads(result["respond_body"])}
+    assert result["qualifies"] == "true" and result["move_count"] == "45"
+    assert all("msg-01" in v for v in moved)  # flood messages are msg-0100 to msg-0144
+    assert "busiest 60 minutes had 45 external messages" in result["summary"]
+    assert _assess(_collect(flood, window=DAY), window=DAY, burst=5)["qualifies"] == "false"  # 10 in 5 minutes

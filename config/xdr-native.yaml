@@ -16,7 +16,8 @@ elevated_roles: [admin]
 elevated_approvals: 2
 
 # Your own DNS and mail suffixes. A dotted name under one of them is an endpoint, any other dotted name
-# is a domain. Account actions are proposed only for addresses under them.
+# is a domain. Account actions are proposed only for addresses under them. Email Bombing never counts
+# mail from them as flood and never moves it (the mailbox's own domain is always treated that way).
 # Example: [corp.example.com, example.com]
 internal_domain_suffixes: []
 

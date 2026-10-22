@@ -201,7 +201,11 @@ Every step runs with *Dry Run* = true until the last one.
    result: "No action proposed: below the flood thresholds". The evidence line "Sightings by module" must name
    Secure Email Threat Defense; if it says "none", XDR returned no ETD sightings for the mailbox.
 3. **Run by hand on a flooded test mailbox** (lower *Minimum Messages* and *Minimum Sender Domains* if
-   needed). Expected: an approval task with the decision card, naming the ETD response action it will use.
+   needed). The thresholds apply to the busiest *Burst Minutes* (default 60) within *Lookback Minutes*
+   (default 240), only external mail counts, and only the messages in that stretch are proposed. Mail from
+   the mailbox's own domain and *Internal Domain Suffixes* is never counted or moved. A normal mailbox
+   should stay below the thresholds even with a long lookback.
+   Expected: an approval task with the decision card, naming the ETD response action it will use.
    If the worklog says "XDR offers no response action that moves a message" and lists what is offered, put
    the right text in *Move Action Pattern* and send the titles. If it says the messages carry no message
    ID, or names no sender, send one sighting of the mailbox from XDR Investigate: the field names of ETD's

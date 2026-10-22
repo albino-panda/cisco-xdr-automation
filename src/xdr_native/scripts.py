@@ -280,37 +280,74 @@ message_count = str(len(state["messages"]))
 
 #: Outputs: qualifies, summary, evidence, respond_body, move_json, move_count, elevated_reasons.
 ASSESS = r'''
-import json, sys
+import datetime, json, re, sys
 state = json.loads(sys.argv[1] or "{}")
-mailbox = sys.argv[2]
+mailbox = sys.argv[2].strip().lower()
 protected = str(sys.argv[3]).lower() == "true"
 min_messages = int(float(sys.argv[4] or "30"))
 min_domains = int(float(sys.argv[5] or "10"))
 min_clean = int(float(sys.argv[6] or "50"))
 window_start, window_end = sys.argv[7], sys.argv[8]
 trusted = set(d.strip().lower().lstrip("@") for d in (sys.argv[9] or "").replace(";", ",").split(",") if d.strip())
+internal = [d.strip().lower().lstrip("*").lstrip("@").lstrip(".") for d in re.split(r"[,;\s]+", sys.argv[10] or "") if d.strip()]
+burst_minutes = max(5, min(int(float(sys.argv[11] or "60")), 1440))
+own = mailbox.rsplit("@", 1)[1] if "@" in mailbox else ""
+if own and own not in internal:
+    internal.append(own)
 
 def show(value):
     line = "".join(c if 32 <= ord(c) < 127 and c != "`" else "?" for c in str(value))
     return "`" + line[:200] + "`"
 
+def when(text):
+    try:
+        stamp = datetime.datetime.fromisoformat(str(text).strip().replace("Z", "+00:00"))
+        return stamp if stamp.tzinfo else stamp.replace(tzinfo=datetime.timezone.utc)
+    except Exception:
+        return None
+
+def is_internal(domain):
+    return any(domain == d or domain.endswith("." + d) for d in internal)
+
 messages = state.get("messages") or []
 error = state.get("error") or ""
 truncated = bool(state.get("truncated"))
 total = len(messages)
+# Mail from your own domains is neither counted as flood nor moved.
+inside = [i for i, m in enumerate(messages) if is_internal(m[2])]
+external = [i for i in range(total) if i not in inside]
+untimed = [i for i in external if not when(messages[i][5])]
+# The flood is the busiest stretch of Burst Minutes within the window, not everything since the window opened:
+# a day of normal mail must not add up to a flood.
+timed = sorted((when(messages[i][5]), i) for i in external if when(messages[i][5]))
+span = datetime.timedelta(minutes=burst_minutes)
+best, best_start = [], None
+low = 0
+for high in range(len(timed)):
+    while timed[high][0] - timed[low][0] > span:
+        low += 1
+    if high - low + 1 > len(best):
+        best = [i for _, i in timed[low:high + 1]]
+        best_start = timed[low][0]
+burst = best
+fmt = "%Y-%m-%dT%H:%M:%SZ"
+burst_from = best_start.strftime(fmt) if best_start else window_start
+burst_to = (best_start + span).strftime(fmt) if best_start else window_end
 domains, verdicts = {}, {}
-for m in messages:
+for i in burst:
+    m = messages[i]
     domains[m[2]] = domains.get(m[2], 0) + 1
     verdicts[m[3]] = verdicts.get(m[3], 0) + 1
 senders = len([d for d in domains if d != "unknown"])
-rated = total - verdicts.get("noverdict", 0)
+rated = len(burst) - verdicts.get("noverdict", 0)
 clean = verdicts.get("neutral", 0) + verdicts.get("graymail", 0)
 clean_share = int(round(100.0 * clean / rated)) if rated else None
 bad = ("malicious", "phishing", "bec", "scam")
-kept = set(i for i, m in enumerate(messages) if (m[4] and m[3] not in bad) or m[2] in trusted)
+kept = set(i for i in burst if (messages[i][4] and messages[i][3] not in bad) or messages[i][2] in trusted)
 # One group per message to move: every message-ID form its sighting names.
 groups = []
-for i, m in enumerate(messages):
+for i in burst:
+    m = messages[i]
     if i not in kept and m[1]:
         forms = m[6] if len(m) > 6 and isinstance(m[6], list) and m[6] else [[m[0], m[1]]]
         groups.append([{"type": str(f[0]), "value": str(f[1])} for f in forms if isinstance(f, list) and len(f) == 2])
@@ -319,8 +356,8 @@ for group in groups:
     for form in group:
         if form not in move:
             move.append(form)
-unmovable = sum(1 for i, m in enumerate(messages) if i not in kept and not m[1])
-qualifies = (total >= min_messages and senders >= min_domains
+unmovable = sum(1 for i in burst if i not in kept and not messages[i][1])
+qualifies = (len(burst) >= min_messages and senders >= min_domains
              and (clean_share is None or clean_share >= min_clean) and bool(move))
 reasons = []
 if protected:
@@ -335,30 +372,38 @@ if clean_share is None:
     share_text = "no ETD verdict in the sightings"
 else:
     share_text = str(clean_share) + "% of the messages with a verdict are neutral or graymail"
-facts = (show(mailbox) + ": " + str(total) + " inbound messages from " + str(senders) + " sender domains between "
-         + window_start + " and " + window_end + " UTC in the Secure Email Threat Defense sightings, " + share_text)
+facts = (show(mailbox) + ": busiest " + str(burst_minutes) + " minutes had " + str(len(burst)) + " external messages from "
+         + str(senders) + " sender domains (" + burst_from + " to " + burst_to + " UTC; " + str(total)
+         + " inbound messages since " + window_start + ", " + str(len(inside)) + " from your own domains), " + share_text)
 lines = ["**Evidence from Secure Email Threat Defense, through Cisco XDR**", "",
-         "1. " + str(total) + " inbound messages to " + show(mailbox) + " between " + window_start + " and " + window_end + " UTC (threshold " + str(min_messages) + ").",
-         "2. " + str(senders) + " different sender domains (threshold " + str(min_domains) + "). Largest: " + (", ".join(show(d) + " " + str(n) for d, n in top) or "none") + "."]
+         "1. " + str(len(burst)) + " external messages to " + show(mailbox) + " in the busiest " + str(burst_minutes)
+         + " minutes, " + burst_from + " to " + burst_to + " UTC (threshold " + str(min_messages) + "). " + str(total)
+         + " inbound messages since " + window_start + ".",
+         "2. " + str(senders) + " different sender domains in that stretch (threshold " + str(min_domains) + "). Largest: "
+         + (", ".join(show(d) + " " + str(n) for d, n in top) or "none") + "."]
 if clean_share is None:
     lines.append("3. The sightings name no ETD verdict, so the " + str(min_clean) + "% neutral or graymail threshold was not applied. Check the verdicts in ETD before approving.")
 else:
     lines.append("3. " + share_text + " (threshold " + str(min_clean) + "%). Verdicts: " + verdict_text + ".")
 lines.append("4. Sightings by module: " + (", ".join(m + " " + str(n) for m, n in sorted(modules.items())) or "none") + ".")
+if inside:
+    lines.append("5. Not counted and never moved: " + str(len(inside)) + " messages from your own domains (" + ", ".join(show(d) for d in internal[:6]) + ").")
 seen_types = state.get("types_seen") or {}
 if seen_types:
     lines.append("Observable types in the sightings: " + ", ".join(t + " " + str(n) for t, n in sorted(seen_types.items())[:15]) + ".")
 if others:
-    lines.append("5. Sightings of other modules, not counted: " + ", ".join(m + " " + str(n) for m, n in sorted(others.items())[:8]) + ".")
+    lines.append("Sightings of other modules, not counted: " + ", ".join(m + " " + str(n) for m, n in sorted(others.items())[:8]) + ".")
 if error:
     lines.append("Degraded source: " + error + ".")
 if domains.get("unknown"):
     lines.append(str(domains["unknown"]) + " messages name no sender.")
+if untimed:
+    lines.append(str(len(untimed)) + " messages carry no time in their sighting, so they cannot be placed in the burst and are not moved.")
 if unmovable:
     lines.append(str(unmovable) + " messages of the flood carry no message ID in their sighting, so they cannot be acted on through XDR.")
 if state.get("outside"):
     lines.append(str(state["outside"]) + " sightings outside the time window were left out.")
-buried = state.get("buried") or []
+buried = [b for b in state.get("buried") or [] if burst_from <= str(b.get("time") or "") <= burst_to]
 lines += ["", "**Not moved (" + str(len(kept)) + "):** messages from trusted sender domains and messages a flood is used to hide."]
 for b in buried:
     lines.append("- [" + b["topic"] + "] " + b["subject"] + " (from " + b["from"] + ", " + b["time"] + ")")
@@ -370,11 +415,12 @@ if qualifies:
     summary = facts + ". Flood found: " + str(len(groups)) + " messages can be moved."
 elif error and not total:
     summary = facts + ". No action proposed: " + error + "."
-elif total >= min_messages and senders >= min_domains and not move:
+elif len(burst) >= min_messages and senders >= min_domains and not move:
     summary = facts + ". No action proposed: no message of the flood carries a message ID XDR can act on."
 else:
-    summary = (facts + ". No action proposed: below the flood thresholds (" + str(min_messages) + " messages, "
-               + str(min_domains) + " sender domains, " + str(min_clean) + "% neutral or graymail).")
+    summary = (facts + ". No action proposed: below the flood thresholds (" + str(min_messages) + " external messages and "
+               + str(min_domains) + " sender domains within " + str(burst_minutes) + " minutes, " + str(min_clean)
+               + "% neutral or graymail).")
 respond_body = json.dumps(move if qualifies else [])
 move_json = json.dumps(groups if qualifies else [])
 move_count = str(len(groups) if qualifies else 0)

@@ -101,8 +101,14 @@ def build(settings: Settings | None = None) -> Workflow:
                                     "no approval task and move nothing. For tuning the rule that starts the workflow.")
     mailbox_in = wf.var("Mailbox", "string", "input",
                         description="Optional. A mailbox to assess when the workflow is started by hand.")
-    lookback = wf.var("Lookback Minutes", "integer", "input", 60,
-                      description="How far back to count the flood (5 to 1440).")
+    lookback = wf.var("Lookback Minutes", "integer", "input", 240,
+                      description="How far back to look for a flood (5 to 1440).")
+    burst = wf.var("Burst Minutes", "integer", "input", 60,
+                   description="Length of the busiest stretch the thresholds apply to (5 to 1440). Only the messages "
+                               "in that stretch are proposed for moving.")
+    internal = wf.var("Internal Domain Suffixes", "string", "input", settings.internal_domain_suffixes,
+                      description="Comma-separated mail domains of your own (corp.example). Mail from them, and from the "
+                                  "mailbox's own domain, is never counted as flood and never moved.")
     min_messages = wf.var("Minimum Messages", "integer", "input", 30,
                           description="Fewer inbound messages than this is not a flood.")
     min_domains = wf.var("Minimum Sender Domains", "integer", "input", 10,
@@ -221,7 +227,7 @@ def build(settings: Settings | None = None) -> Workflow:
     assess = wf.python(
         "Assess flood", scripts.ASSESS,
         [out(collect, "script_queries.state_json"), mailbox, is_protected, min_messages, min_domains, min_clean,
-         window_start, window_end, trusted],
+         window_start, window_end, trusted, internal, burst],
         [("qualifies", "string"), ("summary", "string"), ("evidence", "string"), ("respond_body", "string"),
          ("move_json", "string"),
          ("move_count", "string"), ("elevated_reasons", "string")])
